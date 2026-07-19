@@ -76,14 +76,11 @@ class SettingsView: NSView {
     private var countdownHintLabel: NSTextField!
 
     // Window-capture shadow card
-    private var windowShadowSwitch: NSSwitch!
-    private var windowShadowSlider: NSSlider!
-    private var windowShadowSizeValueLabel: NSTextField!
+    private var windowShadowPicker: NSPopUpButton!
     private var windowShadowPreview: ShadowPreviewView!
     private var windowShadowTitleLabel: NSTextField!
     private var windowShadowSubtitleLabel: NSTextField?
-    private var windowShadowSizeTitleLabel: NSTextField!
-    private var windowShadowSizeHintLabel: NSTextField!
+    private var windowShadowLevelHintLabel: NSTextField!
 
     // Screenshot shortcut card
     private var shortcutTitleLabel: NSTextField!
@@ -706,8 +703,8 @@ class SettingsView: NSView {
         return wrapPane(stack)
     }
 
-    /// Window-capture shadow card: a toggle for the rounded-corner + drop
-    /// shadow effect, a size slider, and a live preview of the result.
+    /// Window-capture shadow card: one discrete effect picker and a live
+    /// preview of the selected result.
     private func buildWindowShadowCard(into stack: NSStackView) {
         let card = CardView()
         let inner = NSStackView()
@@ -718,56 +715,42 @@ class SettingsView: NSView {
         card.addSubview(inner)
         pin(inner, to: card, insets: NSEdgeInsets(top: 4, left: 14, bottom: 14, right: 14))
 
-        // Enable toggle
-        let toggle = makeToggleRow(
-            title: L10n.windowShadowToggleLabel,
-            subtitle: L10n.windowShadowToggleHint,
-            isOn: Defaults.windowShadowEnabled,
-            action: #selector(windowShadowToggled(_:))
-        )
-        windowShadowTitleLabel = toggle.title
-        windowShadowSubtitleLabel = toggle.subtitle
-        windowShadowSwitch = toggle.toggle
-        inner.addArrangedSubview(toggle.row)
-        toggle.row.widthAnchor.constraint(equalTo: inner.widthAnchor).isActive = true
+        let optionRow = NSStackView()
+        optionRow.orientation = .horizontal
+        optionRow.alignment = .centerY
+        optionRow.spacing = 10
+        optionRow.translatesAutoresizingMaskIntoConstraints = false
+
+        let labelStack = NSStackView()
+        labelStack.orientation = .vertical
+        labelStack.alignment = .leading
+        labelStack.spacing = 3
+
+        windowShadowTitleLabel = primaryLabel(L10n.windowShadowLabel)
+        windowShadowSubtitleLabel = secondaryLabel(L10n.windowShadowHint, wrapping: true)
+        labelStack.addArrangedSubview(windowShadowTitleLabel)
+        if let windowShadowSubtitleLabel {
+            labelStack.addArrangedSubview(windowShadowSubtitleLabel)
+        }
+        optionRow.addArrangedSubview(labelStack)
+        labelStack.widthAnchor.constraint(greaterThanOrEqualToConstant: 300).isActive = true
+        optionRow.addArrangedSubview(flexSpacer())
+
+        windowShadowPicker = NSPopUpButton(frame: .zero, pullsDown: false)
+        windowShadowPicker.controlSize = .small
+        windowShadowPicker.font = NSFont.systemFont(ofSize: 12)
+        windowShadowPicker.target = self
+        windowShadowPicker.action = #selector(windowShadowLevelChanged(_:))
+        windowShadowPicker.translatesAutoresizingMaskIntoConstraints = false
+        windowShadowPicker.widthAnchor.constraint(greaterThanOrEqualToConstant: 120).isActive = true
+        optionRow.addArrangedSubview(windowShadowPicker)
+
+        inner.addArrangedSubview(optionRow)
+        optionRow.widthAnchor.constraint(equalTo: inner.widthAnchor).isActive = true
 
         let divider = rowDivider()
         inner.addArrangedSubview(divider)
         divider.widthAnchor.constraint(equalTo: inner.widthAnchor).isActive = true
-
-        // Size header — title + numeric value
-        let header = NSStackView()
-        header.orientation = .horizontal
-        header.alignment = .firstBaseline
-        header.spacing = 8
-        header.translatesAutoresizingMaskIntoConstraints = false
-
-        windowShadowSizeTitleLabel = primaryLabel(L10n.windowShadowSizeLabel)
-        header.addArrangedSubview(windowShadowSizeTitleLabel)
-        header.addArrangedSubview(flexSpacer())
-
-        windowShadowSizeValueLabel = NSTextField(labelWithString: "\(Int(Defaults.windowShadowSize.rounded()))")
-        windowShadowSizeValueLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .semibold)
-        windowShadowSizeValueLabel.textColor = NSColor.white.withAlphaComponent(0.88)
-        header.addArrangedSubview(windowShadowSizeValueLabel)
-
-        inner.addArrangedSubview(header)
-        header.widthAnchor.constraint(equalTo: inner.widthAnchor).isActive = true
-
-        // Size slider
-        let slider = NSSlider(
-            value: Defaults.windowShadowSize,
-            minValue: Defaults.windowShadowSizeMin,
-            maxValue: Defaults.windowShadowSizeMax,
-            target: self,
-            action: #selector(windowShadowSizeChanged(_:))
-        )
-        slider.controlSize = .small
-        slider.isContinuous = true
-        slider.translatesAutoresizingMaskIntoConstraints = false
-        windowShadowSlider = slider
-        inner.addArrangedSubview(slider)
-        slider.widthAnchor.constraint(equalTo: inner.widthAnchor).isActive = true
 
         // Live preview
         let preview = ShadowPreviewView()
@@ -778,23 +761,28 @@ class SettingsView: NSView {
         preview.widthAnchor.constraint(equalTo: inner.widthAnchor).isActive = true
         preview.heightAnchor.constraint(equalToConstant: 120).isActive = true
 
-        windowShadowSizeHintLabel = secondaryLabel(L10n.windowShadowSizeHint, wrapping: true)
-        inner.addArrangedSubview(windowShadowSizeHintLabel)
-        windowShadowSizeHintLabel.widthAnchor.constraint(equalTo: inner.widthAnchor).isActive = true
+        windowShadowLevelHintLabel = secondaryLabel(L10n.windowShadowLevelHint, wrapping: true)
+        inner.addArrangedSubview(windowShadowLevelHintLabel)
+        windowShadowLevelHintLabel.widthAnchor.constraint(equalTo: inner.widthAnchor).isActive = true
 
-        updateWindowShadowControlsEnabled()
+        refreshWindowShadowControls()
 
         stack.addArrangedSubview(card)
         card.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
     }
 
-    /// Dim and disable the size controls when the shadow toggle is off.
-    private func updateWindowShadowControlsEnabled() {
-        let on = Defaults.windowShadowEnabled
-        windowShadowSlider?.isEnabled = on
-        windowShadowSizeTitleLabel?.textColor = NSColor.white.withAlphaComponent(on ? 0.94 : 0.4)
-        windowShadowSizeValueLabel?.textColor = NSColor.white.withAlphaComponent(on ? 0.88 : 0.4)
-        windowShadowPreview?.isEffectEnabled = on
+    private func refreshWindowShadowControls() {
+        let level = Defaults.windowShadowLevel
+        windowShadowPicker?.removeAllItems()
+        for option in WindowShadowLevel.allCases {
+            windowShadowPicker?.addItem(withTitle: option.localizedTitle)
+            windowShadowPicker?.lastItem?.representedObject = option.rawValue
+        }
+        if let index = WindowShadowLevel.allCases.firstIndex(of: level) {
+            windowShadowPicker?.selectItem(at: index)
+        }
+        windowShadowPreview?.shadowSize = CGFloat(level.shadowSize)
+        windowShadowPreview?.isEffectEnabled = level.isEnabled
     }
 
     private func updateHistoryCacheControlsEnabled() {
@@ -2824,15 +2812,14 @@ class SettingsView: NSView {
         countdownValueLabel?.stringValue = "\(Defaults.countdownSeconds)\(L10n.countdownSecondsSuffix)"
     }
 
-    @objc private func windowShadowToggled(_ sender: NSSwitch) {
-        Defaults.windowShadowEnabled = sender.state == .on
-        updateWindowShadowControlsEnabled()
-    }
-
-    @objc private func windowShadowSizeChanged(_ sender: NSSlider) {
-        Defaults.windowShadowSize = sender.doubleValue
-        windowShadowSizeValueLabel?.stringValue = "\(Int(Defaults.windowShadowSize.rounded()))"
-        windowShadowPreview?.shadowSize = CGFloat(Defaults.windowShadowSize)
+    @objc private func windowShadowLevelChanged(_ sender: NSPopUpButton) {
+        guard let rawValue = sender.selectedItem?.representedObject as? String,
+              let level = WindowShadowLevel(rawValue: rawValue)
+        else {
+            return
+        }
+        Defaults.windowShadowLevel = level
+        refreshWindowShadowControls()
     }
 
     @objc private func launchAtLoginToggled(_ sender: NSSwitch) {
@@ -4583,10 +4570,10 @@ class SettingsView: NSView {
         historyPanelNotchModeTitleLabel?.stringValue = L10n.historyPanelNotchMode
         historyPanelNotchModeHintLabel?.stringValue = L10n.historyPanelNotchModeHint
         updateHistoryPanelModeControlsEnabled()
-        windowShadowTitleLabel?.stringValue = L10n.windowShadowToggleLabel
-        windowShadowSubtitleLabel?.stringValue = L10n.windowShadowToggleHint
-        windowShadowSizeTitleLabel?.stringValue = L10n.windowShadowSizeLabel
-        windowShadowSizeHintLabel?.stringValue = L10n.windowShadowSizeHint
+        windowShadowTitleLabel?.stringValue = L10n.windowShadowLabel
+        windowShadowSubtitleLabel?.stringValue = L10n.windowShadowHint
+        windowShadowLevelHintLabel?.stringValue = L10n.windowShadowLevelHint
+        refreshWindowShadowControls()
         countdownTitleLabel?.stringValue = L10n.countdownLabel
         countdownHintLabel?.stringValue = L10n.countdownHint
         countdownValueLabel?.stringValue = "\(Defaults.countdownSeconds)\(L10n.countdownSecondsSuffix)"

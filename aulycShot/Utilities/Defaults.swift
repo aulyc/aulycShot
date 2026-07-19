@@ -59,6 +59,43 @@ enum AppLanguage: String, CaseIterable {
     }
 }
 
+/// Discrete shadow choices shown in Settings. The raw values are persisted and
+/// must remain stable so users keep their selection across app updates.
+enum WindowShadowLevel: String, CaseIterable {
+    case disabled
+    case small
+    case medium
+    case large
+
+    var isEnabled: Bool { self != .disabled }
+
+    var shadowSize: Double {
+        switch self {
+        case .disabled: return 0
+        case .small: return 12
+        case .medium: return 22
+        case .large: return 40
+        }
+    }
+
+    var localizedTitle: String {
+        switch self {
+        case .disabled: return L10n.windowShadowDisabled
+        case .small: return L10n.windowShadowSmall
+        case .medium: return L10n.windowShadowMedium
+        case .large: return L10n.windowShadowLarge
+        }
+    }
+
+    /// Maps the former free-form slider value to the nearest discrete level.
+    static func resolve(legacyEnabled: Bool, legacySize: Double) -> WindowShadowLevel {
+        guard legacyEnabled else { return .disabled }
+        return [WindowShadowLevel.small, .medium, .large].min {
+            abs($0.shadowSize - legacySize) < abs($1.shadowSize - legacySize)
+        } ?? .medium
+    }
+}
+
 extension Notification.Name {
     static let languageDidChange = Notification.Name("aulycShot.languageDidChange")
     static let historyCacheEnabledDidChange = Notification.Name("aulycShot.historyCacheEnabledDidChange")
@@ -108,10 +145,13 @@ enum L10n {
     static var countdownLabel: String { s("countdownLabel") }
     static var countdownHint: String { s("countdownHint") }
     static var countdownSecondsSuffix: String { s("countdownSecondsSuffix") }
-    static var windowShadowToggleLabel: String { s("windowShadowToggleLabel") }
-    static var windowShadowToggleHint: String { s("windowShadowToggleHint") }
-    static var windowShadowSizeLabel: String { s("windowShadowSizeLabel") }
-    static var windowShadowSizeHint: String { s("windowShadowSizeHint") }
+    static var windowShadowLabel: String { s("windowShadowLabel") }
+    static var windowShadowHint: String { s("windowShadowHint") }
+    static var windowShadowLevelHint: String { s("windowShadowLevelHint") }
+    static var windowShadowDisabled: String { s("windowShadowDisabled") }
+    static var windowShadowSmall: String { s("windowShadowSmall") }
+    static var windowShadowMedium: String { s("windowShadowMedium") }
+    static var windowShadowLarge: String { s("windowShadowLarge") }
     static var savePathTitle: String { s("savePathTitle") }
     static var savePathSubtitle: String { s("savePathSubtitle") }
     static var autoRevealSavedFilesLabel: String { s("autoRevealSavedFilesLabel") }
@@ -1687,38 +1727,41 @@ struct Defaults {
         set { defaults.set(newValue, forKey: "pinAcrossSpaces") }
     }
 
-    // Window-capture drop shadow. When enabled, single-window screenshots get
-    // rounded corners and a macOS-style drop shadow in the final output.
-    // Rounded corners are always applied to window captures; this toggle only
-    // governs the shadow.
-
-    static let windowShadowSizeMin: Double = 6
-    static let windowShadowSizeMax: Double = 60
-
-    static var windowShadowEnabled: Bool {
+    // Window-capture drop shadow. Existing toggle/slider values are migrated
+    // once to the nearest discrete level; the legacy keys stay synchronized so
+    // downgrading the app does not discard the user's new choice.
+    static var windowShadowLevel: WindowShadowLevel {
         get {
-            if defaults.object(forKey: "windowShadowEnabled") == nil {
-                return true
+            if let rawValue = defaults.string(forKey: "windowShadowLevel"),
+               let level = WindowShadowLevel(rawValue: rawValue) {
+                return level
             }
-            return defaults.bool(forKey: "windowShadowEnabled")
+
+            let legacyEnabled = defaults.object(forKey: "windowShadowEnabled") == nil
+                ? true
+                : defaults.bool(forKey: "windowShadowEnabled")
+            let legacySize = defaults.object(forKey: "windowShadowSize") == nil
+                ? WindowShadowLevel.medium.shadowSize
+                : defaults.double(forKey: "windowShadowSize")
+            let level = WindowShadowLevel.resolve(
+                legacyEnabled: legacyEnabled,
+                legacySize: legacySize
+            )
+            defaults.set(level.rawValue, forKey: "windowShadowLevel")
+            return level
         }
         set {
-            defaults.set(newValue, forKey: "windowShadowEnabled")
+            defaults.set(newValue.rawValue, forKey: "windowShadowLevel")
+            defaults.set(newValue.isEnabled, forKey: "windowShadowEnabled")
+            if newValue.isEnabled {
+                defaults.set(newValue.shadowSize, forKey: "windowShadowSize")
+            }
         }
     }
 
-    static var windowShadowSize: Double {
-        get {
-            if defaults.object(forKey: "windowShadowSize") == nil {
-                return 22
-            }
-            let val = defaults.double(forKey: "windowShadowSize")
-            return min(max(val, windowShadowSizeMin), windowShadowSizeMax)
-        }
-        set {
-            defaults.set(min(max(newValue, windowShadowSizeMin), windowShadowSizeMax), forKey: "windowShadowSize")
-        }
-    }
+    static var windowShadowEnabled: Bool { windowShadowLevel.isEnabled }
+
+    static var windowShadowSize: Double { windowShadowLevel.shadowSize }
 
     static var language: AppLanguage {
         get {

@@ -29,10 +29,13 @@
 "countdownLabel" = "倒數秒數";
 "countdownHint" = "按住 ⌥ Option 後連按兩下 ⌘，或按下截圖快捷鍵，即可先倒數再截圖，按 Esc 取消";
 "countdownSecondsSuffix" = "秒";
-"windowShadowToggleLabel" = "視窗截圖陰影";
-"windowShadowToggleHint" = "擷取視窗時裁出圓角，並加上 macOS 風格的陰影";
-"windowShadowSizeLabel" = "陰影大小";
-"windowShadowSizeHint" = "數值越大，陰影越柔和、擴散越遠，視窗看起來越有懸浮感";
+"windowShadowLabel" = "視窗截圖陰影";
+"windowShadowHint" = "擷取視窗時裁出圓角，並加上 macOS 風格的陰影";
+"windowShadowLevelHint" = "可選擇小、中、大三檔，檔位越高陰影越柔和、擴散越遠";
+"windowShadowDisabled" = "不啟用";
+"windowShadowSmall" = "小";
+"windowShadowMedium" = "中";
+"windowShadowLarge" = "大";
 
 /* Screenshot shortcut */
 "shortcutHeader" = "截圖";
