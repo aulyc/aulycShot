@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.14] - 2026-07-19
+
 ### Changed
 - Rebrand the application, package, bundle identifiers, build outputs, documentation, and visual assets as aulycShot
 - Move generated App bundles into hidden build directories so only the installed application appears in normal app listings
