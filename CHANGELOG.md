@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-07-19
+
 ### Changed
 - Refresh the menu bar icon with the hand-drawn aulyc letterform
 - Replace the window shadow toggle and continuous slider with migrated Off, Small, Medium, and Large levels
