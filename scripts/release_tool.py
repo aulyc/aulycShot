@@ -157,11 +157,15 @@ def command_prepare(args: argparse.Namespace) -> None:
     print(f"prepared release metadata: {target_version} build {target_build}")
 
 
+def codesign_has_runtime(output: str) -> bool:
+    return re.search(r"^CodeDirectory .*\bflags=.*\(runtime\)", output, re.M) is not None
+
+
 def parse_codesign(app: Path) -> tuple[str, str, bool]:
     output = run(["codesign", "-dv", "--verbose=4", str(app)], combine=True)
     team_match = re.search(r"^TeamIdentifier=(.+)$", output, re.M)
     authority_match = re.search(r"^Authority=(.+)$", output, re.M)
-    runtime = re.search(r"^flags=.*\(runtime\)", output, re.M) is not None
+    runtime = codesign_has_runtime(output)
     if team_match is None or authority_match is None:
         raise ReleaseError("Developer ID signature identity is incomplete")
     authority = authority_match.group(1).strip()

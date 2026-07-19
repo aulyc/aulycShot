@@ -7,8 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.6.13] - 2026-07-19
-
 ### Changed
 - Rebrand the application, package, bundle identifiers, build outputs, documentation, and visual assets as aulycShot
 - Move generated App bundles into hidden build directories so only the installed application appears in normal app listings
@@ -16,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Create the menu bar status item before the permission flow and keep the app running when the setup window closes
+- Correct formal release provenance validation of the Hardened Runtime flag after notarization
 
 ### Removed
 - Remove the translation feature, image-hosting feature, related settings, actions, localizations, and implementation code

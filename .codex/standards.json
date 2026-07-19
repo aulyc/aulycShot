@@ -196,7 +196,7 @@
     },
     {
       "path": "scripts/release_tool.py",
-      "sha256": "91dfde167391c5e1967155c01d6308a42e945d985ed1735961c29c7df40f40b0"
+      "sha256": "9eb57a8241cf1914760f46a99182c6e296ddc3ed3f4e6aebad0f020d75167cdc"
     },
     {
       "path": "scripts/prepare-formal-release.sh",
@@ -232,7 +232,7 @@
     },
     {
       "path": "Tests/test_release_tool.py",
-      "sha256": "e153370e64c6a59ce636395d72d984199f5775c08662bc6ff633d6bf6b6592a1"
+      "sha256": "df6274bed892ef89c23b4883cbe1d892ba82e2e29ee91fa55e85290117f35e48"
     }
   ]
 }

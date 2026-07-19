@@ -81,6 +81,13 @@ class ReleaseToolTests(unittest.TestCase):
         with self.assertRaisesRegex(release_tool.ReleaseError, "target build must be greater"):
             release_tool.command_prepare(argparse.Namespace(version="1.6.13", build=494))
 
+    def test_codesign_runtime_parser_matches_real_code_directory_line(self):
+        signed = "CodeDirectory v=20500 size=10079 flags=0x10000(runtime) hashes=304+7 location=embedded"
+        unsigned = "CodeDirectory v=20400 size=10079 flags=0x0(none) hashes=304+7 location=embedded"
+
+        self.assertTrue(release_tool.codesign_has_runtime(signed))
+        self.assertFalse(release_tool.codesign_has_runtime(unsigned))
+
     def valid_provenance(self, dmg):
         return {
             "releaseProfile": "macos-arm64-app",
