@@ -26,7 +26,7 @@ SEMVER = re.compile(
     r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
     r"(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$"
 )
-EXPECTED_ARCHITECTURES = {"arm64", "x86_64"}
+EXPECTED_ARCHITECTURES = {"arm64"}
 
 
 class ReleaseError(Exception):
@@ -260,7 +260,7 @@ def command_write_provenance(args: argparse.Namespace) -> None:
         "tag": tag,
         "commit": commit,
         "dirty": False,
-        "architecture": "universal2",
+        "architecture": "arm64",
         "architectures": identity["architectures"],
         "bundleIdentifier": identity["bundleIdentifier"],
         "teamIdentifier": identity["teamIdentifier"],
@@ -296,8 +296,8 @@ def validate_provenance(path: Path) -> tuple[dict, Path]:
         "releaseProfile": "macos-arm64-app",
         "releaseChannel": "formal",
         "dirty": False,
-        "architecture": "universal2",
-        "architectures": ["arm64", "x86_64"],
+        "architecture": "arm64",
+        "architectures": ["arm64"],
         "bundleIdentifier": "com.aulyc.aulycshot",
         "hardenedRuntime": True,
         "notarized": True,

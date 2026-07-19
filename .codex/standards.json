@@ -172,15 +172,15 @@
     },
     {
       "path": ".github/workflows/ci.yml",
-      "sha256": "5fd0badb9119e51e941768ece39d17792da820d208fd3e2418a51dd01db878e6"
+      "sha256": "b4e95836d1895e7b3ad7e69af1d25d506d8cac8abb67056f9c39a6b92bc5d27e"
     },
     {
       "path": "AGENTS.md",
-      "sha256": "6c91679274385833f459d77d114298f31c04507b064955d39a9f59d5e431c930"
+      "sha256": "f16226c2137241a27182655ce54dc80416d2a2fb7236502be5f22bc3b951863e"
     },
     {
       "path": "docs/RELEASE.md",
-      "sha256": "352ca6c0023e6fb1fcad9659ad4a3c128d739f3f0f9cb8ac7523777f1724851f"
+      "sha256": "c2ea03e465b3ccc4f93cdc10a5b31ab1bf3dd00f60812d7b7a2c3d71fac9b3c1"
     },
     {
       "path": "Makefile",
@@ -188,7 +188,7 @@
     },
     {
       "path": "scripts/bundle.sh",
-      "sha256": "213a98699885a34392a3dabb552933c983b5c250afcfca3e82d76335d37786c0"
+      "sha256": "24f2264313fd38fbed68c2eb6d995983b88c762bf3d321ec5e628e0bec1ea80d"
     },
     {
       "path": "scripts/inject-build-metadata.sh",
@@ -196,7 +196,7 @@
     },
     {
       "path": "scripts/release_tool.py",
-      "sha256": "9eb57a8241cf1914760f46a99182c6e296ddc3ed3f4e6aebad0f020d75167cdc"
+      "sha256": "57e408f74a4c400b26b21221b1623801a253a9692306daf8d475bc129eb07f9b"
     },
     {
       "path": "scripts/prepare-formal-release.sh",
@@ -204,7 +204,7 @@
     },
     {
       "path": "scripts/release-check.sh",
-      "sha256": "e9ae0bc84abeb44ae7227aa0e8cd44c407fcdc2bc7ddc3b602b02e3ba6bf81cb"
+      "sha256": "40e5e3bb3227b19ea25610e95955836c93d3c1480189327cbe7634771e91fe19"
     },
     {
       "path": "scripts/create-release-tag.sh",
@@ -212,7 +212,7 @@
     },
     {
       "path": "scripts/formal-release.sh",
-      "sha256": "3dbf9b3ae73529adde714aaa717e95fa9a191f4b01dcf0f322073556d3b77111"
+      "sha256": "f7aaa50726dba9a45aa7163db660d01e3d72b2faa9b35eb09d87e35abd53a930"
     },
     {
       "path": "scripts/verify-formal-artifact.sh",
@@ -232,7 +232,7 @@
     },
     {
       "path": "Tests/test_release_tool.py",
-      "sha256": "df6274bed892ef89c23b4883cbe1d892ba82e2e29ee91fa55e85290117f35e48"
+      "sha256": "0e15825d154d4265f220719f2afa7bb4c3566f3940fe0909f4d67609c5c2c105"
     }
   ]
 }

@@ -21,9 +21,8 @@ jobs:
         run: |
           PYTHONPYCACHEPREFIX=/tmp/aulycShot-pycache python3 -m unittest discover -s Tests -p 'test_*.py'
           swift test
-      - name: Universal Release candidate
+      - name: arm64 Release candidate
         env:
           CONFIG: release
-          UNIVERSAL: "1"
           SIGN_IDENTITY: "-"
         run: bash scripts/bundle.sh

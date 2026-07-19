@@ -5,7 +5,7 @@
 | 字段 | 值 |
 |---|---|
 | Release Profile | `macos-arm64-app` 1.0.0 |
-| 项目适配 | Universal 2，`arm64` + `x86_64` |
+| 架构 | Apple Silicon `arm64` only |
 | 分发渠道 | Developer ID DMG，私有 GitHub Release |
 | GitHub | `aulyc/aulycShot` / `origin` / `main` |
 | 唯一版本源 | `aulycShot/App/Info.plist` |
@@ -13,10 +13,9 @@
 | 最低系统 | macOS 14.0 |
 | 安装位置 | `/Applications/aulycShot.app` |
 
-Profile 原生要求 Apple Silicon `arm64`。本项目延续 Universal 2 分发并做显式
-适配：App 和 share extension 都必须同时包含 `arm64` 与 `x86_64`，两个 slice
-共享相同的版本、build、Bundle ID、entitlements、Developer ID、Hardened Runtime
-和公证信任。缺少任一 slice 或任一信任检查都会阻断发布。
+App 和 share extension 都必须只包含 `arm64` slice，并共享相同的版本、build、
+Bundle ID、entitlements、Developer ID、Hardened Runtime 和公证信任。出现其他
+架构或缺少任一信任检查都会阻断发布。
 
 当前不发布测试版，不生成自动更新 feed，也不触发 Homebrew。正式版本只通过私有
 GitHub Release 提供手动下载。
@@ -48,8 +47,8 @@ make release-tag
 ```
 
 `release-check` 要求 `main`、干净工作区、精确发布提交和 dated Changelog，然后
-执行中央 strict scan、编译、Swift 测试和与最终路径一致的 Universal 2 Release
-候选构建。候选必须是 Developer ID 签名，App 与 share extension 都包含两个架构
+执行中央 strict scan、编译、Swift 测试和与最终路径一致的 arm64 Release 候选
+构建。候选必须是 Developer ID 签名，App 与 share extension 都只包含 `arm64`
 并启用 Hardened Runtime。
 
 `release-tag` 只在门禁通过后创建或验证与版本完全一致、不带 `v` 的 annotated
@@ -65,7 +64,7 @@ make release-formal \
   NOTARY_PROFILE=aulyc-notary
 ```
 
-脚本从 annotated tag 创建隔离 worktree，构建 Universal 2 Release App，先签 share
+脚本从 annotated tag 创建隔离 worktree，构建 arm64 Release App，先签 share
 extension 再签 App，启用 timestamp 和 Hardened Runtime，生成并签名 DMG，等待
 Apple notarization `Accepted`，执行 staple、`stapler validate`、DMG/App Gatekeeper
 验证，再从挂载 DMG 的 App 生成 release provenance。隔离源码在构建前后都必须
@@ -74,13 +73,13 @@ clean。
 产物位于 `dist/`：
 
 ```text
-aulycShot-<version>-build.<build>-universal2.dmg
-aulycShot-<version>-build.<build>-universal2.dmg.sha256
-aulycShot-<version>-build.<build>-universal2.release-provenance.json
-aulycShot-<version>-build.<build>-universal2.release-provenance.json.sha256
+aulycShot-<version>-build.<build>-arm64.dmg
+aulycShot-<version>-build.<build>-arm64.dmg.sha256
+aulycShot-<version>-build.<build>-arm64.release-provenance.json
+aulycShot-<version>-build.<build>-arm64.release-provenance.json.sha256
 ```
 
-provenance 记录 Profile、channel、版本、build、tag、Commit、`dirty: false`、两个
+provenance 记录 Profile、channel、版本、build、tag、Commit、`dirty: false`、arm64
 架构、Bundle ID、Team ID、最低系统、Developer ID、Hardened Runtime、公证提交
 ID、staple、Gatekeeper、DMG 和 App 可执行文件 SHA-256。它与 `Info.plist` 是不同
 边界，不能互相替代。
@@ -101,7 +100,7 @@ make install-release RELEASE_PROVENANCE=/absolute/path/aulycShot-....release-pro
 
 安装入口先复核产物，再安全替换 `/Applications/aulycShot.app`，失败时回滚旧 App，
 不删除设置、历史、截图、Keychain 或隐私数据。随后核对版本、build、Commit、tag、
-channel、`dirty: false`、两个架构、Developer ID、Team ID、Hardened Runtime 和
+channel、`dirty: false`、arm64-only、Developer ID、Team ID、Hardened Runtime 和
 Gatekeeper，并从 `/Applications` 启动真实二进制。
 
 只读复核已安装 App：
@@ -130,8 +129,8 @@ GitHub Release 并上传 DMG、checksums 和 provenance。该流程不会创建�
 - GitHub 目标、remote URL、正式分支或凭据能力不匹配
 - 工作区不干净、发布提交混入功能代码或 Changelog 缺少精确版本
 - tag 不是 annotated tag、不是稳定 SemVer、未指向发布提交或远端已占用
-- Swift 构建、测试、Universal 2 候选或精确标签隔离构建失败
-- App 或 share extension 缺少任一架构、Developer ID、timestamp 或 Hardened Runtime
+- Swift 构建、测试、arm64 候选或精确标签隔离构建失败
+- App 或 share extension 不是 arm64-only，或缺少 Developer ID、timestamp、Hardened Runtime
 - DMG 签名、公证、staple、Gatekeeper 或 SHA-256 任一步失败
 - provenance 与 Git、DMG、挂载 App、已安装 App 或远端回读不一致
 - 目标版本、标签、GitHub Release 或任一正式产物已经存在

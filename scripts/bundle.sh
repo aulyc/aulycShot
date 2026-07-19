@@ -3,15 +3,20 @@ set -e
 
 # Build configuration
 # - CONFIG=debug|release  (default: debug)
-# - UNIVERSAL=1           build a fat arm64+x86_64 binary (default: host arch only)
+#
+# aulycShot is Apple Silicon only. Every assembled App and share extension is
+# built explicitly for arm64 so host architecture or stale build products
+# cannot change the distributed architecture.
 CONFIG="${CONFIG:-debug}"
-UNIVERSAL="${UNIVERSAL:-0}"
 
 for arg in "$@"; do
     case "$arg" in
-        --universal) UNIVERSAL=1 ;;
         --release)   CONFIG="release" ;;
         --debug)     CONFIG="debug" ;;
+        *)
+            echo "error: unsupported bundle argument: $arg" >&2
+            exit 64
+            ;;
     esac
 done
 
@@ -30,41 +35,12 @@ EXTENSION_CONTENTS="$EXTENSION_DIR/Contents"
 EXTENSION_MACOS="$EXTENSION_CONTENTS/MacOS"
 EXTENSION_RESOURCES="$EXTENSION_CONTENTS/Resources"
 
-# Build binary
-if [ "$UNIVERSAL" = "1" ]; then
-    echo "Building aulycShot ($CONFIG, universal: arm64 + x86_64)..."
-    swift build -c "$CONFIG" --arch arm64 --arch x86_64
-    # SwiftPM emits the merged universal binary under .build/apple/Products/<Config>/
-    CONFIG_CAP="$(tr '[:lower:]' '[:upper:]' <<< "${CONFIG:0:1}")${CONFIG:1}"
-    BUILD_BIN=".build/apple/Products/$CONFIG_CAP/aulycShot"
-    EXTENSION_BUILD_BIN=".build/apple/Products/$CONFIG_CAP/$EXTENSION_PRODUCT_NAME"
-    if [ ! -f "$BUILD_BIN" ] || [ ! -f "$EXTENSION_BUILD_BIN" ]; then
-        # Fallback: merge per-arch binaries with lipo
-        ARM_BIN=".build/arm64-apple-macosx/$CONFIG/aulycShot"
-        X86_BIN=".build/x86_64-apple-macosx/$CONFIG/aulycShot"
-        EXTENSION_ARM_BIN=".build/arm64-apple-macosx/$CONFIG/$EXTENSION_PRODUCT_NAME"
-        EXTENSION_X86_BIN=".build/x86_64-apple-macosx/$CONFIG/$EXTENSION_PRODUCT_NAME"
-        if [ -f "$ARM_BIN" ] && [ -f "$X86_BIN" ]; then
-            BUILD_BIN=".build/$CONFIG/aulycShot-universal"
-            lipo -create -output "$BUILD_BIN" "$ARM_BIN" "$X86_BIN"
-        else
-            echo "error: universal binary not found at $BUILD_BIN and per-arch fallbacks missing" >&2
-            exit 1
-        fi
-        if [ -f "$EXTENSION_ARM_BIN" ] && [ -f "$EXTENSION_X86_BIN" ]; then
-            EXTENSION_BUILD_BIN=".build/$CONFIG/$EXTENSION_PRODUCT_NAME-universal"
-            lipo -create -output "$EXTENSION_BUILD_BIN" "$EXTENSION_ARM_BIN" "$EXTENSION_X86_BIN"
-        else
-            echo "error: universal extension binary not found at $EXTENSION_BUILD_BIN and per-arch fallbacks missing" >&2
-            exit 1
-        fi
-    fi
-else
-    echo "Building aulycShot ($CONFIG, host arch only)..."
-    swift build -c "$CONFIG"
-    BUILD_BIN=".build/$CONFIG/aulycShot"
-    EXTENSION_BUILD_BIN=".build/$CONFIG/$EXTENSION_PRODUCT_NAME"
-fi
+# Build binaries
+echo "Building aulycShot ($CONFIG, arm64)..."
+swift build -c "$CONFIG" --arch arm64
+BUILD_BIN_DIR="$(swift build -c "$CONFIG" --arch arm64 --show-bin-path)"
+BUILD_BIN="$BUILD_BIN_DIR/aulycShot"
+EXTENSION_BUILD_BIN="$BUILD_BIN_DIR/$EXTENSION_PRODUCT_NAME"
 
 if [ ! -f "$BUILD_BIN" ]; then
     echo "error: app binary not found at $BUILD_BIN" >&2
@@ -122,7 +98,7 @@ for lproj in Resources/*.lproj; do
 done
 
 # Copy SwiftPM resource bundles. PermissionFlow uses Bundle.module for its
-# floating authorization panel strings; if this bundle is absent, Intel builds
+# floating authorization panel strings; if this bundle is absent, the App can
 # crash with a Swift assertion the first time the panel is shown.
 BUILD_DIR="$(dirname "$BUILD_BIN")"
 PERMISSION_FLOW_BUNDLE="$BUILD_DIR/aulycShot_PermissionFlow.bundle"

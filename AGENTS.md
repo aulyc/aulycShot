@@ -52,19 +52,16 @@ This script builds the app bundle, kills any running instance, launches the new 
   `Bundle.module`, such as the PermissionFlow authorization panel.
 - After packaging changes, verify the final `.app` contents directly with
   `find .cache/build/aulycShot.app/Contents/Resources -maxdepth 2 -name '*.bundle'` and,
-  for release builds, confirm the universal app still contains both `arm64` and
-  `x86_64` slices.
+  for release builds, confirm both the App and share extension contain only the
+  `arm64` slice.
 
 ## Versioning and Release Profile
 
 - Release profile: `macos-arm64-app` 1.0.0
 - Distribution: Developer ID DMG published manually to the private GitHub
   repository `aulyc/aulycShot`
-- Architecture: Universal 2 (`arm64` and `x86_64`) project adaptation. The
-  selected Profile directly covers the Apple Silicon slice; release gates must
-  additionally verify both slices in the App and share extension, with the same
-  bundle identity, minimum macOS version, entitlements, Developer ID signature,
-  Hardened Runtime, notarization, staple and Gatekeeper result
+- Architecture: Apple Silicon `arm64` only. Release gates require both the App
+  and share extension to contain exactly the `arm64` slice
 - Authoritative version and build source: `aulycShot/App/Info.plist`
   (`CFBundleShortVersionString` and `CFBundleVersion`)
 - Derived version fields: the assembled App copies the authoritative plist and
@@ -103,7 +100,7 @@ This script builds the app bundle, kills any running instance, launches the new 
 - Every formal artifact is rebuilt from an isolated worktree at the exact
   annotated tag. The source must remain clean before and after the build
 - Formal App and share extension require Developer ID, timestamp, Hardened
-  Runtime and both Universal 2 slices. The signed DMG requires Apple
+  Runtime and only the `arm64` slice. The signed DMG requires Apple
   notarization `Accepted`, stapling, `stapler validate` and Gatekeeper
 - Release provenance is `*.release-provenance.json`, records `dirty: false`,
   and is independently checked against Git, the real DMG, mounted App and

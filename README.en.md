@@ -40,7 +40,7 @@
 
 <p align="center">
   <a href="https://github.com/aulyc/aulycShot/releases/latest"><b>Download Latest Release</b></a> &nbsp;·&nbsp;
-  macOS 14+ &nbsp;·&nbsp; Universal (Apple Silicon + Intel)
+  macOS 14+ &nbsp;·&nbsp; Apple Silicon (arm64)
 </p>
 
 ## Why aulycShot

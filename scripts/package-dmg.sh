@@ -16,16 +16,16 @@ APP="$APP_OUTPUT_DIR/${APP_NAME}.app"
 DIST="$ROOT/dist"
 
 VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$ROOT/aulycShot/App/Info.plist")
-DMG="$DIST/${APP_NAME}-${VERSION}-macos.dmg"
+DMG="$DIST/${APP_NAME}-${VERSION}-arm64.dmg"
 
-echo "==> building .app (release, universal arm64 + x86_64)"
-CONFIG=release UNIVERSAL=1 bash "$ROOT/scripts/bundle.sh"
+echo "==> building .app (release, arm64)"
+CONFIG=release bash "$ROOT/scripts/bundle.sh"
 [[ -d "$APP" ]] || { echo "error: $APP missing after build" >&2; exit 1; }
 
-# Sanity-check: DMGs are shipped to users, so the binary must be universal.
+# Sanity-check: DMGs are shipped to users, so the binary must be arm64-only.
 ARCHS="$(lipo -archs "$APP/Contents/MacOS/aulycShot" 2>/dev/null || true)"
-if [[ "$ARCHS" != *"arm64"* ]] || [[ "$ARCHS" != *"x86_64"* ]]; then
-    echo "error: bundled binary is not universal (archs: $ARCHS)" >&2
+if [[ "$ARCHS" != "arm64" ]]; then
+    echo "error: bundled binary is not arm64-only (archs: $ARCHS)" >&2
     exit 1
 fi
 echo "==> binary archs: $ARCHS"

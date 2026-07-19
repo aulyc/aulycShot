@@ -17,8 +17,8 @@ git rev-parse --verify "refs/tags/$TAG^{tag}" >/dev/null
 [[ "$(git rev-list -n 1 "refs/tags/$TAG")" == "$COMMIT" ]] || { echo "error: formal tag does not point to HEAD" >&2; exit 1; }
 
 DIST="$ROOT/dist"
-DMG="$DIST/aulycShot-$VERSION-build.$BUILD-universal2.dmg"
-PROVENANCE="$DIST/aulycShot-$VERSION-build.$BUILD-universal2.release-provenance.json"
+DMG="$DIST/aulycShot-$VERSION-build.$BUILD-arm64.dmg"
+PROVENANCE="$DIST/aulycShot-$VERSION-build.$BUILD-arm64.release-provenance.json"
 for output in "$DMG" "$DMG.sha256" "$PROVENANCE" "$PROVENANCE.sha256"; do
     [[ ! -e "$output" ]] || { echo "error: refusing to overwrite $output" >&2; exit 1; }
 done
@@ -47,15 +47,15 @@ AULYCSHOT_BUILD_COMMIT="$COMMIT" \
 AULYCSHOT_RELEASE_CHANNEL="formal" \
 AULYCSHOT_RELEASE_TAG="$TAG" \
 AULYCSHOT_BUILD_DIRTY="false" \
-CONFIG=release UNIVERSAL=1 REQUIRE_SIGNING=1 SIGN_IDENTITY="$IDENTITY" \
+CONFIG=release REQUIRE_SIGNING=1 SIGN_IDENTITY="$IDENTITY" \
 bash scripts/bundle.sh
 APP="$APP_OUTPUT/aulycShot.app"
 
 codesign --verify --deep --strict --verbose=2 "$APP"
 APP_ARCHS="$(lipo -archs "$APP/Contents/MacOS/aulycShot")"
 EXT_ARCHS="$(lipo -archs "$APP/Contents/PlugIns/AulycShotShareExtension.appex/Contents/MacOS/AulycShotShareExtension")"
-[[ "$APP_ARCHS" == *arm64* && "$APP_ARCHS" == *x86_64* ]] || { echo "error: formal app is not Universal 2" >&2; exit 1; }
-[[ "$EXT_ARCHS" == *arm64* && "$EXT_ARCHS" == *x86_64* ]] || { echo "error: formal extension is not Universal 2" >&2; exit 1; }
+[[ "$APP_ARCHS" == "arm64" ]] || { echo "error: formal app is not arm64-only: $APP_ARCHS" >&2; exit 1; }
+[[ "$EXT_ARCHS" == "arm64" ]] || { echo "error: formal extension is not arm64-only: $EXT_ARCHS" >&2; exit 1; }
 SIGNATURE_INFO="$(codesign -dv --verbose=4 "$APP" 2>&1)"
 [[ "$SIGNATURE_INFO" == *"Developer ID Application:"* && "$SIGNATURE_INFO" == *"(runtime)"* ]] || { echo "error: formal App signature is invalid" >&2; exit 1; }
 

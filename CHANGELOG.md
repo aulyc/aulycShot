@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Limit all application, share extension, CI, packaging, and formal release builds to Apple Silicon arm64
+
 ## [1.6.14] - 2026-07-19
 
 ### Changed

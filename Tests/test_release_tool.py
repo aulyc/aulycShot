@@ -93,8 +93,8 @@ class ReleaseToolTests(unittest.TestCase):
             "releaseProfile": "macos-arm64-app",
             "releaseChannel": "formal",
             "dirty": False,
-            "architecture": "universal2",
-            "architectures": ["arm64", "x86_64"],
+            "architecture": "arm64",
+            "architectures": ["arm64"],
             "bundleIdentifier": "com.aulyc.aulycshot",
             "hardenedRuntime": True,
             "notarized": True,
@@ -126,6 +126,18 @@ class ReleaseToolTests(unittest.TestCase):
         dmg.write_bytes(b"tampered")
 
         with self.assertRaisesRegex(release_tool.ReleaseError, "DMG SHA-256"):
+            release_tool.validate_provenance(provenance)
+
+    def test_validate_provenance_rejects_non_arm64_artifact(self):
+        dmg = self.root / "aulycShot.dmg"
+        dmg.write_bytes(b"formal artifact")
+        value = self.valid_provenance(dmg)
+        value["architecture"] = "universal2"
+        value["architectures"] = ["arm64", "x86_64"]
+        provenance = self.root / "release-provenance.json"
+        provenance.write_text(json.dumps(value), encoding="utf-8")
+
+        with self.assertRaisesRegex(release_tool.ReleaseError, "field architecture"):
             release_tool.validate_provenance(provenance)
 
     def test_refresh_standards_hashes_only_declared_files(self):

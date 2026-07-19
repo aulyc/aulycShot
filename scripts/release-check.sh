@@ -32,15 +32,15 @@ AULYCSHOT_BUILD_COMMIT="$HEAD_COMMIT" \
 AULYCSHOT_RELEASE_CHANNEL="formal-candidate" \
 AULYCSHOT_RELEASE_TAG="N/A" \
 AULYCSHOT_BUILD_DIRTY="false" \
-CONFIG=release UNIVERSAL=1 REQUIRE_SIGNING=1 \
+CONFIG=release REQUIRE_SIGNING=1 \
 bash scripts/bundle.sh
 
 APP="$APP_OUTPUT/aulycShot.app"
 codesign --verify --deep --strict --verbose=2 "$APP"
 APP_ARCHS="$(lipo -archs "$APP/Contents/MacOS/aulycShot")"
 EXT_ARCHS="$(lipo -archs "$APP/Contents/PlugIns/AulycShotShareExtension.appex/Contents/MacOS/AulycShotShareExtension")"
-[[ "$APP_ARCHS" == *arm64* && "$APP_ARCHS" == *x86_64* ]] || { echo "error: candidate app is not Universal 2" >&2; exit 1; }
-[[ "$EXT_ARCHS" == *arm64* && "$EXT_ARCHS" == *x86_64* ]] || { echo "error: candidate extension is not Universal 2" >&2; exit 1; }
+[[ "$APP_ARCHS" == "arm64" ]] || { echo "error: candidate app is not arm64-only: $APP_ARCHS" >&2; exit 1; }
+[[ "$EXT_ARCHS" == "arm64" ]] || { echo "error: candidate extension is not arm64-only: $EXT_ARCHS" >&2; exit 1; }
 SIGNATURE_INFO="$(codesign -dv --verbose=4 "$APP" 2>&1)"
 [[ "$SIGNATURE_INFO" == *"Developer ID Application:"* ]] || { echo "error: candidate is not Developer ID signed" >&2; exit 1; }
 [[ "$SIGNATURE_INFO" == *"(runtime)"* ]] || { echo "error: candidate is missing Hardened Runtime" >&2; exit 1; }
