@@ -1,0 +1,451 @@
+/* aulycShot — 简体中文 */
+
+/* Settings */
+"settingsTitle" = "aulycShot 设置";
+"showMenuBarIcon" = "显示菜单栏图标";
+"permissionsHeader" = "所需权限";
+"accessibilityPermission" = "辅助功能";
+"accessibilityDescription" = "用于检测双击 ⌘ Command 键来触发截图";
+"screenRecordingPermission" = "屏幕录制";
+"screenRecordingDescription" = "用于捕获屏幕内容进行截图";
+"launchApp" = "启动应用";
+"launchAtLogin" = "开机自动启动";
+"demoMode" = "演示模式";
+"demoModeHint" = "录屏软件可以录到选区遮罩与编辑器，仅影响外部录制";
+"pinAcrossSpaces" = "贴图跨桌面显示";
+"pinAcrossSpacesHint" = "开启后新贴图会出现在所有桌面与全屏空间";
+"historyCacheToggleLabel" = "缓存截图";
+"historyCacheToggleHint" = "保存最近截图、取色和上传结果，便于从菜单栏快速再次复制";
+"clipboardTextCacheToggleLabel" = "缓存剪贴板文本";
+"clipboardTextCacheToggleHint" = "将复制的文本保存到历史记录，便于从历史记录快速复用";
+"clipboardTextHistoryLimitLabel" = "文本历史数量";
+"historyCacheLabel" = "图片与媒体历史数量";
+"historyPanelDisplayModeLabel" = "历史面板显示方式";
+"historyPanelDisplayModeHint" = "选择通过弹窗或刘海查看历史记录";
+"historyPanelDialogMode" = "弹窗";
+"historyPanelDialogModeHint" = "通过菜单或快捷键打开横向预览面板";
+"historyPanelNotchMode" = "刘海";
+"historyPanelNotchModeHint" = "鼠标进入屏幕顶部刘海自动展开，移出后自动收起";
+"countdownLabel" = "倒计时秒数";
+"countdownHint" = "按住 ⌥ Option 后双击 ⌘ 或按截图快捷键，先弹出倒计时再截图，按 Esc 取消";
+"countdownSecondsSuffix" = "秒";
+"windowShadowToggleLabel" = "窗口截图阴影";
+"windowShadowToggleHint" = "点选窗口截图时自动裁出圆角，并加上 macOS 风格的投影";
+"windowShadowSizeLabel" = "阴影大小";
+"windowShadowSizeHint" = "数值越大投影越柔和、扩散越远，窗口看起来悬浮得越高";
+
+/* Screenshot shortcut */
+"shortcutHeader" = "截图";
+"shortcutHint" = "默认双击 ⌘ 触发；自定义后双击 ⌘ 失效，可点恢复回到默认";
+"shortcutDefaultDisplay" = "双击 ⌘";
+"shortcutSet" = "录制";
+"shortcutCancel" = "取消";
+"shortcutWaiting" = "等待按键";
+"shortcutNeedsModifierTitle" = "快捷键需要修饰键";
+"shortcutNeedsModifier" = "需要组合键：⌘/⌥/⇧/⌃ + 其他按键（如 ⌘⇧8），或单独按 F1–F12";
+"shortcutRestore" = "恢复默认";
+"selectedImagePinShortcutHeader" = "钉起选中的图片";
+"selectedImagePinShortcutDefaultDisplay" = "未设置";
+"selectedImagePinShortcutClear" = "清除钉起选中图片快捷键";
+"clipboardImagePinShortcutHeader" = "钉起剪贴板图片";
+"clipboardImagePinShortcutDefaultDisplay" = "未设置";
+"clipboardImagePinShortcutClear" = "清除钉起剪贴板图片快捷键";
+"clipboardTextPinShortcutHeader" = "钉起剪贴板文本";
+"clipboardTextPinShortcutDefaultDisplay" = "未设置";
+"clipboardTextPinShortcutClear" = "清除钉起剪贴板文本快捷键";
+"selectedImagePinNoImage" = "未找到 Finder 中选中的图片";
+"clipboardImagePinNoImage" = "剪贴板里没有可钉起的图片";
+"clipboardTextPinNoText" = "剪贴板里没有文本";
+"pinFromFinderHint" = "已钉起 Finder 选中的图片，按 X 关闭";
+"pinFromClipboardHint" = "已钉起剪贴板图片，按 X 关闭";
+"pinFromClipboardTextHint" = "已钉起剪贴板文本，双击可编辑";
+"pinToolbarEdit" = "编辑钉图";
+"pinToolbarEditText" = "编辑文字";
+
+/* Image-edit shortcuts */
+"selectedImageEditShortcutHeader" = "编辑选中图片";
+"selectedImageEditShortcutHint" = "按下后直接编辑 Finder 中选中的单张图片。默认未设置";
+"selectedImageEditShortcutDefaultDisplay" = "未设置";
+"clipboardImageEditShortcutHeader" = "编辑剪贴板图片";
+"clipboardImageEditShortcutHint" = "按下后直接编辑当前剪贴板里的图片。默认未设置";
+"clipboardImageEditShortcutDefaultDisplay" = "未设置";
+"textRecognitionShortcutHeader" = "文字识别";
+"textRecognitionShortcutDefaultDisplay" = "未设置";
+"copyImageTextShortcutHeader" = "复制图中文字";
+"copyImageTextShortcutDefaultDisplay" = "未设置";
+"recordShortcutHeader" = "录制";
+"recordShortcutDefaultDisplay" = "未设置";
+"fullScreenScreenshotShortcutHeader" = "截全屏";
+"fullScreenScreenshotShortcutDefaultDisplay" = "未设置";
+"colorPickerShortcutHeader" = "取色器";
+"colorPickerShortcutDefaultDisplay" = "未设置";
+
+/* Copy-to-clipboard shortcut (editor confirm) */
+"clipboardShortcutHeader" = "复制到剪贴板";
+"clipboardShortcutHint" = "在编辑器内按下以确认编辑并把截图复制到剪贴板。未设置时默认双击 ⌘";
+"clipboardShortcutDefaultDisplay" = "双击 ⌘";
+
+/* Save-to-file shortcut (editor save) */
+"fileSaveShortcutHeader" = "保存到文件";
+"fileSaveShortcutHint" = "在编辑器内按下后，把截图保存为 PNG 到设置的截图保存路径。默认 ⌘S";
+"previousHistoryImageShortcutHeader" = "上一张历史截图";
+"nextHistoryImageShortcutHeader" = "下一张历史截图";
+"historyPanelShortcutHeader" = "历史面板";
+"historyPanelShortcutDefaultDisplay" = "未设置";
+
+/* Shortcut conflict */
+"shortcutConflictTitle" = "快捷键已被占用";
+"shortcutConflictScreenshot" = "该按键组合已被截图快捷键占用，请换一个";
+"shortcutConflictCountdown" = "该按键组合已被倒计时截图快捷键（截图快捷键 + ⌥）占用，请换一个";
+"shortcutConflictSelectedImagePin" = "该按键组合已被钉起选中图片快捷键占用，请换一个";
+"shortcutConflictClipboardImagePin" = "该按键组合已被钉起剪贴板图片快捷键占用，请换一个";
+"shortcutConflictClipboardTextPin" = "该按键组合已被钉起剪贴板文本快捷键占用，请换一个";
+"shortcutConflictClipboard" = "该按键组合已被复制到剪贴板快捷键占用，请换一个";
+"shortcutConflictFileSave" = "该按键组合已被保存到文件快捷键占用，请换一个";
+"shortcutConflictPreviousHistoryImage" = "该按键组合已被上一张历史截图快捷键占用，请换一个";
+"shortcutConflictNextHistoryImage" = "该按键组合已被下一张历史截图快捷键占用，请换一个";
+"shortcutConflictHistoryPanel" = "该按键组合已被历史面板快捷键占用，请换一个";
+"shortcutConflictSelectedImageEdit" = "该按键组合已被编辑选中图片快捷键占用，请换一个";
+"shortcutConflictClipboardImageEdit" = "该按键组合已被编辑剪贴板图片快捷键占用，请换一个";
+"shortcutConflictTextRecognition" = "该按键组合已被文字识别快捷键占用，请换一个";
+"shortcutConflictCopyImageText" = "该按键组合已被复制图中文字快捷键占用，请换一个";
+"shortcutConflictRecord" = "该按键组合已被录制快捷键占用，请换一个";
+"shortcutConflictFullScreenScreenshot" = "该按键组合已被截全屏快捷键占用，请换一个";
+"shortcutConflictColorPicker" = "该按键组合已被取色器快捷键占用，请换一个";
+
+/* Menu bar */
+"takeScreenshot" = "截图";
+"takeFullScreenScreenshot" = "截全屏";
+"record" = "录制";
+"colorPicker" = "取色器";
+"settings" = "设置";
+"quitApp" = "退出 aulycShot";
+"historyMenu" = "历史";
+"historyEmpty" = "暂无历史";
+"historyClear" = "清除历史";
+"historyCleared" = "历史已清除";
+"historyShowInFinder" = "在 Finder 中显示";
+"historyPanelMenu" = "历史面板";
+"historyPanelDeleteAll" = "删除全部历史";
+"historyPanelDeleteSelectedOne" = "删除%d个项目";
+"historyPanelDeleteSelected" = "删除%d个项目";
+"historyPanelDeletedSelectedOne" = "已删除%d个项目";
+"historyPanelDeletedSelected" = "已删除%d个项目";
+"historyPanelFilterAll" = "全部";
+"historyPanelFilterScreenshots" = "截图";
+"historyPanelFilterGIF" = "GIF";
+"historyPanelFilterMP4" = "MP4";
+"historyPanelFilterColors" = "颜色";
+"historyPanelFilterText" = "文本";
+"historyPreviewCopyText" = "复制文本";
+"historyPreviewConvertToQRCode" = "转成二维码";
+"historyPreviewQRCodeTooLong" = "文本太长，无法转换为二维码";
+"historyPreviewOriginalText" = "原文";
+"historyPreviewQRCodeTitle" = "文本二维码";
+"historyPanelCopyHint" = "点击复制";
+"historyPanelCopyDragHint" = "点击复制 · 拖拽到应用";
+"historyPanelCopyMarkdownLink" = "复制 MD 链接";
+"historyPanelCopyPlainLink" = "复制普通链接";
+"historyPanelEmpty" = "暂无历史";
+
+/* Cursor chip */
+"dragToScreenshot" = "点击窗口或拖动以截图";
+"dragToScreenshotAspectFree" = "点击窗口或拖动以截图 · 框选自由比例（R）";
+"dragToScreenshotAspect" = "点击窗口或拖动以截图 · 框选 %@（R）";
+"dragToTextRecognition" = "点击窗口或框选区域识别文字";
+"dragToCopyImageText" = "点击窗口或框选区域复制文字";
+"dragToRecord" = "点击窗口或拖动以录制";
+"dragToRecordAspectFree" = "点击窗口或拖动以录制 · 框选自由比例（R）";
+"dragToRecordAspect" = "点击窗口或拖动以录制 · 框选 %@（R）";
+
+/* Toast */
+"copiedToClipboard" = "已添加到剪贴板";
+"mergedLongScreenshot" = "已合并长截图";
+"autoScrollPermissionNeeded" = "长截图需要辅助功能权限，请在系统设置 → 隐私与安全性 → 辅助功能中授权 aulycShot";
+"cropLongScreenshotHint" = "拖动上下边裁剪长图，回车或点对勾确认";
+"scrollCaptureHint" = "按任意键结束滚动";
+"scrollCaptureManualHint" = "手动滚动页面，按任意键或点击绿色按钮结束";
+"finderEditExitHint" = "从访达编辑，按 X 退出编辑";
+"clipboardEditExitHint" = "从剪贴板编辑，按 X 退出编辑";
+"pinEditExitHint" = "正在编辑钉图，按 X 退出编辑";
+"fullScreenEditExitHint" = "正在编辑全屏截图，按 X 退出编辑";
+"editSuspendedToast" = "已暂存编辑，下次触发截图时继续";
+"editSuspendedResumeToast" = "已恢复上次未完成的编辑";
+"fullScreenScreenshotFailed" = "截全屏失败";
+"openImageNoImage" = "复制图片到剪贴板，或选择一个图片文件";
+"selectedImageEditNoImage" = "未找到 Finder 中选中的单张图片";
+"clipboardImageEditNoImage" = "剪贴板里没有可编辑的图片";
+"recordingSaved" = "录制已保存到 %@";
+"recordingCancelled" = "录制已取消";
+"recordingExportingGIF" = "正在生成 GIF";
+"recordingFailed" = "录制失败: %@";
+"saveRecording" = "保存录制";
+"saveRecordingPrompt" = "保存";
+"recordingFormatLabel" = "格式";
+"recordingFormatManual" = "手动选择";
+"recordingFormatMP4" = "MP4";
+"recordingFormatGIF" = "GIF";
+"recordingFormatChoiceTitle" = "选择录制格式";
+"recordingFormatChoiceMessage" = "录制会保存到设置里的录制保存路径";
+"screenshotSaved" = "截图已保存到 %@";
+"screenshotSaveFailed" = "截图保存失败: %@";
+"recordingStop" = "停止录制";
+"recordingPause" = "暂停";
+"recordingResume" = "继续";
+"colorCopied" = "已复制颜色 %@";
+"qrCodeCopied" = "已复制二维码内容";
+"qrCodeNotFound" = "未识别到二维码";
+
+/* Toolbar tooltips */
+"tipRectangle" = "矩形";
+"tipEllipse" = "椭圆";
+"tipArrow" = "箭头";
+"tipLine" = "直线";
+"tipPen" = "画笔";
+"tipMarker" = "高亮笔";
+"tipMosaic" = "马赛克";
+"mosaicGranularity" = "马赛克颗粒度";
+"tipEraser" = "橡皮擦";
+"tipMagnifier" = "放大镜";
+"tipNumbered" = "序号";
+"tipText" = "文字";
+"tipQRCode" = "二维码";
+"tipEmoji" = "表情";
+"tipMoreEmoji" = "更多表情";
+"tipInsertImage" = "插入图片";
+"tipColorPicker" = "取色器";
+"tipPickedInkBottle" = "使用取色器提取颜色到墨水瓶";
+"tipUndo" = "撤销";
+"tipRedo" = "恢复撤销";
+"tipMoveSelection" = "移动选区";
+"tipScrollCapture" = "长截图";
+"tipBeautify" = "美化";
+"tipOCR" = "文字识别";
+"tipSave" = "保存到文件";
+"tipPin" = "钉在屏幕";
+"tipRecord" = "录制";
+"tipCancel" = "取消";
+"tipConfirm" = "复制到剪贴板";
+"tipScrollCropConfirm" = "保存并编辑";
+"copyQRCodeContent" = "复制二维码内容";
+
+/* Beautify */
+"beautify" = "美化";
+"beautifyPresetPeachBlue" = "粉蓝";
+"beautifyPresetMintTeal" = "薄荷青";
+"beautifyPresetPeachPink" = "桃粉";
+"beautifyPresetBluePurple" = "蓝紫梦";
+"beautifyPresetWarmOrange" = "暖橘黄";
+"beautifyPresetTealPink" = "青粉";
+"beautifyPresetDeepPurple" = "深邃紫";
+"beautifyPresetNeutralGray" = "中性灰";
+"beautifyPresetWallpaper" = "壁纸";
+"beautifyShadowEffect" = "阴影效果";
+"textStrokeEffect" = "描边";
+"textCalloutEffect" = "标注";
+"shapeFillEffect" = "填充";
+"shapeFillNone" = "线框";
+"shapeFillOpaque" = "填充";
+"shapeFillTranslucent" = "半透明填充";
+"shapeStyleStandard" = "默认样式";
+"shapeStyleRounded" = "圆角矩形";
+"shapeStyleHandDrawn" = "手绘圆角";
+"insertImageFromClipboard" = "从剪贴板插入";
+"insertImageFromFile" = "从本地文件插入";
+"insertImageChooseFile" = "选择图片";
+"insertImageNoClipboardImage" = "剪贴板中没有图片";
+"scrollCaptureAutoScroll" = "自动滚动";
+"scrollCaptureManualScroll" = "手动滚动";
+
+/* Language */
+"languageHeader" = "语言";
+
+/* Settings sidebar tabs */
+"settingsTabGeneral" = "通用";
+"settingsTabShortcuts" = "快捷键";
+"settingsTabPermissions" = "权限";
+"settingsTabAbout" = "关于";
+"settingsTabToolbar" = "工具栏";
+"settingsQuit" = "退出应用";
+
+"toolbarSettingsPrimaryTitle" = "主工具栏";
+"toolbarSettingsPrimaryHint" = "工具会在选区上方或下方显示";
+"toolbarSettingsSideTitle" = "侧工具栏";
+"toolbarSettingsSideHint" = "工具会在选区左侧或右侧显示";
+"toolbarSettingsHiddenTitle" = "隐藏的工具";
+"toolbarSettingsHiddenHint" = "拖到这里的工具不会出现在任何工具栏中";
+"toolbarSettingsFootnote" = "工具栏会根据选区位置自动切换为上下或左右布局";
+"toolbarSettingsReset" = "重置为默认";
+"toolbarSettingsCancel" = "取消";
+"toolbarSettingsApply" = "应用";
+
+/* About pane */
+"aboutTagline" = "菜单栏截图工具";
+"aboutLicense" = "开源协议";
+"aboutSourceCode" = "源代码";
+"aboutStarOnGitHub" = "给 aulycShot 点个 Star 🌟";
+"aboutFeatureRequest" = "提需求";
+"aboutBugReport" = "提 Bug";
+"aboutUpdateTitle" = "软件更新";
+"aboutErrorLog" = "错误日志";
+"aboutErrorLogNoCrash" = "暂无错误日志";
+"aboutErrorLogLastCrash" = "最近日志 · %@";
+"aboutErrorLogCopy" = "复制日志";
+"aboutErrorLogCopied" = "已复制";
+"aboutErrorLogReveal" = "在访达中显示";
+"aboutErrorLogRefresh" = "刷新日志";
+"aboutErrorLogClear" = "清除日志";
+"aboutErrorLogEmptyBody" = "aulycShot 暂未记录到错误日志。如果遇到卡死、强制退出或闪退，请回到这里复制日志反馈给开发者";
+
+/* Updates — About pane */
+"checkForUpdates" = "检查更新";
+"updateChecking" = "正在检查";
+"updateUpToDateStatus" = "已是最新版本";
+"updateNewVersionStatus" = "发现新版本 v%@";
+"updateFailedStatus" = "检查失败";
+"updateDownloadButton" = "前往下载";
+"updateRetryButton" = "重试";
+"updateInstallNowButton" = "立即更新";
+"updateDownloadingStatus" = "下载中 %d%%";
+"updateInstallingStatus" = "正在安装";
+"updateInstallFailedStatus" = "安装失败";
+
+/* Updates — menu bar */
+"checkForUpdatesMenu" = "检查更新";
+"checkingForUpdatesMenu" = "正在检查更新";
+"updateAvailableMenu" = "有新版本 v%@";
+"updateDownloadingMenu" = "正在下载更新… %d%%";
+"updateInstallingMenu" = "正在安装更新";
+"updateInstallFailedMenu" = "更新安装失败";
+
+/* Updates — progress HUD */
+"updateCheckingHUD" = "aulycShot 正在检查更新";
+"updateDownloadingHUD" = "正在下载更新 %d%%";
+"updateVerifyingHUD" = "正在校验更新";
+"updateUnzippingHUD" = "正在解压";
+"updateInstallingHUD" = "正在安装";
+
+/* Updates — manual check result alert */
+"updateAvailableTitle" = "发现新版本 v%@";
+"updateAvailableBody" = "aulycShot 将自动下载并安装最新版本，完成后会自动重启";
+"updateUpToDateTitle" = "已是最新版本";
+"updateUpToDateBody" = "当前版本 v%@ 已是最新";
+"updateFailedTitle" = "检查更新失败";
+"updateFailedBody" = "无法连接到 GitHub，请检查网络后重试";
+"updateInstallFailedTitle" = "更新安装失败";
+"updateInstallFailedBody" = "下载或安装更新时出错。你可以前往 GitHub 发布页面手动下载";
+"updateOpenPageButton" = "前往 GitHub";
+"updateSkipButton" = "跳过此版本";
+"updateLaterButton" = "稍后";
+"updateOKButton" = "好";
+
+/* Quit confirmation dialog */
+"quitConfirmTitle" = "退出 aulycShot";
+"quitConfirmMessage" = "退出后菜单栏图标和截图快捷键将不再可用，需要重新启动 aulycShot";
+"quitConfirmAction" = "退出";
+"quitConfirmCancel" = "取消";
+
+
+"filenameRuleTitle" = "文件名规则";
+"filenameRuleSubtitle" = "控制图片上传、图片保存默认名和录制保存默认名。扩展名会自动添加";
+"filenameRulePresetLabel" = "预设";
+"filenameRulePresetCustom" = "自定义";
+"filenameRulePresetShort" = "简短";
+"filenameRulePresetCompact" = "超短链接";
+"filenameRulePresetUnique" = "防重名";
+"filenameRulePresetCounter" = "每日计数";
+"filenameRulePresetRestore" = "恢复默认";
+"filenameRuleImageLabel" = "图片";
+"filenameRuleRecordingLabel" = "录制";
+"filenameRuleVariablesLabel" = "变量";
+"filenameRuleVariableDate" = "日期";
+"filenameRuleVariableTime" = "时间";
+"filenameRuleVariableDaily" = "每日编号";
+"filenameRuleVariableRandom" = "随机码";
+"filenameRuleVariableSize" = "尺寸";
+"filenameRulePreview" = "%@";
+
+
+
+
+
+
+/* Permissions — status label */
+"permissionGranted" = "已授权";
+"permissionNotGranted" = "未授权";
+
+"ocrTextHeader" = "识别文本";
+"ocrRecognizing" = "正在识别";
+"ocrNoText" = "未识别到文字";
+"ocrCopy" = "复制";
+"ocrCopied" = "已复制";
+"ocrLineCopied" = "已复制该行";
+"copyImageTextCopying" = "正在复制";
+"copyImageTextCopied" = "已复制图中文字";
+"copyImageTextNoText" = "未识别到文字";
+
+
+
+
+/* Image Merge */
+"imageMergeShortcutHeader" = "合并图片";
+"imageMergeShortcutDefaultDisplay" = "未设置";
+"shortcutConflictImageMerge" = "该按键组合已被合并图片快捷键占用，请换一个";
+"mergeImages" = "合并图片";
+"mergeEditExitHint" = "正在编辑合并图片，按 X 退出编辑";
+"imageMergeNeedTwoImages" = "请选择至少两张 Finder 图片再合并";
+"imageMergeSomeImagesSkipped" = "部分图片无法载入，已跳过";
+"imageMergeNoClipboardImage" = "剪贴板里没有图片";
+"imageMergeFailed" = "图片合并失败";
+"imageMergeSaved" = "合并图片已保存";
+"imageMergeWindowTitle" = "合并图片";
+"imageMergeSources" = "图片来源";
+"imageMergeAddFiles" = "添加文件";
+"imageMergeAddFromClipboard" = "从剪贴板添加";
+"imageMergeImageList" = "图片";
+"imageMergeTemplate" = "排列方式";
+"imageMergeTemplateHorizontal" = "横向排列";
+"imageMergeTemplateVertical" = "纵向排列";
+"imageMergeTemplateGrid" = "等宽网格";
+"imageMergeTemplateLongStitch" = "长图拼接";
+"imageMergeLayout" = "布局";
+"imageMergeSpacing" = "间距";
+"imageMergeMargin" = "外边距";
+"imageMergeCornerRadius" = "圆角";
+"imageMergeBackground" = "背景";
+"imageMergeTransparent" = "透明";
+"imageMergeSolid" = "纯色";
+"imageMergeOutput" = "输出";
+"imageMergeCopy" = "复制";
+"imageMergeSave" = "保存";
+"imageMergeContinueEditing" = "编辑";
+"imageMergeClose" = "关闭";
+"imageMergeEmptyTitle" = "拖入图片开始合并";
+"imageMergeEmptyBody" = "添加文件、从剪贴板添加，或直接把图片拖到这里";
+"imageMergeClipboardSourceName" = "剪贴板图片";
+
+/* Screenshot quality */
+"screenshotQualityTitle" = "截图质量";
+"screenshotQualitySubtitle" = "上传、保存或复制前按所选档位处理截图，默认保留原图";
+"screenshotQualitySaveLabel" = "保存到文件";
+"screenshotQualityClipboardLabel" = "复制到剪贴板";
+"screenshotQualityOriginal" = "原图";
+"screenshotQualityOriginalHint" = "PNG 原尺寸无损画质，体积最大";
+"screenshotQualityCompressed" = "压缩";
+"screenshotQualityCompressedHint" = "保留原尺寸，做本地 PNG 压缩";
+"screenshotQualityCompressingSave" = "正在压缩后保存";
+"screenshotQualityCompressingClipboard" = "正在压缩后复制";
+"screenshotCompressionFailed" = "图片压缩失败";
+
+/* Save paths */
+"savePathTitle" = "保存路径";
+"savePathSubtitle" = "截图和录制会直接保存到这些路径，不再询问保存位置";
+"autoRevealSavedFilesLabel" = "在 Finder 中显示";
+"autoRevealSavedFilesHint" = "保存成功后，在 Finder 中选中刚保存的截图或录制";
+"recordingSavePathLabel" = "录制保存路径";
+"recordingSaveFormatSettingLabel" = "录制格式";
+"screenshotSavePathLabel" = "截图保存路径";
+"savePathChoose" = "选择";
+"savePathReveal" = "显示";
+"chooseRecordingSavePathTitle" = "选择录制保存路径";
+"chooseScreenshotSavePathTitle" = "选择截图保存路径";

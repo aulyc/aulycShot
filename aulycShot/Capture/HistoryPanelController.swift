@@ -1,0 +1,3915 @@
+import AppKit
+import Carbon
+import ImageIO
+
+private enum HistoryPanelLayout {
+    static let headerTopInset: CGFloat = 12
+    static let headerHeight: CGFloat = 34
+    static let verticalGap: CGFloat = 12
+}
+
+final class HistoryPanelController {
+    private let onEditEntry: (HistoryEntry) -> Void
+    private var dialogPanel: NSPanel?
+    private var dialogOutsideMonitors: [Any] = []
+    private var notchController: HistoryNotchWindowController?
+
+    init(onEditEntry: @escaping (HistoryEntry) -> Void) {
+        self.onEditEntry = onEditEntry
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(displayModesChanged),
+            name: .historyPanelDisplayModesDidChange,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(historyCacheEnabledChanged),
+            name: .historyCacheEnabledDidChange,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(historyCacheEnabledChanged),
+            name: .clipboardTextCacheEnabledDidChange,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(screenParametersChanged),
+            name: NSApplication.didChangeScreenParametersNotification,
+            object: nil
+        )
+        syncNotchAvailability()
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+        closeDialog()
+        notchController?.close()
+    }
+
+    func toggleFromUserRequest(holdOpenUntilMouseEnters: Bool = false) {
+        guard Defaults.isHistoryCacheAvailable else { return }
+        if Defaults.historyPanelDialogEnabled {
+            toggleDialog()
+            return
+        }
+        if Defaults.historyPanelNotchEnabled {
+            ensureNotchController().toggleFromUserRequest(holdOpenUntilMouseEnters: holdOpenUntilMouseEnters)
+        }
+    }
+
+    @objc private func displayModesChanged() {
+        syncNotchAvailability()
+        if !Defaults.historyPanelDialogEnabled {
+            closeDialog()
+        }
+    }
+
+    @objc private func historyCacheEnabledChanged() {
+        if !Defaults.isHistoryCacheAvailable {
+            closeDialog()
+        }
+        syncNotchAvailability()
+    }
+
+    @objc private func screenParametersChanged() {
+        syncNotchAvailability()
+    }
+
+    private func syncNotchAvailability() {
+        guard Defaults.isHistoryCacheAvailable, Defaults.historyPanelNotchEnabled else {
+            notchController?.close()
+            notchController = nil
+            return
+        }
+        _ = ensureNotchController()
+    }
+
+    private func ensureNotchController() -> HistoryNotchWindowController {
+        if let notchController {
+            return notchController
+        }
+        let controller = HistoryNotchWindowController(onEditEntry: onEditEntry)
+        notchController = controller
+        return controller
+    }
+
+    private func toggleDialog() {
+        if dialogPanel?.isVisible == true {
+            closeDialog()
+        } else {
+            showDialog()
+        }
+    }
+
+    private func showDialog() {
+        closeDialog()
+
+        let screen = NSScreen.screenForMouseLocation() ?? NSScreen.main ?? NSScreen.screens.first
+        let visible = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1200, height: 800)
+        let width = min(max(420, visible.width * 0.70), visible.width - 28)
+        let height = HistoryPanelPresentation.dialog.panelHeight
+        let frame = NSRect(
+            x: visible.midX - width / 2,
+            y: visible.maxY - height - 12,
+            width: width,
+            height: height
+        )
+
+        let panel = HistoryFloatingPanel(
+            contentRect: frame,
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.level = NSWindow.Level(rawValue: NSWindow.Level.popUpMenu.rawValue + 2)
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.isReleasedWhenClosed = false
+        panel.hidesOnDeactivate = false
+        panel.acceptsMouseMovedEvents = true
+
+        let chrome = HistoryPanelChromeView()
+        chrome.frame = NSRect(origin: .zero, size: frame.size)
+        chrome.autoresizingMask = [.width, .height]
+
+        let content = HistoryPanelContentView(
+            presentation: .dialog,
+            onRequestDismiss: { [weak self] in self?.closeDialog() },
+            onEditEntry: onEditEntry
+        )
+        content.frame = chrome.bounds
+        content.autoresizingMask = [.width, .height]
+        chrome.addSubview(content)
+        content.setActive(true)
+
+        panel.contentView = chrome
+        panel.orderFrontRegardless()
+        panel.makeKey()
+        dialogPanel = panel
+        startDialogOutsideMonitoring(for: panel)
+    }
+
+    private func closeDialog() {
+        stopDialogOutsideMonitoring()
+        dialogPanel?.orderOut(nil)
+        dialogPanel = nil
+    }
+
+    private func startDialogOutsideMonitoring(for panel: NSPanel) {
+        let local = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self, weak panel] event in
+            guard let self, let panel else { return event }
+            if !self.event(event, isInside: panel) {
+                self.closeDialog()
+            }
+            return event
+        }
+        if let local {
+            dialogOutsideMonitors.append(local)
+        }
+
+        let global = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self, weak panel] event in
+            DispatchQueue.main.async {
+                guard let self, let panel else { return }
+                if !self.event(event, isInside: panel) {
+                    self.closeDialog()
+                }
+            }
+        }
+        if let global {
+            dialogOutsideMonitors.append(global)
+        }
+    }
+
+    private func stopDialogOutsideMonitoring() {
+        for monitor in dialogOutsideMonitors {
+            NSEvent.removeMonitor(monitor)
+        }
+        dialogOutsideMonitors.removeAll()
+    }
+
+    private func event(_ event: NSEvent, isInside panel: NSPanel) -> Bool {
+        let point: NSPoint
+        if let eventWindow = event.window {
+            point = eventWindow.convertToScreen(NSRect(origin: event.locationInWindow, size: .zero)).origin
+        } else {
+            point = NSEvent.mouseLocation
+        }
+        return panel.frame.contains(point)
+    }
+}
+
+private final class HistoryFloatingPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+}
+
+private final class HistoryPanelChromeView: NSView {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.cornerRadius = 18
+        layer?.cornerCurve = .continuous
+        layer?.backgroundColor = NSColor(calibratedWhite: 0.06, alpha: 0.86).cgColor
+        layer?.borderColor = accentGreen.withAlphaComponent(0.34).cgColor
+        layer?.borderWidth = 1
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+}
+
+private final class HistoryNotchWindowController: NSWindowController {
+    private let rootView: HistoryNotchRootView
+    private var hoverSampler: DispatchSourceTimer?
+    private var expandWorkItem: DispatchWorkItem?
+    private var collapseWorkItem: DispatchWorkItem?
+    private var isCollapsing = false
+    private var suppressCollapseUntil: Date?
+    private var holdsOpenUntilMouseEntersHoverRegion = false
+    private var commandOpenedMouseHasEnteredHoverRegion = false
+
+    private let expandDelay: TimeInterval = 0.03
+    private let collapseDelay: TimeInterval = 0.35
+    private let collapseAnimationDuration: TimeInterval = 0.36
+    private let sampleInterval: TimeInterval = 0.035
+    private let postExpandGrace: TimeInterval = 0.5
+
+    init(onEditEntry: @escaping (HistoryEntry) -> Void) {
+        rootView = HistoryNotchRootView(onEditEntry: onEditEntry)
+        let screen = Self.anchorScreen()
+        rootView.updateGeometry(for: screen)
+        let frame = Self.frame(for: screen, expandedSize: rootView.expandedSize)
+        let panel = HistoryFloatingPanel(
+            contentRect: frame,
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.level = .statusBar
+        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = false
+        panel.hidesOnDeactivate = false
+        panel.isReleasedWhenClosed = false
+        panel.acceptsMouseMovedEvents = true
+        panel.ignoresMouseEvents = true
+
+        rootView.frame = NSRect(origin: .zero, size: frame.size)
+        rootView.autoresizingMask = [.width, .height]
+        panel.contentView = rootView
+
+        super.init(window: panel)
+        rootView.onRequestDismiss = { [weak self] in
+            self?.collapse()
+        }
+        panel.orderFrontRegardless()
+        startMouseMonitoring()
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(screenDidChange),
+            name: NSApplication.didChangeScreenParametersNotification,
+            object: nil
+        )
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        close()
+    }
+
+    override func close() {
+        NotificationCenter.default.removeObserver(self)
+        stopMouseMonitoring()
+        super.close()
+    }
+
+    func toggleFromUserRequest(holdOpenUntilMouseEnters: Bool = false) {
+        if rootView.isExpanded {
+            collapse()
+        } else {
+            expand(holdOpenUntilMouseEnters: holdOpenUntilMouseEnters)
+        }
+    }
+
+    private func expand(holdOpenUntilMouseEnters: Bool = false) {
+        guard !rootView.isExpanded else { return }
+        isCollapsing = false
+        cancelCollapse()
+        holdsOpenUntilMouseEntersHoverRegion = holdOpenUntilMouseEnters
+        commandOpenedMouseHasEnteredHoverRegion = false
+        window?.ignoresMouseEvents = false
+        window?.orderFrontRegardless()
+        window?.makeKey()
+        rootView.setExpanded(true, animated: true)
+    }
+
+    private func collapse() {
+        guard rootView.isExpanded else { return }
+        cancelExpand()
+        holdsOpenUntilMouseEntersHoverRegion = false
+        commandOpenedMouseHasEnteredHoverRegion = false
+        rootView.setExpanded(false, animated: true)
+        isCollapsing = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + collapseAnimationDuration) { [weak self] in
+            guard let self, self.isCollapsing else { return }
+            self.isCollapsing = false
+            self.window?.ignoresMouseEvents = true
+        }
+    }
+
+    private func startMouseMonitoring() {
+        startHoverSampler()
+    }
+
+    private func stopMouseMonitoring() {
+        stopHoverSampler()
+        cancelExpand()
+        cancelCollapse()
+    }
+
+    private func startHoverSampler() {
+        guard hoverSampler == nil else { return }
+        let sampler = DispatchSource.makeTimerSource(queue: .main)
+        sampler.schedule(deadline: .now(), repeating: sampleInterval, leeway: .milliseconds(8))
+        sampler.setEventHandler { [weak self] in
+            self?.handleMouseMove()
+        }
+        hoverSampler = sampler
+        sampler.resume()
+    }
+
+    private func stopHoverSampler() {
+        hoverSampler?.setEventHandler {}
+        hoverSampler?.cancel()
+        hoverSampler = nil
+    }
+
+    private func handleMouseMove() {
+        guard let window else { return }
+        let mouse = NSEvent.mouseLocation
+        if rootView.isExpanded {
+            let rect = expandedHoverRect(in: window)
+            if rect.contains(mouse) {
+                commandOpenedMouseHasEnteredHoverRegion = true
+                cancelCollapse()
+                rootView.syncHoverStateWithCurrentMouse()
+            } else {
+                if holdsOpenUntilMouseEntersHoverRegion, !commandOpenedMouseHasEnteredHoverRegion {
+                    cancelCollapse()
+                    return
+                }
+                scheduleCollapse()
+            }
+        } else {
+            let rect = collapsedHitRect()
+            if rect.contains(mouse) {
+                cancelCollapse()
+                if isCollapsing {
+                    expand()
+                } else {
+                    scheduleExpand()
+                }
+            } else {
+                cancelExpand()
+            }
+        }
+    }
+
+    private func expandedHoverRect(in window: NSWindow) -> NSRect {
+        let visibleHeight = rootView.visibleHeight > 0 ? rootView.visibleHeight : window.frame.height
+        let visibleRect = NSRect(
+            x: window.frame.minX,
+            y: window.frame.maxY - visibleHeight,
+            width: window.frame.width,
+            height: visibleHeight
+        )
+        return visibleRect.insetBy(dx: -30, dy: -15)
+    }
+
+    private func scheduleExpand() {
+        guard expandWorkItem == nil else { return }
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.expandWorkItem = nil
+            self.expand()
+            self.suppressCollapseUntil = Date().addingTimeInterval(self.postExpandGrace)
+        }
+        expandWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + expandDelay, execute: workItem)
+    }
+
+    private func scheduleCollapse() {
+        if let until = suppressCollapseUntil, Date() < until { return }
+        guard collapseWorkItem == nil else { return }
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.collapseWorkItem = nil
+            self?.collapse()
+        }
+        collapseWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + collapseDelay, execute: workItem)
+    }
+
+    private func collapsedHitRect() -> NSRect {
+        let screen = Self.anchorScreen() ?? window?.screen
+        let screenFrame = screen?.frame ?? .zero
+        let notchAreaHeight = screen?.safeAreaInsets.top ?? 0
+        let height = (notchAreaHeight > 0 ? notchAreaHeight : 24) + 6
+        let size = rootView.collapsedSize
+        let rect = NSRect(
+            x: screenFrame.midX - size.width / 2,
+            y: screenFrame.maxY - height,
+            width: size.width,
+            height: height
+        )
+        return rect.insetBy(dx: -14, dy: -8)
+    }
+
+    private func cancelExpand() {
+        expandWorkItem?.cancel()
+        expandWorkItem = nil
+    }
+
+    private func cancelCollapse() {
+        collapseWorkItem?.cancel()
+        collapseWorkItem = nil
+    }
+
+    @objc private func screenDidChange() {
+        let screen = Self.anchorScreen()
+        rootView.updateGeometry(for: screen)
+        window?.setFrame(Self.frame(for: screen, expandedSize: rootView.expandedSize), display: true)
+    }
+
+    private static func frame(for screen: NSScreen?, expandedSize: NSSize) -> NSRect {
+        let screenFrame = screen?.frame ?? NSRect(x: 0, y: 0, width: 1200, height: 800)
+        return NSRect(
+            x: screenFrame.midX - expandedSize.width / 2,
+            y: screenFrame.maxY - expandedSize.height,
+            width: expandedSize.width,
+            height: expandedSize.height
+        )
+    }
+
+    private static func anchorScreen() -> NSScreen? {
+        NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 })
+            ?? NSScreen.screenForMouseLocation()
+            ?? NSScreen.main
+            ?? NSScreen.screens.first
+    }
+}
+
+private struct HistoryNotchGeometry {
+    var notchWidth: CGFloat
+    var notchHeight: CGFloat
+    var screenWidth: CGFloat
+
+    let expandedHorizontalMargin: CGFloat = 24
+    let expandedBottomInset: CGFloat = 0
+
+    static func geometry(for screen: NSScreen?) -> HistoryNotchGeometry {
+        let screenFrame = screen?.frame ?? NSRect(x: 0, y: 0, width: 1200, height: 800)
+        let safeTop = screen?.safeAreaInsets.top ?? 0
+        var notchWidth: CGFloat = 200
+
+        if let screen, safeTop > 0 {
+            let leftWidth = screen.auxiliaryTopLeftArea?.width ?? 0
+            let rightWidth = screen.auxiliaryTopRightArea?.width ?? 0
+            if leftWidth > 0, rightWidth > 0 {
+                notchWidth = max(120, screenFrame.width - leftWidth - rightWidth)
+            }
+        }
+
+        return HistoryNotchGeometry(
+            notchWidth: notchWidth,
+            notchHeight: safeTop > 0 ? safeTop : 24,
+            screenWidth: screenFrame.width
+        )
+    }
+
+    var collapsedSize: NSSize {
+        NSSize(width: notchWidth, height: notchHeight)
+    }
+
+    var contentHeight: CGFloat {
+        HistoryPanelPresentation.notch.panelHeight
+    }
+
+    var expandedWidth: CGFloat {
+        min(max(screenWidth * 0.74, 860), max(320, screenWidth - expandedHorizontalMargin))
+    }
+
+    var expandedSize: NSSize {
+        NSSize(width: expandedWidth, height: contentHeight + expandedBottomInset)
+    }
+}
+
+private final class HistoryNotchRootView: NSView {
+    private var geometry = HistoryNotchGeometry.geometry(for: NSScreen.main)
+
+    var collapsedSize: NSSize { geometry.collapsedSize }
+    var expandedSize: NSSize { geometry.expandedSize }
+    var visibleHeight: CGFloat { currentSize.height }
+
+    private let shellView = HistoryNotchShellView()
+    private let contentView: HistoryPanelContentView
+    private let collapsedLabel = NSTextField(labelWithString: "")
+    private let countQueue = DispatchQueue(label: "aulycShot.historyNotchCount", qos: .utility)
+
+    private(set) var isExpanded = false
+    private var currentSize = HistoryNotchGeometry.geometry(for: NSScreen.main).collapsedSize
+    private var countGeneration = 0
+
+    var onRequestDismiss: (() -> Void)? {
+        didSet {
+            contentView.onRequestDismiss = onRequestDismiss
+        }
+    }
+
+    init(onEditEntry: @escaping (HistoryEntry) -> Void) {
+        contentView = HistoryPanelContentView(presentation: .notch, onEditEntry: onEditEntry)
+        super.init(frame: .zero)
+        commonInit()
+    }
+
+    override init(frame frameRect: NSRect) {
+        contentView = HistoryPanelContentView(presentation: .notch, onEditEntry: { _ in })
+        super.init(frame: frameRect)
+        commonInit()
+    }
+
+    private func commonInit() {
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+
+        shellView.frame = bounds
+        shellView.autoresizingMask = [.width, .height]
+        addSubview(shellView)
+
+        contentView.alphaValue = 0
+        contentView.isHidden = true
+        shellView.addSubview(contentView)
+
+        collapsedLabel.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
+        collapsedLabel.textColor = NSColor.white.withAlphaComponent(0.90)
+        collapsedLabel.alignment = .center
+        collapsedLabel.isSelectable = false
+        shellView.addSubview(collapsedLabel)
+
+        refreshCollapsedLabel()
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(refreshCollapsedLabel),
+            name: .historyDidUpdate,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(refreshCollapsedLabel),
+            name: .languageDidChange,
+            object: nil
+        )
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    override var isFlipped: Bool { false }
+
+    override func layout() {
+        super.layout()
+        layoutShell(animated: false)
+    }
+
+    func updateGeometry(for screen: NSScreen?) {
+        geometry = HistoryNotchGeometry.geometry(for: screen)
+        currentSize = isExpanded ? expandedSize : collapsedSize
+        needsLayout = true
+        layoutSubtreeIfNeeded()
+    }
+
+    func setExpanded(_ expanded: Bool, animated: Bool) {
+        guard isExpanded != expanded else { return }
+        isExpanded = expanded
+        currentSize = expanded ? expandedSize : collapsedSize
+
+        if expanded {
+            contentView.setActive(true)
+            contentView.isHidden = false
+        } else {
+            contentView.setActive(false)
+            contentView.resetTransientState(animated: animated)
+        }
+
+        let changes = {
+            self.contentView.alphaValue = expanded ? 1 : 0
+            self.collapsedLabel.alphaValue = expanded ? 0 : 1
+        }
+
+        layoutShell(animated: animated)
+
+        if animated {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = expanded ? 0.35 : 0.3
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                changes()
+            } completionHandler: {
+                self.contentView.isHidden = !expanded
+                if expanded {
+                    self.syncHoverStateWithCurrentMouse()
+                }
+            }
+        } else {
+            changes()
+            contentView.isHidden = !expanded
+        }
+
+        if expanded {
+            layoutSubtreeIfNeeded()
+            syncHoverStateWithCurrentMouse()
+            DispatchQueue.main.async { [weak self] in
+                self?.syncHoverStateWithCurrentMouse()
+            }
+        }
+    }
+
+    func syncHoverStateWithCurrentMouse() {
+        guard isExpanded else { return }
+        contentView.syncHoverStateWithCurrentMouse()
+    }
+
+    private func layoutShell(animated: Bool) {
+        shellView.frame = bounds
+
+        let currentRect = shapeRect(for: currentSize)
+        let expandedRect = shapeRect(for: expandedSize)
+        let collapsedRect = shapeRect(for: collapsedSize)
+
+        shellView.setShape(rect: currentRect, expanded: isExpanded, animated: animated)
+        contentView.frame = NSRect(
+            x: expandedRect.minX,
+            y: expandedRect.maxY - geometry.contentHeight,
+            width: expandedRect.width,
+            height: geometry.contentHeight
+        )
+        collapsedLabel.frame = NSRect(
+            x: collapsedRect.minX + 16,
+            y: collapsedRect.midY - 9,
+            width: collapsedRect.width - 32,
+            height: 18
+        )
+    }
+
+    private func shapeRect(for size: NSSize) -> NSRect {
+        NSRect(
+            x: bounds.midX - size.width / 2,
+            y: bounds.maxY - size.height,
+            width: size.width,
+            height: size.height
+        )
+    }
+
+    @objc private func refreshCollapsedLabel() {
+        countGeneration += 1
+        let generation = countGeneration
+        let title = L10n.historyMenu
+        collapsedLabel.stringValue = title
+        countQueue.async { [weak self] in
+            let count = HistoryManager.shared.entryCount()
+            DispatchQueue.main.async {
+                guard let self, self.countGeneration == generation else { return }
+                self.collapsedLabel.stringValue = "\(title) \(count)"
+            }
+        }
+    }
+}
+
+private final class HistoryNotchShellView: NSView {
+    private let fillLayer = CAShapeLayer()
+    private let maskLayer = CAShapeLayer()
+    private var shapeRect: NSRect = .zero
+    private var isExpanded = false
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+        fillLayer.fillColor = NSColor.black.cgColor
+        layer?.addSublayer(fillLayer)
+        maskLayer.fillColor = NSColor.black.cgColor
+        layer?.mask = maskLayer
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func layout() {
+        super.layout()
+        updateMask(animated: false)
+    }
+
+    func setShape(rect: NSRect, expanded: Bool, animated: Bool) {
+        let previousPath = maskLayer.presentation()?.path ?? maskLayer.path
+        shapeRect = rect
+        isExpanded = expanded
+        updateMask(animated: animated, from: previousPath)
+    }
+
+    private func updateMask(animated: Bool, from previousPath: CGPath? = nil) {
+        guard shapeRect.width > 0, shapeRect.height > 0 else { return }
+
+        let path = Self.islandPath(
+            in: shapeRect,
+            flareRadius: isExpanded ? 14 : 4,
+            bottomCornerRadius: isExpanded ? 20 : 10
+        )
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        fillLayer.frame = bounds
+        fillLayer.path = path
+        maskLayer.frame = bounds
+        maskLayer.path = path
+        CATransaction.commit()
+
+        guard animated, let previousPath else { return }
+
+        let animation = Self.springAnimation(
+            keyPath: "path",
+            from: previousPath,
+            to: path,
+            expanded: isExpanded
+        )
+        fillLayer.add(animation, forKey: "historyNotchFill")
+        maskLayer.add(animation, forKey: "historyNotchShape")
+    }
+
+    private static func islandPath(
+        in rect: NSRect,
+        flareRadius: CGFloat,
+        bottomCornerRadius: CGFloat
+    ) -> CGPath {
+        let flare = max(0, min(flareRadius, rect.width * 0.25, rect.height))
+        let bodyLeft = rect.minX + flare
+        let bodyRight = rect.maxX - flare
+        let bottom = max(0, min(bottomCornerRadius, (bodyRight - bodyLeft) * 0.5, rect.height))
+        let path = CGMutablePath()
+
+        path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addCurve(
+            to: CGPoint(x: bodyRight, y: rect.maxY - flare),
+            control1: CGPoint(x: rect.maxX - flare * 0.5, y: rect.maxY),
+            control2: CGPoint(x: bodyRight, y: rect.maxY - flare * 0.5)
+        )
+        path.addLine(to: CGPoint(x: bodyRight, y: rect.minY + bottom))
+        path.addQuadCurve(
+            to: CGPoint(x: bodyRight - bottom, y: rect.minY),
+            control: CGPoint(x: bodyRight, y: rect.minY)
+        )
+        path.addLine(to: CGPoint(x: bodyLeft + bottom, y: rect.minY))
+        path.addQuadCurve(
+            to: CGPoint(x: bodyLeft, y: rect.minY + bottom),
+            control: CGPoint(x: bodyLeft, y: rect.minY)
+        )
+        path.addLine(to: CGPoint(x: bodyLeft, y: rect.maxY - flare))
+        path.addCurve(
+            to: CGPoint(x: rect.minX, y: rect.maxY),
+            control1: CGPoint(x: bodyLeft, y: rect.maxY - flare * 0.5),
+            control2: CGPoint(x: rect.minX + flare * 0.5, y: rect.maxY)
+        )
+        path.closeSubpath()
+
+        return path
+    }
+
+    private static func springAnimation(
+        keyPath: String,
+        from: CGPath,
+        to: CGPath,
+        expanded: Bool
+    ) -> CASpringAnimation {
+        let response: CGFloat = expanded ? 0.35 : 0.3
+        let dampingFraction: CGFloat = expanded ? 0.86 : 0.9
+        let omega = 2 * CGFloat.pi / response
+        let animation = CASpringAnimation(keyPath: keyPath)
+        animation.fromValue = from
+        animation.toValue = to
+        animation.mass = 1
+        animation.stiffness = Double(omega * omega)
+        animation.damping = Double(2 * dampingFraction * omega)
+        animation.initialVelocity = 0
+        animation.duration = min(max(animation.settlingDuration, Double(response)), 0.7)
+        animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        return animation
+    }
+}
+
+private enum HistoryPanelPresentation {
+    case dialog
+    case notch
+
+    var tileWidth: CGFloat {
+        switch self {
+        case .dialog: return 180
+        case .notch: return 150
+        }
+    }
+
+    var tileHeight: CGFloat {
+        switch self {
+        case .dialog: return 146
+        case .notch: return 134
+        }
+    }
+
+    var previewHeight: CGFloat {
+        switch self {
+        case .dialog: return 98
+        case .notch: return 88
+        }
+    }
+
+    var previewPixelSize: Int {
+        Int(max(tileWidth, previewHeight) * (NSScreen.main?.backingScaleFactor ?? 2))
+    }
+
+    var outerInset: CGFloat {
+        switch self {
+        case .dialog: return 18
+        case .notch: return 16
+        }
+    }
+
+    var stripSideInset: CGFloat {
+        switch self {
+        case .dialog: return 0
+        case .notch: return 12
+        }
+    }
+
+    var contentBottomInset: CGFloat {
+        outerInset
+    }
+
+    var headerInset: CGFloat {
+        switch self {
+        case .dialog: return outerInset
+        case .notch: return 30
+        }
+    }
+
+    var panelHeight: CGFloat {
+        HistoryPanelLayout.headerTopInset
+            + HistoryPanelLayout.headerHeight
+            + HistoryPanelLayout.verticalGap
+            + tileHeight
+            + contentBottomInset
+    }
+}
+
+private enum HistoryPanelFilter: CaseIterable {
+    case all
+    case screenshots
+    case gif
+    case mp4
+    case colors
+    case text
+
+    var title: String {
+        switch self {
+        case .all: return L10n.historyPanelFilterAll
+        case .screenshots: return L10n.historyPanelFilterScreenshots
+        case .gif: return L10n.historyPanelFilterGIF
+        case .mp4: return L10n.historyPanelFilterMP4
+        case .colors: return L10n.historyPanelFilterColors
+        case .text: return L10n.historyPanelFilterText
+        }
+    }
+}
+
+private final class HistoryPanelScrollView: NSScrollView {
+    override func layout() {
+        super.layout()
+        horizontalScroller?.isHidden = true
+    }
+
+    override func reflectScrolledClipView(_ cView: NSClipView) {
+        super.reflectScrolledClipView(cView)
+        horizontalScroller?.isHidden = true
+    }
+}
+
+private final class HistoryPanelContentView: NSView, NSCollectionViewDataSource, NSCollectionViewDelegate {
+    private static let pageSize = 30
+    private static let initialPreviewCount = 18
+    private static let previewPrefetchCount = 9
+
+    private enum PreviewPrefetchDirection {
+        case forward
+        case backward
+    }
+
+    private let presentation: HistoryPanelPresentation
+    private let onEditEntry: (HistoryEntry) -> Void
+    var onRequestDismiss: (() -> Void)?
+
+    private var selectedFilter: HistoryPanelFilter = .all
+    private var filterButtons: [HistoryPanelFilter: HistoryPanelFilterButton] = [:]
+    private let entriesQueue = DispatchQueue(label: "aulycShot.historyPanelEntries", qos: .userInitiated)
+    private let scrollView = HistoryPanelScrollView()
+    private let collectionView = NSCollectionView()
+    private let collectionLayout = NSCollectionViewFlowLayout()
+    private let emptyLabel = NSTextField(labelWithString: "")
+    private let deleteButton = HistoryPanelDeleteButton()
+    private let finderButton = HistoryPanelActionButton(symbolName: "folder", accessibilityLabel: L10n.historyShowInFinder)
+    private let settingsButton = HistoryPanelActionButton(symbolName: "gearshape", accessibilityLabel: L10n.settings)
+    private var deleteButtonWidthConstraint: NSLayoutConstraint?
+    private var confirmationDismissMonitor: Any?
+    private var selectionKeyMonitor: Any?
+    private var previewController: HistoryPreviewWindowController?
+    private weak var activeHoverTile: HistoryPanelTileView?
+    private var allEntries: [HistoryEntry] = []
+    private var visibleEntries: [HistoryEntry] = []
+    private var availableFilters: Set<HistoryPanelFilter> = [.all]
+    private var renderedEntryCount = 0
+    private var isAppendingPage = false
+    private var selectedEntryIDs: [String] = []
+    private var lastSelectionAnchorID: String?
+    private var reloadGeneration = 0
+    private var isActive = false
+    private var isReloading = false
+    private var hasLoadedEntries = false
+    private var needsEntriesReload = true
+    private var isConfirmingDelete = false
+    private var previewWarmGeneration = 0
+    private var previewPrefetchRequests: [String: HistoryImagePreviewRequest] = [:]
+    private var previewPrefetchEntryIDs: Set<String> = []
+    private var lastScrollOriginX: CGFloat = 0
+    private var hoverSyncWorkItem: DispatchWorkItem?
+    private var isScrollingContent = false
+
+    init(
+        presentation: HistoryPanelPresentation,
+        onRequestDismiss: (() -> Void)? = nil,
+        onEditEntry: @escaping (HistoryEntry) -> Void = { _ in }
+    ) {
+        self.presentation = presentation
+        self.onRequestDismiss = onRequestDismiss
+        self.onEditEntry = onEditEntry
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+        setupUI()
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(historyDidUpdate),
+            name: .historyDidUpdate,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(refreshLocalization),
+            name: .languageDidChange,
+            object: nil
+        )
+        warmInitialPreviewWindow()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+        stopConfirmationDismissMonitoring()
+        stopSelectionKeyMonitoring()
+        hoverSyncWorkItem?.cancel()
+        previewPrefetchRequests.values.forEach { $0.cancel() }
+        previewController?.close()
+        HotkeyManager.shared.unregisterHistoryPreview()
+    }
+
+    override func layout() {
+        super.layout()
+        updateCollectionLayout()
+    }
+
+    private func setupUI() {
+        let header = NSView()
+        header.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(header)
+
+        let toolbar = NSStackView()
+        toolbar.orientation = .horizontal
+        toolbar.alignment = .centerY
+        toolbar.spacing = 8
+        toolbar.translatesAutoresizingMaskIntoConstraints = false
+        header.addSubview(toolbar)
+
+        for filter in HistoryPanelFilter.allCases {
+            let button = HistoryPanelFilterButton(filter: filter)
+            button.target = self
+            button.action = #selector(filterClicked(_:))
+            filterButtons[filter] = button
+            toolbar.addArrangedSubview(button)
+        }
+        updateFilterAvailability(availableFilters: [.all])
+
+        finderButton.target = self
+        finderButton.action = #selector(showHistoryInFinderClicked)
+        finderButton.translatesAutoresizingMaskIntoConstraints = false
+        header.addSubview(finderButton)
+
+        settingsButton.target = self
+        settingsButton.action = #selector(openSettingsClicked)
+        settingsButton.translatesAutoresizingMaskIntoConstraints = false
+        header.addSubview(settingsButton)
+
+        deleteButton.target = self
+        deleteButton.action = #selector(deleteHistoryClicked)
+        deleteButton.translatesAutoresizingMaskIntoConstraints = false
+        header.addSubview(deleteButton)
+
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.drawsBackground = false
+        scrollView.hasHorizontalScroller = false
+        scrollView.hasVerticalScroller = false
+        scrollView.autohidesScrollers = false
+        scrollView.horizontalScroller = nil
+        scrollView.borderType = .noBorder
+        scrollView.horizontalScrollElasticity = .allowed
+        scrollView.contentView.postsBoundsChangedNotifications = true
+
+        collectionLayout.scrollDirection = .horizontal
+        collectionLayout.minimumLineSpacing = 14
+        collectionLayout.minimumInteritemSpacing = 14
+        collectionLayout.itemSize = NSSize(width: presentation.tileWidth, height: presentation.tileHeight)
+        collectionLayout.sectionInset = NSEdgeInsets(
+            top: 0,
+            left: presentation.stripSideInset,
+            bottom: 0,
+            right: presentation.stripSideInset
+        )
+        collectionView.collectionViewLayout = collectionLayout
+        collectionView.dataSource = self
+        collectionView.delegate = self
+        collectionView.isSelectable = false
+        collectionView.backgroundColors = [.clear]
+        collectionView.frame = NSRect(x: 0, y: 0, width: 1, height: presentation.tileHeight)
+        collectionView.register(
+            HistoryPanelCollectionItem.self,
+            forItemWithIdentifier: HistoryPanelCollectionItem.identifier
+        )
+        scrollView.documentView = collectionView
+        addSubview(scrollView)
+
+        emptyLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        emptyLabel.textColor = NSColor.white.withAlphaComponent(0.48)
+        emptyLabel.alignment = .center
+        emptyLabel.isHidden = true
+        emptyLabel.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(emptyLabel)
+
+        let inset = presentation.outerInset
+        let headerInset = presentation.headerInset
+        let deleteWidth = deleteButton.widthAnchor.constraint(equalToConstant: HistoryPanelDeleteButton.collapsedWidth)
+        deleteButtonWidthConstraint = deleteWidth
+        NSLayoutConstraint.activate([
+            header.topAnchor.constraint(equalTo: topAnchor, constant: HistoryPanelLayout.headerTopInset),
+            header.leadingAnchor.constraint(equalTo: leadingAnchor, constant: headerInset),
+            header.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -headerInset),
+            header.heightAnchor.constraint(equalToConstant: HistoryPanelLayout.headerHeight),
+
+            toolbar.leadingAnchor.constraint(equalTo: header.leadingAnchor),
+            toolbar.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            toolbar.trailingAnchor.constraint(lessThanOrEqualTo: deleteButton.leadingAnchor, constant: -12),
+
+            deleteButton.trailingAnchor.constraint(equalTo: finderButton.leadingAnchor, constant: -8),
+            deleteButton.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            deleteWidth,
+            deleteButton.heightAnchor.constraint(equalToConstant: 28),
+
+            finderButton.trailingAnchor.constraint(equalTo: settingsButton.leadingAnchor, constant: -8),
+            finderButton.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+
+            settingsButton.trailingAnchor.constraint(equalTo: header.trailingAnchor),
+            settingsButton.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+
+            scrollView.topAnchor.constraint(equalTo: header.bottomAnchor, constant: HistoryPanelLayout.verticalGap),
+            scrollView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: inset),
+            scrollView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -inset),
+            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -presentation.contentBottomInset),
+
+            emptyLabel.centerXAnchor.constraint(equalTo: scrollView.centerXAnchor),
+            emptyLabel.centerYAnchor.constraint(equalTo: scrollView.centerYAnchor),
+            emptyLabel.widthAnchor.constraint(lessThanOrEqualTo: scrollView.widthAnchor, constant: -40),
+        ])
+
+        updateLocalizedCopy()
+        startConfirmationDismissMonitoring()
+        startSelectionKeyMonitoring()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(scrollBoundsDidChange),
+            name: NSView.boundsDidChangeNotification,
+            object: scrollView.contentView
+        )
+    }
+
+    @objc private func refreshLocalization() {
+        updateLocalizedCopy()
+    }
+
+    private func updateLocalizedCopy() {
+        for (filter, button) in filterButtons {
+            button.title = filter.title
+        }
+        updateDeleteButtonPresentation()
+        finderButton.updateAccessibilityLabel(L10n.historyShowInFinder)
+        settingsButton.updateAccessibilityLabel(L10n.settings)
+        emptyLabel.stringValue = L10n.historyPanelEmpty
+    }
+
+    func setActive(_ active: Bool) {
+        guard isActive != active else { return }
+        isActive = active
+        if active {
+            if needsEntriesReload || !hasLoadedEntries {
+                reloadEntries()
+            } else {
+                updatePreviewLoading(initial: true)
+            }
+        } else {
+            if isReloading {
+                needsEntriesReload = true
+                isReloading = false
+                reloadGeneration += 1
+            }
+            hoverSyncWorkItem?.cancel()
+            hoverSyncWorkItem = nil
+            isScrollingContent = false
+            clearActiveHoverTile()
+        }
+    }
+
+    @objc private func historyDidUpdate() {
+        needsEntriesReload = true
+        if isActive {
+            reloadEntries()
+        } else {
+            warmInitialPreviewWindow()
+        }
+    }
+
+    @objc private func filterClicked(_ sender: HistoryPanelFilterButton) {
+        selectFilter(sender.filter)
+    }
+
+    private func selectFilter(_ filter: HistoryPanelFilter) {
+        selectedFilter = filter
+        setDeleteConfirmation(false, animated: true)
+        if hasLoadedEntries {
+            applySelectedFilter(resetScrollPosition: true)
+        } else {
+            updateFilterSelection()
+            reloadEntries()
+        }
+    }
+
+    private func cycleFilter(forward: Bool) {
+        let orderedFilters = HistoryPanelFilter.allCases.filter { availableFilters.contains($0) }
+        guard orderedFilters.count > 1,
+              let currentIndex = orderedFilters.firstIndex(of: selectedFilter) else { return }
+        let offset = forward ? 1 : orderedFilters.count - 1
+        selectFilter(orderedFilters[(currentIndex + offset) % orderedFilters.count])
+    }
+
+    private func updateFilterAvailability(availableFilters: Set<HistoryPanelFilter>) {
+        for (filter, button) in filterButtons {
+            button.isHidden = !availableFilters.contains(filter)
+        }
+        updateFilterSelection()
+    }
+
+    private func updateFilterSelection() {
+        for (filter, button) in filterButtons {
+            button.isSelected = filter == selectedFilter
+        }
+    }
+
+    @objc private func deleteHistoryClicked() {
+        guard deleteButton.isEnabled else { return }
+        if isConfirmingDelete {
+            let deletingSelection = hasSelection
+            let entriesToDelete = selectedEntries()
+            setDeleteConfirmation(false, animated: false)
+            if deletingSelection {
+                guard !entriesToDelete.isEmpty else {
+                    clearSelection()
+                    return
+                }
+                HistoryManager.shared.remove(entriesToDelete) { removedCount in
+                    guard removedCount > 0 else { return }
+                    ToastWindow.show(message: L10n.historyPanelDeletedSelected(removedCount))
+                }
+                clearSelection()
+            } else {
+                HistoryManager.shared.clearAll {
+                    ToastWindow.show(message: L10n.historyCleared)
+                }
+            }
+            onRequestDismiss?()
+        } else {
+            setDeleteConfirmation(true, animated: true)
+        }
+    }
+
+    @objc private func showHistoryInFinderClicked() {
+        setDeleteConfirmation(false, animated: true)
+        NSWorkspace.shared.open(HistoryManager.shared.cacheDirectoryURL())
+        onRequestDismiss?()
+    }
+
+    @objc private func openSettingsClicked() {
+        setDeleteConfirmation(false, animated: true)
+        SettingsWindowController.shared.showAsSettings()
+        onRequestDismiss?()
+    }
+
+    @objc private func reloadEntries() {
+        guard isActive else {
+            needsEntriesReload = true
+            return
+        }
+        reloadGeneration += 1
+        let generation = reloadGeneration
+        needsEntriesReload = false
+        isReloading = true
+        entriesQueue.async { [weak self] in
+            let allEntries = HistoryManager.shared.panelEntries()
+            let availableFilters = Self.availableFilters(for: allEntries)
+            DispatchQueue.main.async {
+                guard let self, self.reloadGeneration == generation, self.isActive else { return }
+                self.isReloading = false
+                self.hasLoadedEntries = true
+                self.allEntries = allEntries
+                self.availableFilters = availableFilters
+                self.applySelectedFilter(resetScrollPosition: false)
+            }
+        }
+    }
+
+    private func applySelectedFilter(resetScrollPosition: Bool) {
+        let effectiveFilter = availableFilters.contains(selectedFilter) ? selectedFilter : .all
+        selectedFilter = effectiveFilter
+        updateFilterAvailability(availableFilters: availableFilters)
+        let entries = Self.filteredEntries(from: allEntries, filter: effectiveFilter)
+        applyEntries(entries, hasAnyEntries: !allEntries.isEmpty)
+        if resetScrollPosition {
+            scrollView.contentView.scroll(to: .zero)
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+        }
+    }
+
+    private func applyEntries(_ entries: [HistoryEntry], hasAnyEntries: Bool) {
+        previewWarmGeneration += 1
+        clearActiveHoverTile()
+        visibleEntries = entries
+        pruneSelection(to: entries)
+        renderedEntryCount = min(Self.pageSize, entries.count)
+        isAppendingPage = false
+        lastScrollOriginX = scrollView.contentView.bounds.origin.x
+        collectionView.reloadData()
+        collectionLayout.invalidateLayout()
+        refreshTileSelectionStates()
+        deleteButton.isEnabled = hasAnyEntries
+        deleteButton.alphaValue = deleteButton.isEnabled ? 1 : 0.35
+        if !hasAnyEntries {
+            setDeleteConfirmation(false, animated: true)
+        }
+        emptyLabel.isHidden = !entries.isEmpty
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.loadNextPageIfNeeded()
+            self.syncHoverStateWithCurrentMouse()
+            self.updatePreviewLoading(initial: true)
+        }
+    }
+
+    private var hasSelection: Bool {
+        !selectedEntryIDs.isEmpty
+    }
+
+    private func pruneSelection(to entries: [HistoryEntry]) {
+        let previousSelection = selectedEntryIDs
+        let visibleIDs = Set(entries.map(entryID))
+        selectedEntryIDs = selectedEntryIDs.filter { visibleIDs.contains($0) }
+        if let anchor = lastSelectionAnchorID, !visibleIDs.contains(anchor) {
+            lastSelectionAnchorID = selectedEntryIDs.last
+        }
+        if selectedEntryIDs != previousSelection {
+            setDeleteConfirmation(false, animated: true)
+        }
+    }
+
+    private func handleSelectionToggle(for tile: HistoryPanelTileView, event: NSEvent) {
+        guard tile.supportsSelection else { return }
+        window?.makeKey()
+        setDeleteConfirmation(false, animated: true)
+        if event.modifierFlags.contains(.shift), let anchor = lastSelectionAnchorID {
+            selectRange(from: anchor, to: entryID(tile.entry))
+        } else {
+            toggleSelection(for: tile.entry)
+            lastSelectionAnchorID = entryID(tile.entry)
+        }
+        refreshTileSelectionStates()
+    }
+
+    private func handlePrimaryClick(for tile: HistoryPanelTileView, event: NSEvent) {
+        if event.modifierFlags.contains(.command), tile.supportsSelection {
+            handleSelectionToggle(for: tile, event: event)
+            return
+        }
+        if event.modifierFlags.contains(.shift), tile.supportsSelection {
+            handleSelectionToggle(for: tile, event: event)
+            return
+        }
+
+        let tileID = entryID(tile.entry)
+        if hasSelection, selectedEntryIDs.contains(tileID) {
+            if case .image = tile.entry.kind,
+               HistoryPanelEntryActions.copyImages(selectedImageEntries()) {
+                onRequestDismiss?()
+            } else if HistoryPanelEntryActions.copy(tile.entry) {
+                onRequestDismiss?()
+            }
+            return
+        }
+
+        if HistoryPanelEntryActions.copy(tile.entry) {
+            onRequestDismiss?()
+        }
+    }
+
+    private func dragEntries(for tile: HistoryPanelTileView) -> [HistoryEntry] {
+        let tileID = entryID(tile.entry)
+        guard selectedEntryIDs.contains(tileID) else {
+            return [tile.entry]
+        }
+        let selected = selectedEntries().filter { entry in
+            switch entry.kind {
+            case .color, .text:
+                return false
+            case .image, .video:
+                return true
+            }
+        }
+        return selected.isEmpty ? [tile.entry] : selected
+    }
+
+    private func selectedImageEntries() -> [HistoryEntry] {
+        selectedEntries().filter { entry in
+            guard case .image = entry.kind else { return false }
+            return true
+        }
+    }
+
+    private func selectedEntries() -> [HistoryEntry] {
+        let entriesByID = Dictionary(uniqueKeysWithValues: visibleEntries.map { (entryID($0), $0) })
+        return selectedEntryIDs.compactMap { entriesByID[$0] }
+    }
+
+    private func toggleSelection(for entry: HistoryEntry) {
+        let id = entryID(entry)
+        if let index = selectedEntryIDs.firstIndex(of: id) {
+            selectedEntryIDs.remove(at: index)
+        } else {
+            selectedEntryIDs.append(id)
+        }
+        if selectedEntryIDs.isEmpty {
+            lastSelectionAnchorID = nil
+        }
+    }
+
+    private func clearSelection() {
+        guard hasSelection else { return }
+        selectedEntryIDs.removeAll()
+        lastSelectionAnchorID = nil
+        refreshTileSelectionStates()
+    }
+
+    private func selectRange(from anchorID: String, to targetID: String) {
+        guard let anchorIndex = visibleEntries.firstIndex(where: { entryID($0) == anchorID }),
+              let targetIndex = visibleEntries.firstIndex(where: { entryID($0) == targetID }) else {
+            if let target = visibleEntries.first(where: { entryID($0) == targetID }) {
+                toggleSelection(for: target)
+            }
+            return
+        }
+        let range = anchorIndex <= targetIndex ? anchorIndex...targetIndex : targetIndex...anchorIndex
+        for entry in visibleEntries[range] where isSelectable(entry) {
+            let id = entryID(entry)
+            if !selectedEntryIDs.contains(id) {
+                selectedEntryIDs.append(id)
+            }
+        }
+    }
+
+    private func refreshTileSelectionStates() {
+        for tile in visibleCollectionTiles {
+            let id = entryID(tile.entry)
+            let order = selectedEntryIDs.firstIndex(of: id).map { $0 + 1 }
+            tile.setSelectionState(order: order, selectionModeActive: hasSelection)
+        }
+        updateDeleteButtonPresentation()
+    }
+
+    private func entryID(_ entry: HistoryEntry) -> String {
+        entry.fileURL.standardizedFileURL.path
+    }
+
+    private func isSelectable(_: HistoryEntry) -> Bool {
+        return true
+    }
+
+    private func updateDeleteButtonPresentation() {
+        let title = hasSelection
+            ? L10n.historyPanelDeleteSelected(selectedEntryIDs.count)
+            : L10n.historyPanelDeleteAll
+        deleteButton.title = title
+        deleteButton.toolTip = title
+        deleteButton.setAccessibilityLabel(title)
+        if isConfirmingDelete {
+            deleteButtonWidthConstraint?.constant = deleteButton.expandedWidth
+            layoutSubtreeIfNeeded()
+        }
+    }
+
+    private func setDeleteConfirmation(_ confirming: Bool, animated: Bool) {
+        guard isConfirmingDelete != confirming else { return }
+        isConfirmingDelete = confirming
+        let width = confirming ? deleteButton.expandedWidth : HistoryPanelDeleteButton.collapsedWidth
+
+        guard animated else {
+            deleteButtonWidthConstraint?.constant = width
+            deleteButton.setConfirming(confirming, animated: false)
+            layoutSubtreeIfNeeded()
+            return
+        }
+
+        layoutSubtreeIfNeeded()
+        deleteButton.setConfirming(confirming, animated: true)
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.22
+            context.allowsImplicitAnimation = true
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            deleteButtonWidthConstraint?.constant = width
+            animator().layoutSubtreeIfNeeded()
+        }
+    }
+
+    func resetTransientState(animated: Bool) {
+        setDeleteConfirmation(false, animated: animated)
+        clearSelection()
+        clearActiveHoverTile()
+    }
+
+    func syncHoverStateWithCurrentMouse() {
+        guard let window, !isHidden else {
+            clearActiveHoverTile()
+            return
+        }
+
+        let windowPoint = window.convertPoint(fromScreen: NSEvent.mouseLocation)
+        let contentPoint = convert(windowPoint, from: nil)
+        let scrollPoint = scrollView.convert(windowPoint, from: nil)
+        guard bounds.contains(contentPoint), scrollView.bounds.contains(scrollPoint) else {
+            clearActiveHoverTile()
+            return
+        }
+
+        for tile in visibleCollectionTiles.reversed() {
+            let tilePoint = tile.convert(windowPoint, from: nil)
+            if tile.bounds.contains(tilePoint) {
+                updateActiveHoverTile(tile, isHovered: true)
+                return
+            }
+        }
+
+        clearActiveHoverTile()
+    }
+
+    private func updateActiveHoverTile(_ tile: HistoryPanelTileView, isHovered: Bool) {
+        if isHovered {
+            guard !isScrollingContent else {
+                tile.setHovered(false)
+                return
+            }
+            let hoverChanged = activeHoverTile !== tile
+            if hoverChanged {
+                activeHoverTile?.setHovered(false)
+                activeHoverTile = tile
+            }
+            tile.setHovered(true)
+            if hoverChanged {
+                updateHistoryPreviewHotkey()
+            }
+        } else if activeHoverTile === tile {
+            tile.setHovered(false)
+            activeHoverTile = nil
+            updateHistoryPreviewHotkey()
+        } else {
+            tile.setHovered(false)
+        }
+    }
+
+    private func clearActiveHoverTile() {
+        guard let hoveredTile = activeHoverTile else { return }
+        hoveredTile.setHovered(false)
+        activeHoverTile = nil
+        updateHistoryPreviewHotkey()
+    }
+
+    private func updateHistoryPreviewHotkey() {
+        guard previewController == nil,
+              let entry = activeHoverTile?.entry,
+              previewKind(for: entry) != nil else {
+            HotkeyManager.shared.unregisterHistoryPreview()
+            return
+        }
+        HotkeyManager.shared.registerHistoryPreview { [weak self] in
+            guard let self,
+                  let hoveredEntry = self.activeHoverTile?.entry,
+                  self.previewKind(for: hoveredEntry) != nil else { return }
+            self.presentPreview(startingAt: hoveredEntry)
+        }
+    }
+
+    private func startConfirmationDismissMonitoring() {
+        guard confirmationDismissMonitor == nil else { return }
+        confirmationDismissMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+            self?.collapseDeleteConfirmationIfNeeded(for: event)
+            return event
+        }
+    }
+
+    private func stopConfirmationDismissMonitoring() {
+        if let confirmationDismissMonitor {
+            NSEvent.removeMonitor(confirmationDismissMonitor)
+            self.confirmationDismissMonitor = nil
+        }
+    }
+
+    private func startSelectionKeyMonitoring() {
+        guard selectionKeyMonitor == nil else { return }
+        selectionKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self else { return event }
+            guard event.window === self.window else { return event }
+
+            let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            let hasFilterCycleModifier = !modifiers.intersection([.command, .control, .option, .shift]).isEmpty
+            if self.isActive, !hasFilterCycleModifier {
+                switch Int(event.keyCode) {
+                case kVK_LeftArrow:
+                    self.cycleFilter(forward: false)
+                    return nil
+                case kVK_RightArrow:
+                    self.cycleFilter(forward: true)
+                    return nil
+                default:
+                    break
+                }
+            }
+            if event.keyCode == UInt16(kVK_Space), modifiers.isEmpty,
+               let hoveredEntry = self.activeHoverTile?.entry,
+               self.previewKind(for: hoveredEntry) != nil {
+                self.presentPreview(startingAt: hoveredEntry)
+                return nil
+            }
+            let hasUnsupportedSelectAllModifier = !modifiers.intersection([.control, .option, .shift]).isEmpty
+            if event.keyCode == UInt16(kVK_ANSI_A),
+               modifiers.contains(.command),
+               !hasUnsupportedSelectAllModifier {
+                self.setDeleteConfirmation(false, animated: true)
+                self.selectedEntryIDs = self.visibleEntries
+                    .filter(self.isSelectable)
+                    .map(self.entryID)
+                self.lastSelectionAnchorID = self.selectedEntryIDs.first
+                self.refreshTileSelectionStates()
+                return nil
+            }
+
+            if event.keyCode == UInt16(kVK_Escape) {
+                if self.isConfirmingDelete {
+                    self.setDeleteConfirmation(false, animated: true)
+                } else if self.hasSelection {
+                    self.clearSelection()
+                } else {
+                    return event
+                }
+                return nil
+            }
+            return event
+        }
+    }
+
+    private func presentPreview(startingAt entry: HistoryEntry) {
+        guard let kind = previewKind(for: entry) else { return }
+        let previewEntries = visibleEntries.filter { previewKind(for: $0) == kind }
+        guard !previewEntries.isEmpty else { return }
+        HotkeyManager.shared.unregisterHistoryPreview()
+        previewController?.close()
+        let controller = HistoryPreviewWindowController(
+            entries: previewEntries,
+            initialEntry: entry,
+            onEdit: { [weak self] selectedEntry in
+                self?.previewController = nil
+                self?.onRequestDismiss?()
+                self?.onEditEntry(selectedEntry)
+            }
+        )
+        controller.onClose = { [weak self, weak controller] in
+            guard self?.previewController === controller else { return }
+            self?.previewController = nil
+            self?.syncHoverStateWithCurrentMouse()
+        }
+        previewController = controller
+        controller.show(relativeTo: window?.screen)
+    }
+
+    private enum PreviewKind {
+        case image
+        case text
+    }
+
+    private func previewKind(for entry: HistoryEntry) -> PreviewKind? {
+        switch entry.kind {
+        case .image: return .image
+        case .text: return .text
+        case .video, .color: return nil
+        }
+    }
+
+    private func stopSelectionKeyMonitoring() {
+        if let selectionKeyMonitor {
+            NSEvent.removeMonitor(selectionKeyMonitor)
+            self.selectionKeyMonitor = nil
+        }
+    }
+
+    private func collapseDeleteConfirmationIfNeeded(for event: NSEvent) {
+        guard isConfirmingDelete else { return }
+        guard let eventWindow = event.window, let hostWindow = window, eventWindow === hostWindow else { return }
+        let point = convert(event.locationInWindow, from: nil)
+        guard bounds.contains(point) else { return }
+
+        let deleteRect = deleteButton.convert(deleteButton.bounds, to: self)
+        if !deleteRect.contains(point) {
+            setDeleteConfirmation(false, animated: true)
+        }
+    }
+
+    @objc private func scrollBoundsDidChange() {
+        let currentOriginX = scrollView.contentView.bounds.origin.x
+        let direction: PreviewPrefetchDirection = currentOriginX >= lastScrollOriginX ? .forward : .backward
+        lastScrollOriginX = currentOriginX
+        suspendHoverUpdatesDuringScrolling()
+        loadNextPageIfNeeded()
+        visibleCollectionTiles.forEach { $0.loadPreviewIfNeeded() }
+        updatePreviewLoading(direction: direction)
+    }
+
+    private func suspendHoverUpdatesDuringScrolling() {
+        if !isScrollingContent {
+            isScrollingContent = true
+            clearActiveHoverTile()
+        }
+
+        hoverSyncWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self, self.isActive else { return }
+            self.isScrollingContent = false
+            self.hoverSyncWorkItem = nil
+            self.syncHoverStateWithCurrentMouse()
+        }
+        hoverSyncWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: workItem)
+    }
+
+    private static func filteredEntries(from entries: [HistoryEntry], filter: HistoryPanelFilter) -> [HistoryEntry] {
+        entries.filter { entryMatches($0, filter: filter) }
+    }
+
+    private static func availableFilters(for entries: [HistoryEntry]) -> Set<HistoryPanelFilter> {
+        var filters: Set<HistoryPanelFilter> = [.all]
+        for filter in HistoryPanelFilter.allCases where filter != .all {
+            if entries.contains(where: { entryMatches($0, filter: filter) }) {
+                filters.insert(filter)
+            }
+        }
+        return filters
+    }
+
+    private static func entryMatches(_ entry: HistoryEntry, filter: HistoryPanelFilter) -> Bool {
+        switch filter {
+        case .all:
+            return true
+        case .screenshots:
+            guard case .image = entry.kind else { return false }
+            return entry.fileURL.pathExtension.lowercased() != "gif"
+        case .gif:
+            guard case .image = entry.kind else { return false }
+            return entry.fileURL.pathExtension.lowercased() == "gif"
+        case .mp4:
+            guard case .video = entry.kind else { return false }
+            return true
+        case .colors:
+            guard case .color = entry.kind else { return false }
+            return true
+        case .text:
+            guard case .text = entry.kind else { return false }
+            return true
+        }
+    }
+
+    private var visibleCollectionTiles: [HistoryPanelTileView] {
+        collectionView.visibleItems().compactMap { item in
+            (item as? HistoryPanelCollectionItem)?.tileView
+        }
+    }
+
+    private func warmInitialPreviewWindow() {
+        previewWarmGeneration += 1
+        let generation = previewWarmGeneration
+        let filter = selectedFilter
+        entriesQueue.async { [weak self] in
+            let entries = Self.filteredEntries(from: HistoryManager.shared.panelEntries(), filter: filter)
+            let initialEntries = Array(entries.prefix(Self.initialPreviewCount))
+            DispatchQueue.main.async {
+                guard let self, self.previewWarmGeneration == generation else { return }
+                self.prefetchPreviews(for: initialEntries)
+            }
+        }
+    }
+
+    private func updatePreviewLoading(
+        initial: Bool = false,
+        direction: PreviewPrefetchDirection = .forward
+    ) {
+        guard isActive, !visibleEntries.isEmpty else { return }
+        if initial {
+            visibleCollectionTiles.forEach { $0.loadPreviewIfNeeded() }
+        }
+
+        let entriesToPrefetch: [HistoryEntry]
+        if initial {
+            let startIndex = visibleIndexRange()?.lowerBound ?? 0
+            let endIndex = min(startIndex + Self.initialPreviewCount, visibleEntries.count)
+            entriesToPrefetch = startIndex < endIndex
+                ? Array(visibleEntries[startIndex..<endIndex])
+                : []
+        } else if let visibleRange = visibleIndexRange() {
+            switch direction {
+            case .forward:
+                let startIndex = visibleRange.upperBound + 1
+                let endIndex = min(startIndex + Self.previewPrefetchCount, visibleEntries.count)
+                entriesToPrefetch = startIndex < endIndex
+                    ? Array(visibleEntries[startIndex..<endIndex])
+                    : []
+            case .backward:
+                let endIndex = visibleRange.lowerBound
+                let startIndex = max(0, endIndex - Self.previewPrefetchCount)
+                entriesToPrefetch = startIndex < endIndex
+                    ? Array(visibleEntries[startIndex..<endIndex])
+                    : []
+            }
+        } else {
+            entriesToPrefetch = Array(visibleEntries.prefix(Self.initialPreviewCount))
+        }
+        prefetchPreviews(for: entriesToPrefetch)
+    }
+
+    private func visibleIndexRange() -> ClosedRange<Int>? {
+        guard renderedEntryCount > 0 else { return nil }
+        let visibleRect = scrollView.documentVisibleRect
+        let itemStride = presentation.tileWidth + collectionLayout.minimumLineSpacing
+        guard itemStride > 0 else { return nil }
+
+        let leading = collectionLayout.sectionInset.left
+        let firstIndex = max(0, Int(floor((visibleRect.minX - leading) / itemStride)))
+        let lastIndex = min(
+            renderedEntryCount - 1,
+            max(firstIndex, Int(floor((visibleRect.maxX - leading - 1) / itemStride)))
+        )
+        guard firstIndex <= lastIndex else { return nil }
+        return firstIndex...lastIndex
+    }
+
+    private func prefetchPreviews(for entries: [HistoryEntry]) {
+        let entryIDs = Set(entries.map { $0.fileURL.standardizedFileURL.path })
+
+        let staleEntryIDs = previewPrefetchRequests.keys.filter { !entryIDs.contains($0) }
+        for entryID in staleEntryIDs {
+            previewPrefetchRequests.removeValue(forKey: entryID)?.cancel()
+        }
+        previewPrefetchEntryIDs = entryIDs
+
+        let pixelSize = presentation.previewPixelSize
+        for entry in entries {
+            let entryID = entry.fileURL.standardizedFileURL.path
+            guard previewPrefetchRequests[entryID] == nil else { continue }
+
+            switch entry.kind {
+            case .image:
+                guard HistoryImagePreviewLoader.shared.cachedPreview(
+                    url: entry.fileURL,
+                    pixelSize: pixelSize
+                ) == nil else { continue }
+                let request = HistoryImagePreviewLoader.shared.load(
+                    url: entry.fileURL,
+                    pixelSize: pixelSize,
+                    priority: .prefetch,
+                    completion: { [weak self] _ in
+                        self?.previewPrefetchRequests.removeValue(forKey: entryID)
+                    }
+                )
+                previewPrefetchRequests[entryID] = request
+            case .video:
+                guard HistoryImagePreviewLoader.shared.cachedVideoFrame(
+                    url: entry.fileURL,
+                    pixelSize: pixelSize
+                ) == nil else { continue }
+                let request = HistoryImagePreviewLoader.shared.loadVideoFrame(
+                    url: entry.fileURL,
+                    pixelSize: pixelSize,
+                    priority: .prefetch,
+                    completion: { [weak self] _ in
+                        self?.previewPrefetchRequests.removeValue(forKey: entryID)
+                    }
+                )
+                previewPrefetchRequests[entryID] = request
+            case .text(let text):
+                text.preload()
+            case .color:
+                break
+            }
+        }
+    }
+
+    private func updateCollectionLayout() {
+        let itemSize = NSSize(width: presentation.tileWidth, height: presentation.tileHeight)
+        if collectionLayout.itemSize != itemSize {
+            collectionLayout.itemSize = itemSize
+            collectionLayout.invalidateLayout()
+        }
+    }
+
+    private func loadNextPageIfNeeded() {
+        guard isActive, !isAppendingPage, renderedEntryCount < visibleEntries.count else { return }
+        let visibleRect = scrollView.documentVisibleRect
+        let contentWidth = collectionLayout.collectionViewContentSize.width
+        let threshold = max(scrollView.bounds.width * 0.75, presentation.tileWidth * 3)
+        guard contentWidth - visibleRect.maxX <= threshold else { return }
+
+        let oldCount = renderedEntryCount
+        let newCount = min(oldCount + Self.pageSize, visibleEntries.count)
+        guard newCount > oldCount else { return }
+        isAppendingPage = true
+        renderedEntryCount = newCount
+        let indexPaths = Set((oldCount..<newCount).map { IndexPath(item: $0, section: 0) })
+        collectionView.insertItems(at: indexPaths)
+        collectionLayout.invalidateLayout()
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.collectionView.layoutSubtreeIfNeeded()
+            self.isAppendingPage = false
+        }
+    }
+
+    func numberOfSections(in collectionView: NSCollectionView) -> Int {
+        1
+    }
+
+    func collectionView(_ collectionView: NSCollectionView, numberOfItemsInSection section: Int) -> Int {
+        renderedEntryCount
+    }
+
+    func collectionView(
+        _ collectionView: NSCollectionView,
+        itemForRepresentedObjectAt indexPath: IndexPath
+    ) -> NSCollectionViewItem {
+        let item = collectionView.makeItem(
+            withIdentifier: HistoryPanelCollectionItem.identifier,
+            for: indexPath
+        ) as! HistoryPanelCollectionItem
+        guard indexPath.item < renderedEntryCount, indexPath.item < visibleEntries.count else {
+            item.clear()
+            return item
+        }
+
+        let entry = visibleEntries[indexPath.item]
+        item.configure(
+            entry: entry,
+            presentation: presentation,
+            onRequestDismiss: { [weak self] in
+                self?.onRequestDismiss?()
+            },
+            onHoverChanged: { [weak self] tile, isHovered in
+                self?.updateActiveHoverTile(tile, isHovered: isHovered)
+            },
+            onSelectionToggle: { [weak self] tile, event in
+                self?.handleSelectionToggle(for: tile, event: event)
+            },
+            onPrimaryClick: { [weak self] tile, event in
+                self?.handlePrimaryClick(for: tile, event: event)
+            },
+            dragEntriesProvider: { [weak self] tile in
+                self?.dragEntries(for: tile) ?? [tile.entry]
+            }
+        )
+        let order = selectedEntryIDs.firstIndex(of: entryID(entry)).map { $0 + 1 }
+        item.tileView?.setSelectionState(order: order, selectionModeActive: hasSelection)
+        item.tileView?.loadPreviewIfNeeded()
+        return item
+    }
+
+    func collectionView(
+        _ collectionView: NSCollectionView,
+        didEndDisplaying item: NSCollectionViewItem,
+        forRepresentedObjectAt indexPath: IndexPath
+    ) {
+        guard let tile = (item as? HistoryPanelCollectionItem)?.tileView else { return }
+        tile.cancelPendingPreviewLoad()
+        if activeHoverTile === tile {
+            clearActiveHoverTile()
+        }
+    }
+}
+
+private final class HistoryPanelCenteredTextView: NSView {
+    private struct CachedTextLayout {
+        let attributedString: NSAttributedString
+        let textBounds: NSRect
+        let textRect: NSRect
+    }
+
+    private final class CachedTextLayoutBox: NSObject {
+        let layout: CachedTextLayout
+
+        init(_ layout: CachedTextLayout) {
+            self.layout = layout
+        }
+    }
+
+    private static let textLayoutCache: NSCache<NSString, CachedTextLayoutBox> = {
+        let cache = NSCache<NSString, CachedTextLayoutBox>()
+        cache.countLimit = 512
+        cache.totalCostLimit = 4 * 1024 * 1024
+        return cache
+    }()
+
+    var ignoresHitTesting = false
+    private var cachedTextLayout: CachedTextLayout?
+
+    var stringValue: String = "" {
+        didSet { invalidateTextLayout() }
+    }
+
+    var font: NSFont = NSFont.systemFont(ofSize: 13, weight: .semibold) {
+        didSet { invalidateTextLayout() }
+    }
+
+    var textColor: NSColor = .white {
+        didSet { invalidateTextLayout() }
+    }
+
+    var alignment: NSTextAlignment = .center {
+        didSet { invalidateTextLayout() }
+    }
+
+    var horizontalInset: CGFloat = 8 {
+        didSet { invalidateTextLayout() }
+    }
+
+    var verticalInset: CGFloat = 0 {
+        didSet { invalidateTextLayout() }
+    }
+
+    var lineBreakMode: NSLineBreakMode = .byTruncatingTail {
+        didSet { invalidateTextLayout() }
+    }
+
+    var minimumFontSize: CGFloat = 0 {
+        didSet { invalidateTextLayout() }
+    }
+
+    override var toolTip: String? {
+        didSet { super.toolTip = toolTip }
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var isFlipped: Bool { true }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        ignoresHitTesting ? nil : super.hitTest(point)
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        if frame.size != newSize {
+            cachedTextLayout = nil
+        }
+        super.setFrameSize(newSize)
+    }
+
+    override func setBoundsSize(_ newSize: NSSize) {
+        if bounds.size != newSize {
+            cachedTextLayout = nil
+        }
+        super.setBoundsSize(newSize)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard let textLayout = textLayout() else { return }
+
+        NSGraphicsContext.saveGraphicsState()
+        NSBezierPath(rect: textLayout.textBounds).addClip()
+        textLayout.attributedString.draw(
+            with: textLayout.textRect,
+            options: [.usesLineFragmentOrigin, .usesFontLeading]
+        )
+        NSGraphicsContext.restoreGraphicsState()
+    }
+
+    private func invalidateTextLayout() {
+        cachedTextLayout = nil
+        needsDisplay = true
+    }
+
+    private func textLayout() -> CachedTextLayout? {
+        if let cachedTextLayout {
+            return cachedTextLayout
+        }
+        guard !stringValue.isEmpty else { return nil }
+
+        let textBounds = bounds.insetBy(dx: horizontalInset, dy: verticalInset)
+        guard textBounds.width > 0, textBounds.height > 0 else { return nil }
+        let cacheKey = textLayoutCacheKey(textBounds: textBounds)
+        if let cachedLayout = Self.textLayoutCache.object(forKey: cacheKey)?.layout {
+            cachedTextLayout = cachedLayout
+            return cachedLayout
+        }
+
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = alignment
+        paragraph.lineBreakMode = lineBreakMode
+
+        let fittedFont = fontFitting(in: textBounds.size, paragraphStyle: paragraph)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: fittedFont,
+            .foregroundColor: textColor,
+            .paragraphStyle: paragraph
+        ]
+        let attributedString = NSAttributedString(string: stringValue, attributes: attributes)
+        let measured = measuredRect(for: attributedString, fitting: textBounds.size)
+        let textHeight = min(ceil(measured.height), textBounds.height)
+        let textRect = NSRect(
+            x: textBounds.minX,
+            y: textBounds.midY - textHeight / 2,
+            width: textBounds.width,
+            height: textHeight
+        )
+        let textLayout = CachedTextLayout(
+            attributedString: attributedString,
+            textBounds: textBounds,
+            textRect: textRect
+        )
+        cachedTextLayout = textLayout
+        let estimatedCost = min(stringValue.utf8.count * 2 + 256, 128 * 1024)
+        Self.textLayoutCache.setObject(
+            CachedTextLayoutBox(textLayout),
+            forKey: cacheKey,
+            cost: estimatedCost
+        )
+        return textLayout
+    }
+
+    private func textLayoutCacheKey(textBounds: NSRect) -> NSString {
+        let fontSize = String(describing: font.pointSize)
+        let colorHash = String(textColor.hash)
+        let alignmentValue = String(alignment.rawValue)
+        let lineBreakValue = String(lineBreakMode.rawValue)
+        let horizontalInsetValue = String(describing: horizontalInset)
+        let verticalInsetValue = String(describing: verticalInset)
+        let minimumFontSizeValue = String(describing: minimumFontSize)
+        let components: [String] = [
+            font.fontName,
+            fontSize,
+            colorHash,
+            alignmentValue,
+            lineBreakValue,
+            horizontalInsetValue,
+            verticalInsetValue,
+            minimumFontSizeValue,
+            NSStringFromRect(textBounds),
+            stringValue
+        ]
+        return components.joined(separator: "\u{1F}") as NSString
+    }
+
+    private func fontFitting(in size: NSSize, paragraphStyle: NSParagraphStyle) -> NSFont {
+        guard minimumFontSize > 0, lineBreakMode != .byWordWrapping, lineBreakMode != .byCharWrapping else {
+            return font
+        }
+
+        func fits(_ pointSize: CGFloat) -> Bool {
+            let candidate = font.withPointSize(pointSize)
+            let attributed = NSAttributedString(
+                string: stringValue,
+                attributes: [.font: candidate, .paragraphStyle: paragraphStyle]
+            )
+            let measured = measuredRect(for: attributed, fitting: size)
+            return ceil(measured.width) <= size.width && ceil(measured.height) <= size.height
+        }
+
+        guard !fits(font.pointSize) else { return font }
+
+        var lowerBound = min(minimumFontSize, font.pointSize)
+        var upperBound = font.pointSize
+        while upperBound - lowerBound > 0.5 {
+            let midpoint = (lowerBound + upperBound) / 2
+            if fits(midpoint) {
+                lowerBound = midpoint
+            } else {
+                upperBound = midpoint
+            }
+        }
+        return font.withPointSize(lowerBound)
+    }
+
+    private func measuredRect(for attributed: NSAttributedString, fitting size: NSSize) -> NSRect {
+        let measuringSize: NSSize
+        switch lineBreakMode {
+        case .byWordWrapping, .byCharWrapping:
+            measuringSize = NSSize(width: size.width, height: .greatestFiniteMagnitude)
+        default:
+            measuringSize = NSSize(width: .greatestFiniteMagnitude, height: size.height)
+        }
+        return attributed.boundingRect(
+            with: measuringSize,
+            options: [.usesLineFragmentOrigin, .usesFontLeading]
+        )
+    }
+}
+
+private extension NSFont {
+    func withPointSize(_ pointSize: CGFloat) -> NSFont {
+        NSFont(descriptor: fontDescriptor, size: pointSize) ?? self
+    }
+}
+
+private final class HistorySelectionBadgeView: NSView {
+    private static let size: CGFloat = 18
+    private let label = NSTextField(labelWithString: "")
+
+    var order: Int? {
+        didSet { applyAppearance() }
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.cornerRadius = Self.size / 2
+        layer?.cornerCurve = .continuous
+        layer?.borderWidth = 1.25
+
+        label.font = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .bold)
+        label.alignment = .center
+        label.isSelectable = false
+        label.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(label)
+
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: leadingAnchor),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor),
+            label.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -0.5)
+        ])
+
+        applyAppearance()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: Self.size, height: Self.size)
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        nil
+    }
+
+    private func applyAppearance() {
+        if let order {
+            label.stringValue = "\(order)"
+            label.textColor = .white
+            layer?.backgroundColor = accentGreen.withAlphaComponent(0.96).cgColor
+            layer?.borderColor = NSColor.white.withAlphaComponent(0.78).cgColor
+        } else {
+            label.stringValue = ""
+            layer?.backgroundColor = NSColor.black.withAlphaComponent(0.34).cgColor
+            layer?.borderColor = NSColor.white.withAlphaComponent(0.76).cgColor
+        }
+    }
+}
+
+private final class HistoryPanelDeleteButton: NSControl {
+    static let collapsedWidth: CGFloat = 28
+    static let minimumExpandedWidth: CGFloat = 96
+    private static let iconSize: CGFloat = 14
+    private static let contentSpacing: CGFloat = 8
+    private static let horizontalPadding: CGFloat = 12
+    private static let collapsedBackgroundColor = NSColor.white.withAlphaComponent(0.10).cgColor
+
+    private let iconView = NSImageView()
+    private let label = HistoryPanelCenteredTextView()
+    private var isConfirming = false
+
+    var title: String {
+        get { label.stringValue }
+        set {
+            label.stringValue = newValue
+            needsLayout = true
+        }
+    }
+
+    var expandedWidth: CGFloat {
+        let textWidth = ceil((label.stringValue as NSString).size(withAttributes: [.font: label.font]).width)
+        return max(
+            Self.minimumExpandedWidth,
+            Self.iconSize + Self.contentSpacing + textWidth + Self.horizontalPadding * 2
+        )
+    }
+
+    override var isEnabled: Bool {
+        didSet {
+            alphaValue = isEnabled ? 1 : 0.35
+        }
+    }
+
+    override var toolTip: String? {
+        didSet {
+            iconView.toolTip = toolTip
+            label.toolTip = toolTip
+        }
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.cornerRadius = 14
+        layer?.cornerCurve = .continuous
+
+        let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .semibold)
+        iconView.image = NSImage(systemSymbolName: "trash", accessibilityDescription: L10n.historyClear)?
+            .withSymbolConfiguration(config)
+        iconView.contentTintColor = NSColor.systemRed.withAlphaComponent(0.88)
+        iconView.imageScaling = .scaleProportionallyDown
+        addSubview(iconView)
+
+        label.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        label.textColor = .white
+        label.alignment = .left
+        label.horizontalInset = 0
+        label.alphaValue = 0
+        addSubview(label)
+
+        setConfirming(false, animated: false)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func layout() {
+        super.layout()
+        let textWidth = isConfirming
+            ? min(
+                max(0, bounds.width - Self.iconSize - Self.contentSpacing - Self.horizontalPadding * 2),
+                ceil((label.stringValue as NSString).size(withAttributes: [.font: label.font]).width)
+            )
+            : 0
+        let groupWidth = isConfirming ? Self.iconSize + Self.contentSpacing + textWidth : Self.iconSize
+        let groupStartX = max(0, bounds.midX - groupWidth / 2)
+
+        iconView.frame = NSRect(
+            x: groupStartX,
+            y: bounds.midY - Self.iconSize / 2,
+            width: Self.iconSize,
+            height: Self.iconSize
+        )
+        label.frame = NSRect(
+            x: iconView.frame.maxX + Self.contentSpacing,
+            y: 0,
+            width: textWidth,
+            height: bounds.height
+        )
+    }
+
+    func setConfirming(_ confirming: Bool, animated: Bool) {
+        layoutSubtreeIfNeeded()
+        isConfirming = confirming
+
+        let backgroundColor = confirming
+            ? NSColor.systemRed.withAlphaComponent(0.86).cgColor
+            : Self.collapsedBackgroundColor
+        layer?.backgroundColor = backgroundColor
+        iconView.contentTintColor = confirming
+            ? .white
+            : NSColor.systemRed.withAlphaComponent(0.88)
+
+        guard animated else {
+            label.alphaValue = confirming ? 1 : 0
+            needsLayout = true
+            layoutSubtreeIfNeeded()
+            return
+        }
+
+        needsLayout = true
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.18
+            context.allowsImplicitAnimation = true
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            label.animator().alphaValue = confirming ? 1 : 0
+            animator().layoutSubtreeIfNeeded()
+        }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard isEnabled else { return }
+        sendAction(action, to: target)
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
+private final class HistoryPanelActionButton: NSControl {
+    private static let buttonSize: CGFloat = 28
+    private static let iconSize: CGFloat = 13
+    private let iconView = NSImageView()
+
+    override var toolTip: String? {
+        didSet {
+            iconView.toolTip = toolTip
+        }
+    }
+
+    init(symbolName: String, accessibilityLabel: String) {
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.cornerRadius = 14
+        layer?.cornerCurve = .continuous
+        layer?.backgroundColor = NSColor.white.withAlphaComponent(0.10).cgColor
+        updateAccessibilityLabel(accessibilityLabel)
+
+        let config = NSImage.SymbolConfiguration(pointSize: 12, weight: .semibold)
+        iconView.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: accessibilityLabel)?
+            .withSymbolConfiguration(config)
+        iconView.contentTintColor = NSColor.white.withAlphaComponent(0.68)
+        iconView.imageScaling = .scaleProportionallyDown
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(iconView)
+
+        NSLayoutConstraint.activate([
+            widthAnchor.constraint(equalToConstant: Self.buttonSize),
+            heightAnchor.constraint(equalToConstant: Self.buttonSize),
+            iconView.centerXAnchor.constraint(equalTo: centerXAnchor),
+            iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            iconView.widthAnchor.constraint(equalToConstant: Self.iconSize),
+            iconView.heightAnchor.constraint(equalToConstant: Self.iconSize),
+        ])
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: Self.buttonSize, height: Self.buttonSize)
+    }
+
+    func updateAccessibilityLabel(_ label: String) {
+        toolTip = label
+        setAccessibilityLabel(label)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        sendAction(action, to: target)
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
+private final class HistoryPanelFilterButton: NSControl {
+    let filter: HistoryPanelFilter
+    private let label = NSTextField(labelWithString: "")
+
+    var title: String {
+        get { label.stringValue }
+        set {
+            label.stringValue = newValue
+            invalidateIntrinsicContentSize()
+        }
+    }
+
+    var isSelected: Bool = false {
+        didSet { applyAppearance() }
+    }
+
+    init(filter: HistoryPanelFilter) {
+        self.filter = filter
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.cornerRadius = 14
+        layer?.cornerCurve = .continuous
+
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        label.alignment = .center
+        label.isSelectable = false
+        addSubview(label)
+
+        NSLayoutConstraint.activate([
+            heightAnchor.constraint(equalToConstant: 28),
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -18),
+            label.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+
+        title = filter.title
+        applyAppearance()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: label.intrinsicContentSize.width + 36, height: 28)
+    }
+
+    private func applyAppearance() {
+        if isSelected {
+            layer?.backgroundColor = accentGreen.withAlphaComponent(0.95).cgColor
+            label.textColor = .black
+        } else {
+            layer?.backgroundColor = NSColor.white.withAlphaComponent(0.10).cgColor
+            label.textColor = NSColor.white.withAlphaComponent(0.66)
+        }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        sendAction(action, to: target)
+    }
+}
+
+private final class HistoryPanelCollectionItem: NSCollectionViewItem {
+    static let identifier = NSUserInterfaceItemIdentifier("HistoryPanelCollectionItem")
+
+    private(set) var tileView: HistoryPanelTileView?
+
+    override func loadView() {
+        view = NSView()
+        view.wantsLayer = true
+        view.layer?.backgroundColor = NSColor.clear.cgColor
+    }
+
+    func configure(
+        entry: HistoryEntry,
+        presentation: HistoryPanelPresentation,
+        onRequestDismiss: (() -> Void)?,
+        onHoverChanged: @escaping (HistoryPanelTileView, Bool) -> Void,
+        onSelectionToggle: @escaping (HistoryPanelTileView, NSEvent) -> Void,
+        onPrimaryClick: @escaping (HistoryPanelTileView, NSEvent) -> Void,
+        dragEntriesProvider: @escaping (HistoryPanelTileView) -> [HistoryEntry]
+    ) {
+        if let tileView {
+            tileView.reconfigure(with: entry)
+            tileView.isHidden = false
+            return
+        }
+        let tile = HistoryPanelTileView(
+            entry: entry,
+            presentation: presentation,
+            onRequestDismiss: onRequestDismiss,
+            onHoverChanged: onHoverChanged,
+            onSelectionToggle: onSelectionToggle,
+            onPrimaryClick: onPrimaryClick,
+            dragEntriesProvider: dragEntriesProvider
+        )
+        tile.frame = view.bounds
+        tile.autoresizingMask = [.width, .height]
+        view.addSubview(tile)
+        tileView = tile
+    }
+
+    func clear() {
+        tileView?.cancelPendingPreviewLoad()
+        tileView?.isHidden = true
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        tileView?.prepareForCollectionReuse()
+    }
+}
+
+private final class HistoryPanelTileView: NSView, NSDraggingSource {
+    private static let textPreviewCharacterLimit = 600
+    private enum PreviewLoadState {
+        case idle
+        case loading
+        case loaded
+    }
+
+    private(set) var entry: HistoryEntry
+    private let presentation: HistoryPanelPresentation
+    private let onRequestDismiss: (() -> Void)?
+    private let onHoverChanged: ((HistoryPanelTileView, Bool) -> Void)?
+    private let onSelectionToggle: ((HistoryPanelTileView, NSEvent) -> Void)?
+    private let onPrimaryClick: ((HistoryPanelTileView, NSEvent) -> Void)?
+    private let dragEntriesProvider: ((HistoryPanelTileView) -> [HistoryEntry])?
+    private let imageView = NSImageView()
+    private let textPreviewLabel = HistoryPanelCenteredTextView()
+    private let overlayLabel = HistoryPanelCenteredTextView()
+    private let badgeView = HistoryMediaBadgeView()
+    private let selectionBadgeView = HistorySelectionBadgeView()
+    private let metaLabel = HistoryPanelCenteredTextView()
+    private var trackingArea: NSTrackingArea?
+    private var previewRequest: HistoryImagePreviewRequest?
+    private var mouseDownPoint: NSPoint?
+    private var mouseDownHitSelectionBadge = false
+    private var isHovered = false
+    private var isSelectionModeActive = false
+    private var selectionOrder: Int?
+    private var didStartDrag = false
+    private var didDismissForCurrentDrag = false
+    private var previewLoadState: PreviewLoadState = .idle
+    private var previewLoadGeneration = 0
+
+    init(
+        entry: HistoryEntry,
+        presentation: HistoryPanelPresentation,
+        onRequestDismiss: (() -> Void)? = nil,
+        onHoverChanged: ((HistoryPanelTileView, Bool) -> Void)? = nil,
+        onSelectionToggle: ((HistoryPanelTileView, NSEvent) -> Void)? = nil,
+        onPrimaryClick: ((HistoryPanelTileView, NSEvent) -> Void)? = nil,
+        dragEntriesProvider: ((HistoryPanelTileView) -> [HistoryEntry])? = nil
+    ) {
+        self.entry = entry
+        self.presentation = presentation
+        self.onRequestDismiss = onRequestDismiss
+        self.onHoverChanged = onHoverChanged
+        self.onSelectionToggle = onSelectionToggle
+        self.onPrimaryClick = onPrimaryClick
+        self.dragEntriesProvider = dragEntriesProvider
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.cornerRadius = 8
+        layer?.cornerCurve = .continuous
+        layer?.backgroundColor = NSColor.white.withAlphaComponent(0.075).cgColor
+        layer?.borderColor = NSColor.white.withAlphaComponent(0.08).cgColor
+        layer?.borderWidth = 1
+
+        imageView.imageScaling = .scaleProportionallyDown
+        imageView.imageAlignment = .alignCenter
+        imageView.wantsLayer = true
+        imageView.layer?.cornerRadius = 5
+        imageView.layer?.cornerCurve = .continuous
+        imageView.layer?.masksToBounds = true
+        imageView.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.24).cgColor
+        addSubview(imageView)
+
+        textPreviewLabel.isHidden = true
+        textPreviewLabel.font = NSFont.systemFont(ofSize: presentation == .dialog ? 13 : 12, weight: .medium)
+        textPreviewLabel.textColor = NSColor.white.withAlphaComponent(0.84)
+        textPreviewLabel.alignment = .natural
+        textPreviewLabel.horizontalInset = 12
+        textPreviewLabel.verticalInset = 9
+        textPreviewLabel.lineBreakMode = .byWordWrapping
+        textPreviewLabel.ignoresHitTesting = true
+        addSubview(textPreviewLabel)
+
+        let overlayHint = Self.overlayHint(for: entry, supportsDrag: supportsDrag)
+        overlayLabel.stringValue = overlayHint
+        overlayLabel.isHidden = overlayHint.isEmpty
+        overlayLabel.font = NSFont.systemFont(ofSize: presentation == .dialog ? 13 : 12, weight: .bold)
+        overlayLabel.textColor = .white
+        overlayLabel.alignment = .center
+        overlayLabel.horizontalInset = 10
+        overlayLabel.verticalInset = 8
+        overlayLabel.lineBreakMode = .byWordWrapping
+        overlayLabel.ignoresHitTesting = true
+        overlayLabel.alphaValue = 0
+        overlayLabel.layer?.cornerRadius = 5
+        overlayLabel.layer?.cornerCurve = .continuous
+        overlayLabel.layer?.masksToBounds = true
+        overlayLabel.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.56).cgColor
+        addSubview(overlayLabel)
+
+        if let badgeKind = HistoryMediaBadgeKind(entry: entry) {
+            badgeView.title = badgeKind.title
+            badgeView.isHidden = false
+        } else {
+            badgeView.isHidden = true
+        }
+        addSubview(badgeView)
+
+        selectionBadgeView.isHidden = true
+        addSubview(selectionBadgeView)
+
+        let metadataFontSize: CGFloat = presentation == .dialog ? 12 : 9.5
+        metaLabel.font = NSFont.monospacedDigitSystemFont(ofSize: metadataFontSize, weight: .semibold)
+        metaLabel.textColor = NSColor.white.withAlphaComponent(0.56)
+        metaLabel.alignment = .center
+        metaLabel.horizontalInset = 0
+        metaLabel.ignoresHitTesting = true
+        addSubview(metaLabel)
+
+        reconfigure(with: entry)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        previewRequest?.cancel()
+    }
+
+    override var isFlipped: Bool { true }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard !isHidden, alphaValue > 0, frame.contains(point) else { return nil }
+        return super.hitTest(point)
+    }
+
+    override func layout() {
+        super.layout()
+        let padding: CGFloat = 12
+        imageView.frame = NSRect(
+            x: padding,
+            y: padding,
+            width: bounds.width - padding * 2,
+            height: presentation.previewHeight
+        )
+        textPreviewLabel.frame = imageView.frame
+        overlayLabel.frame = imageView.frame
+        if !badgeView.isHidden {
+            let badgeSize = badgeView.intrinsicContentSize
+            let selectionOffset: CGFloat = selectionBadgeView.isHidden ? 0 : 20
+            badgeView.frame = NSRect(
+                x: imageView.frame.maxX - badgeSize.width - 7,
+                y: imageView.frame.minY + 7 + selectionOffset,
+                width: badgeSize.width,
+                height: badgeSize.height
+            )
+        }
+        let selectionSize = selectionBadgeView.intrinsicContentSize
+        selectionBadgeView.frame = NSRect(
+            x: imageView.frame.maxX - selectionSize.width + 5,
+            y: imageView.frame.minY - 5,
+            width: selectionSize.width,
+            height: selectionSize.height
+        )
+        metaLabel.frame = NSRect(
+            x: padding,
+            y: imageView.frame.maxY + 9,
+            width: bounds.width - padding * 2,
+            height: 18
+        )
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        trackingArea = area
+        addTrackingArea(area)
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        if let onHoverChanged {
+            onHoverChanged(self, true)
+        } else {
+            setHovered(true)
+        }
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        if let onHoverChanged {
+            onHoverChanged(self, false)
+        } else {
+            setHovered(false)
+        }
+    }
+
+    func setHovered(_ hovered: Bool) {
+        guard isHovered != hovered else { return }
+        isHovered = hovered
+        layer?.borderColor = hovered
+            ? accentGreen.withAlphaComponent(0.80).cgColor
+            : selectedBorderColor
+        layer?.backgroundColor = hovered
+            ? NSColor.white.withAlphaComponent(0.11).cgColor
+            : NSColor.white.withAlphaComponent(0.075).cgColor
+        overlayLabel.alphaValue = hovered && !overlayLabel.isHidden ? 1 : 0
+        updateSelectionBadgeVisibility()
+    }
+
+    func setSelectionState(order: Int?, selectionModeActive: Bool) {
+        selectionOrder = order
+        isSelectionModeActive = selectionModeActive
+        selectionBadgeView.order = order
+        layer?.borderColor = isHovered
+            ? accentGreen.withAlphaComponent(0.80).cgColor
+            : selectedBorderColor
+        layer?.borderWidth = order == nil ? 1 : 2
+        updateSelectionBadgeVisibility()
+        needsLayout = true
+    }
+
+    private var selectedBorderColor: CGColor {
+        selectionOrder == nil
+            ? NSColor.white.withAlphaComponent(0.08).cgColor
+            : accentGreen.withAlphaComponent(0.95).cgColor
+    }
+
+    private func updateSelectionBadgeVisibility() {
+        selectionBadgeView.isHidden = !supportsSelection || (!isHovered && !isSelectionModeActive && selectionOrder == nil)
+        needsLayout = true
+    }
+
+    func reconfigure(with entry: HistoryEntry) {
+        cancelPendingPreviewLoad()
+        previewLoadGeneration += 1
+        self.entry = entry
+        previewLoadState = .idle
+
+        imageView.image = nil
+        imageView.contentTintColor = nil
+        imageView.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.24).cgColor
+        textPreviewLabel.stringValue = ""
+        textPreviewLabel.toolTip = nil
+        textPreviewLabel.isHidden = true
+
+        let overlayHint = Self.overlayHint(for: entry, supportsDrag: supportsDrag)
+        overlayLabel.stringValue = overlayHint
+        overlayLabel.isHidden = overlayHint.isEmpty
+        overlayLabel.alphaValue = 0
+
+        if let badgeKind = HistoryMediaBadgeKind(entry: entry) {
+            badgeView.title = badgeKind.title
+            badgeView.isHidden = false
+        } else {
+            badgeView.isHidden = true
+        }
+
+        isHovered = false
+        isSelectionModeActive = false
+        selectionOrder = nil
+        selectionBadgeView.order = nil
+        selectionBadgeView.isHidden = true
+        layer?.borderColor = selectedBorderColor
+        layer?.borderWidth = 1
+        layer?.backgroundColor = NSColor.white.withAlphaComponent(0.075).cgColor
+
+        mouseDownPoint = nil
+        mouseDownHitSelectionBadge = false
+        didStartDrag = false
+        didDismissForCurrentDrag = false
+
+        switch entry.kind {
+        case .image:
+            configureImagePlaceholder()
+            let label = entry.fileURL.pathExtension.lowercased() == "gif"
+                ? L10n.historyPanelFilterGIF
+                : L10n.historyPanelFilterScreenshots
+            metaLabel.stringValue = Self.metadata(label: label, date: entry.createdAt)
+        case .video:
+            configureVideoPlaceholder()
+            previewLoadState = .idle
+        case .color(let hex):
+            configureColorPreview(hex: hex)
+        case .text:
+            imageView.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.055).cgColor
+            metaLabel.stringValue = Self.metadata(label: L10n.historyPanelFilterText, date: entry.createdAt)
+        }
+        needsLayout = true
+    }
+
+    func prepareForCollectionReuse() {
+        cancelPendingPreviewLoad()
+        setHovered(false)
+    }
+
+    func loadPreviewIfNeeded() {
+        guard previewLoadState == .idle else { return }
+        if applyCachedPreviewIfAvailable() {
+            return
+        }
+        previewLoadState = .loading
+        previewLoadGeneration += 1
+        loadEntryPreview(generation: previewLoadGeneration)
+    }
+
+    func cancelPendingPreviewLoad() {
+        guard previewLoadState == .loading else { return }
+        previewLoadGeneration += 1
+        previewRequest?.cancel()
+        previewRequest = nil
+        previewLoadState = .idle
+    }
+
+    private func applyCachedPreviewIfAvailable() -> Bool {
+        let pixelSize = presentation.previewPixelSize
+        switch entry.kind {
+        case .image:
+            guard let preview = HistoryImagePreviewLoader.shared.cachedPreview(
+                url: entry.fileURL,
+                pixelSize: pixelSize
+            ) else { return false }
+            configureImagePreview(preview)
+            return true
+        case .video:
+            guard let preview = HistoryImagePreviewLoader.shared.cachedVideoFrame(
+                url: entry.fileURL,
+                pixelSize: pixelSize
+            ) else { return false }
+            configureVideoPreview(preview)
+            return true
+        case .text(let text):
+            guard let loadedValue = text.loadedValue else { return false }
+            configureTextPreview(loadedValue)
+            return true
+        case .color:
+            return true
+        }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        mouseDownPoint = convert(event.locationInWindow, from: nil)
+        mouseDownHitSelectionBadge = selectionBadgeHitTest(mouseDownPoint ?? .zero)
+        didStartDrag = false
+        didDismissForCurrentDrag = false
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard !didStartDrag, let mouseDownPoint else { return }
+        guard !mouseDownHitSelectionBadge else { return }
+        let point = convert(event.locationInWindow, from: nil)
+        let dx = point.x - mouseDownPoint.x
+        let dy = point.y - mouseDownPoint.y
+        guard hypot(dx, dy) > 4 else { return }
+        didStartDrag = true
+        let draggedEntries = dragEntriesProvider?(self) ?? [entry]
+        let draggableEntries = draggedEntries.filter { Self.supportsDrag($0) }
+        guard !draggableEntries.isEmpty else { return }
+
+        let draggingImage = imageView.image
+            ?? NSImage(systemSymbolName: "photo", accessibilityDescription: nil)
+            ?? NSImage(size: imageView.bounds.size)
+        let dragImage = draggableEntries.count > 1
+            ? Self.multiDragImage(base: draggingImage, count: draggableEntries.count)
+            : draggingImage
+        let dragFrame = draggingFrame(for: dragImage)
+        let items = draggableEntries.enumerated().map { index, entry in
+            let item = NSDraggingItem(pasteboardWriter: entry.fileURL as NSURL)
+            let offset = CGFloat(min(index, 2)) * 4
+            item.setDraggingFrame(dragFrame.offsetBy(dx: offset, dy: offset), contents: dragImage)
+            return item
+        }
+        beginDraggingSession(with: items, event: event, source: self)
+    }
+
+    private func draggingFrame(for image: NSImage) -> NSRect {
+        let imageSize = image.size
+        let bounds = imageView.bounds
+        guard imageSize.width > 0, imageSize.height > 0, bounds.width > 0, bounds.height > 0 else {
+            return imageView.frame
+        }
+
+        let scale = min(bounds.width / imageSize.width, bounds.height / imageSize.height)
+        let fittedSize = NSSize(width: imageSize.width * scale, height: imageSize.height * scale)
+        let fittedRect = NSRect(
+            x: bounds.midX - fittedSize.width / 2,
+            y: bounds.midY - fittedSize.height / 2,
+            width: fittedSize.width,
+            height: fittedSize.height
+        )
+        return imageView.convert(fittedRect, to: self)
+    }
+
+    private static func multiDragImage(base: NSImage, count: Int) -> NSImage {
+        let baseSize = base.size.width > 0 && base.size.height > 0
+            ? base.size
+            : NSSize(width: 120, height: 80)
+        let shadowOffset: CGFloat = 6
+        let size = NSSize(width: baseSize.width + shadowOffset * 2, height: baseSize.height + shadowOffset * 2)
+        let image = NSImage(size: size)
+        image.lockFocus()
+
+        for index in 0..<3 {
+            let offset = CGFloat(2 - index) * 3
+            let rect = NSRect(
+                x: shadowOffset - offset,
+                y: shadowOffset - offset,
+                width: baseSize.width,
+                height: baseSize.height
+            )
+            NSColor.black.withAlphaComponent(index == 2 ? 0.18 : 0.30).setFill()
+            NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8).fill()
+        }
+
+        let contentRect = NSRect(
+            x: shadowOffset,
+            y: shadowOffset,
+            width: baseSize.width,
+            height: baseSize.height
+        )
+        base.draw(in: contentRect, from: .zero, operation: .sourceOver, fraction: 1)
+
+        let badgeSize: CGFloat = 28
+        let badgeRect = NSRect(
+            x: size.width - badgeSize - 2,
+            y: size.height - badgeSize - 2,
+            width: badgeSize,
+            height: badgeSize
+        )
+        accentGreen.withAlphaComponent(0.96).setFill()
+        NSBezierPath(ovalIn: badgeRect).fill()
+        NSColor.white.withAlphaComponent(0.86).setStroke()
+        NSBezierPath(ovalIn: badgeRect.insetBy(dx: 0.75, dy: 0.75)).stroke()
+
+        let text = "\(count)" as NSString
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .bold)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: NSColor.white
+        ]
+        let textSize = text.size(withAttributes: attributes)
+        text.draw(
+            at: NSPoint(
+                x: badgeRect.midX - textSize.width / 2,
+                y: badgeRect.midY - textSize.height / 2
+            ),
+            withAttributes: attributes
+        )
+
+        image.unlockFocus()
+        return image
+    }
+
+    var supportsSelection: Bool {
+        return true
+    }
+
+    private var supportsDrag: Bool {
+        Self.supportsDrag(entry)
+    }
+
+    private static func supportsDrag(_ entry: HistoryEntry) -> Bool {
+        switch entry.kind {
+        case .color, .text:
+            return false
+        case .image, .video:
+            return true
+        }
+    }
+
+    private static func overlayHint(for entry: HistoryEntry, supportsDrag: Bool) -> String {
+        guard supportsDrag else { return L10n.historyPanelCopyHint }
+        return L10n.historyPanelCopyDragHint.replacingOccurrences(of: " · ", with: "\n")
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        defer {
+            didStartDrag = false
+            mouseDownHitSelectionBadge = false
+            mouseDownPoint = nil
+        }
+        guard !didStartDrag else { return }
+        let point = convert(event.locationInWindow, from: nil)
+        if mouseDownHitSelectionBadge, selectionBadgeHitTest(point) {
+            onSelectionToggle?(self, event)
+            return
+        }
+        if let onPrimaryClick {
+            onPrimaryClick(self, event)
+        } else if HistoryPanelEntryActions.copy(entry) {
+            onRequestDismiss?()
+        }
+    }
+
+    private func selectionBadgeHitTest(_ point: NSPoint) -> Bool {
+        guard supportsSelection, !selectionBadgeView.isHidden else { return false }
+        return selectionBadgeView.frame.insetBy(dx: -7, dy: -7).contains(point)
+    }
+
+    func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
+        .copy
+    }
+
+    func draggingSession(_ session: NSDraggingSession, movedTo screenPoint: NSPoint) {
+        guard !didDismissForCurrentDrag else { return }
+        guard let window, !window.frame.contains(screenPoint) else { return }
+        didDismissForCurrentDrag = true
+        DispatchQueue.main.async { [weak self] in
+            self?.onRequestDismiss?()
+        }
+    }
+
+    private func loadEntryPreview(generation: Int) {
+        switch entry.kind {
+        case .image:
+            loadPreview(generation: generation)
+        case .video:
+            loadVideoPreview(generation: generation)
+        case .color(let hex):
+            configureColorPreview(hex: hex)
+        case .text(let text):
+            text.load { [weak self] value in
+                guard let self,
+                      self.previewLoadGeneration == generation,
+                      self.previewLoadState == .loading else { return }
+                self.previewLoadState = .loaded
+                self.configureTextPreview(value)
+            }
+        }
+    }
+
+    private func loadPreview(generation: Int) {
+        let pixelSize = presentation.previewPixelSize
+        let url = entry.fileURL
+        previewRequest?.cancel()
+        previewRequest = HistoryImagePreviewLoader.shared.load(url: url, pixelSize: pixelSize) { [weak self] preview in
+            guard let self,
+                  self.previewLoadGeneration == generation,
+                  self.previewLoadState == .loading,
+                  self.entry.fileURL == url else { return }
+            self.configureImagePreview(preview)
+        }
+    }
+
+    private func loadVideoPreview(generation: Int) {
+        configureVideoPlaceholder()
+        let pixelSize = presentation.previewPixelSize
+        let url = entry.fileURL
+        previewRequest?.cancel()
+        previewRequest = HistoryImagePreviewLoader.shared.loadVideoFrame(url: url, pixelSize: pixelSize) { [weak self] preview in
+            guard let self,
+                  self.previewLoadGeneration == generation,
+                  self.previewLoadState == .loading,
+                  self.entry.fileURL == url else { return }
+            self.configureVideoPreview(preview)
+        }
+    }
+
+    private func configureImagePlaceholder() {
+        let config = NSImage.SymbolConfiguration(pointSize: 28, weight: .medium)
+        let image = NSImage(systemSymbolName: "photo", accessibilityDescription: nil)?
+            .withSymbolConfiguration(config)
+        image?.isTemplate = true
+        imageView.image = image
+        imageView.contentTintColor = NSColor.white.withAlphaComponent(0.18)
+        imageView.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.045).cgColor
+    }
+
+    private func configureImagePreview(_ preview: HistoryImagePreview) {
+        previewRequest = nil
+        previewLoadState = .loaded
+        if let cgImage = preview.cgImage {
+            imageView.image = NSImage(
+                cgImage: cgImage,
+                size: NSSize(width: cgImage.width, height: cgImage.height)
+            )
+            imageView.contentTintColor = nil
+            imageView.layer?.backgroundColor = NSColor.clear.cgColor
+        }
+        metaLabel.stringValue = HistoryImagePreview.metadata(
+            pixelWidth: preview.pixelWidth,
+            pixelHeight: preview.pixelHeight,
+            date: entry.createdAt
+        )
+    }
+
+    private func configureVideoPreview(_ preview: HistoryImagePreview) {
+        previewRequest = nil
+        previewLoadState = .loaded
+        if let cgImage = preview.cgImage {
+            imageView.image = NSImage(
+                cgImage: cgImage,
+                size: NSSize(width: cgImage.width, height: cgImage.height)
+            )
+            imageView.contentTintColor = nil
+            imageView.layer?.backgroundColor = NSColor.clear.cgColor
+        }
+        if preview.pixelWidth > 0, preview.pixelHeight > 0 {
+            metaLabel.stringValue = HistoryImagePreview.metadata(
+                pixelWidth: preview.pixelWidth,
+                pixelHeight: preview.pixelHeight,
+                date: entry.createdAt
+            )
+        }
+    }
+
+    private func configureVideoPlaceholder() {
+        let config = NSImage.SymbolConfiguration(pointSize: 34, weight: .semibold)
+        let image = NSImage(systemSymbolName: "play.rectangle.fill", accessibilityDescription: L10n.historyPanelFilterMP4)?
+            .withSymbolConfiguration(config)
+        image?.isTemplate = true
+        imageView.image = image
+        imageView.contentTintColor = NSColor.white.withAlphaComponent(0.86)
+        imageView.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.34).cgColor
+        metaLabel.stringValue = Self.metadata(label: L10n.historyPanelFilterMP4, date: entry.createdAt)
+    }
+
+    private func configureColorPreview(hex: String) {
+        imageView.image = nil
+        imageView.layer?.backgroundColor = (NSColor(hex: hex) ?? .black).cgColor
+        metaLabel.stringValue = Self.metadata(label: hex.uppercased(), date: entry.createdAt)
+        previewRequest = nil
+        previewLoadState = .loaded
+    }
+
+    private func configureTextPreview(_ text: String) {
+        let previewText = String(text.prefix(Self.textPreviewCharacterLimit))
+        imageView.image = nil
+        imageView.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.055).cgColor
+        textPreviewLabel.stringValue = previewText
+        textPreviewLabel.toolTip = previewText
+        textPreviewLabel.isHidden = false
+        metaLabel.stringValue = Self.metadata(label: L10n.historyPanelFilterText, date: entry.createdAt)
+        previewRequest = nil
+        previewLoadState = .loaded
+    }
+
+    private static func metadata(label: String, date: Date) -> String {
+        "\(label)  ·  \(dateFormatter.string(from: date))"
+    }
+
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.setLocalizedDateFormatFromTemplate("MdHm")
+        return formatter
+    }()
+}
+
+private final class HistoryPreviewPanel: NSPanel {
+    var onKeyDown: ((NSEvent) -> Bool)?
+
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown, onKeyDown?(event) == true {
+            return
+        }
+        super.sendEvent(event)
+    }
+}
+
+private final class HistoryPreviewContentView: NSView {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        applyAppearance()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyAppearance()
+    }
+
+    private func applyAppearance() {
+        let background = AdaptiveChrome.resolvedColor(
+            AdaptiveChrome.panelBackground,
+            for: effectiveAppearance
+        )
+        layer?.backgroundColor = background.cgColor
+        window?.backgroundColor = background
+    }
+}
+
+private final class HistoryPreviewActionButton: NSButton {
+    var hoverTip = ""
+
+    init(image: NSImage, target: AnyObject?, action: Selector?) {
+        super.init(frame: .zero)
+        self.image = image
+        self.target = target
+        self.action = action
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+}
+
+private final class HistoryPreviewTooltipPanel: NSPanel {
+    override var canBecomeKey: Bool { false }
+    override var canBecomeMain: Bool { false }
+}
+
+private final class HistoryPreviewTooltipController {
+    private weak var parentWindow: NSWindow?
+    private let panel: HistoryPreviewTooltipPanel
+    private let label = NSTextField(labelWithString: "")
+
+    init() {
+        panel = HistoryPreviewTooltipPanel(
+            contentRect: .zero,
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.ignoresMouseEvents = true
+        panel.hidesOnDeactivate = false
+        panel.isReleasedWhenClosed = false
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+
+        let content = AdaptiveChromeSurfaceView(
+            style: .floating,
+            cornerRadius: 6,
+            borderWidth: 1
+        )
+        panel.contentView = content
+
+        label.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        label.textColor = .labelColor
+        label.usesSingleLineMode = true
+        label.lineBreakMode = .byClipping
+        content.addSubview(label)
+    }
+
+    func show(_ text: String, relativeTo anchorView: NSView) {
+        guard !text.isEmpty,
+              let parentWindow = anchorView.window,
+              let screen = parentWindow.screen ?? NSScreen.main ?? NSScreen.screens.first else {
+            hide()
+            return
+        }
+
+        if self.parentWindow !== parentWindow {
+            if let previousParent = self.parentWindow {
+                previousParent.removeChildWindow(panel)
+            }
+            self.parentWindow = parentWindow
+            parentWindow.addChildWindow(panel, ordered: .above)
+        }
+        label.stringValue = text
+        let textSize = label.intrinsicContentSize
+        let panelSize = NSSize(
+            width: ceil(textSize.width) + 20,
+            height: ceil(textSize.height) + 10
+        )
+        label.frame = NSRect(x: 10, y: 5, width: ceil(textSize.width), height: ceil(textSize.height))
+
+        let anchorRect = parentWindow.convertToScreen(anchorView.convert(anchorView.bounds, to: nil))
+        let visibleFrame = screen.visibleFrame
+        var origin = NSPoint(
+            x: anchorRect.midX - panelSize.width / 2,
+            y: anchorRect.minY - panelSize.height - 6
+        )
+        origin.x = min(
+            max(origin.x, visibleFrame.minX + 8),
+            visibleFrame.maxX - panelSize.width - 8
+        )
+        if origin.y < visibleFrame.minY + 8 {
+            origin.y = anchorRect.maxY + 6
+        }
+
+        panel.level = NSWindow.Level(rawValue: parentWindow.level.rawValue + 1)
+        panel.setFrame(NSRect(origin: origin, size: panelSize), display: true)
+        panel.orderFrontRegardless()
+    }
+
+    func hide() {
+        panel.orderOut(nil)
+        if let parentWindow {
+            parentWindow.removeChildWindow(panel)
+        }
+        parentWindow = nil
+    }
+
+    func close() {
+        hide()
+    }
+}
+
+private final class HistoryPreviewWindowController: NSWindowController, NSWindowDelegate {
+    private enum ContentKind {
+        case image
+        case text
+    }
+
+    private let entries: [HistoryEntry]
+    private let onEdit: (HistoryEntry) -> Void
+    private let contentKind: ContentKind
+    private let imageView = NSImageView()
+    private let textScrollView = NSScrollView()
+    private let textView = NSTextView()
+    private let titlebarFilenameContainer = NSView()
+    private let titlebarFilenameLabel = NSTextField(labelWithString: "")
+    private let titlebarPositionLabel = NSTextField(labelWithString: "")
+    private let titlebarActionStack = NSStackView()
+    private let tooltipController = HistoryPreviewTooltipController()
+    private weak var hoveredActionButton: HistoryPreviewActionButton?
+    private var qrCodeButton: HistoryPreviewActionButton?
+    private var actionButtons: [HistoryPreviewActionButton] = []
+    private var actionHoverTimer: Timer?
+    private var previewKeyMonitor: Any?
+    private var currentIndex: Int
+    private var loadGeneration = 0
+    private var placementScreen: NSScreen?
+    var onClose: (() -> Void)?
+
+    init(entries: [HistoryEntry], initialEntry: HistoryEntry, onEdit: @escaping (HistoryEntry) -> Void) {
+        self.entries = entries
+        self.onEdit = onEdit
+        if case .text = initialEntry.kind {
+            contentKind = .text
+        } else {
+            contentKind = .image
+        }
+        currentIndex = entries.firstIndex(where: {
+            $0.fileURL.standardizedFileURL == initialEntry.fileURL.standardizedFileURL
+        }) ?? 0
+
+        let panel = HistoryPreviewPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 640, height: 480),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        panel.titleVisibility = .hidden
+        panel.titlebarAppearsTransparent = true
+        panel.isMovableByWindowBackground = true
+        panel.level = NSWindow.Level(rawValue: NSWindow.Level.popUpMenu.rawValue + 3)
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.isReleasedWhenClosed = false
+        panel.backgroundColor = AdaptiveChrome.panelBackground
+
+        super.init(window: panel)
+        panel.delegate = self
+        panel.onKeyDown = { [weak self] event in
+            self?.handleKeyDown(event) ?? false
+        }
+        setupContent(in: panel)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func show(relativeTo screen: NSScreen?) {
+        guard let window else { return }
+        placementScreen = screen ?? window.screen ?? NSScreen.main ?? NSScreen.screens.first
+        updateWindowFrame(for: currentEntry, on: placementScreen, animated: false)
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        window.makeFirstResponder(contentKind == .text ? textView : imageView)
+        startPreviewKeyMonitoring()
+        startActionHoverTracking()
+        loadCurrentContent()
+    }
+
+    override func close() {
+        stopPreviewKeyMonitoring()
+        stopActionHoverTracking()
+        tooltipController.close()
+        (window as? HistoryPreviewPanel)?.onKeyDown = nil
+        super.close()
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        stopPreviewKeyMonitoring()
+        stopActionHoverTracking()
+        tooltipController.close()
+        (window as? HistoryPreviewPanel)?.onKeyDown = nil
+        onClose?()
+    }
+
+    private func setupContent(in panel: NSPanel) {
+        let content = HistoryPreviewContentView(frame: panel.contentView?.bounds ?? .zero)
+        content.autoresizingMask = [.width, .height]
+        panel.contentView = content
+
+        imageView.imageScaling = .scaleProportionallyUpOrDown
+        imageView.imageAlignment = .alignCenter
+        imageView.isEditable = false
+        imageView.frame = content.bounds
+        imageView.autoresizingMask = [.width, .height]
+        content.addSubview(imageView)
+
+        textScrollView.drawsBackground = false
+        textScrollView.hasVerticalScroller = true
+        textScrollView.hasHorizontalScroller = false
+        textScrollView.autohidesScrollers = true
+        textScrollView.borderType = .noBorder
+        textScrollView.frame = content.bounds
+        textScrollView.autoresizingMask = [.width, .height]
+        textScrollView.isHidden = true
+
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.isRichText = false
+        textView.drawsBackground = false
+        textView.font = NSFont.systemFont(ofSize: 16)
+        textView.textColor = .labelColor
+        textView.textContainerInset = NSSize(width: 24, height: 20)
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.minSize = NSSize(width: 0, height: 0)
+        textView.maxSize = NSSize(
+            width: CGFloat.greatestFiniteMagnitude,
+            height: CGFloat.greatestFiniteMagnitude
+        )
+        textView.textContainer?.widthTracksTextView = true
+        textView.textContainer?.containerSize = NSSize(
+            width: 0,
+            height: CGFloat.greatestFiniteMagnitude
+        )
+        textView.frame = textScrollView.contentView.bounds
+        textScrollView.documentView = textView
+        content.addSubview(textScrollView)
+
+        titlebarFilenameLabel.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        titlebarFilenameLabel.textColor = NSColor.labelColor
+        titlebarFilenameLabel.lineBreakMode = .byTruncatingTail
+        titlebarFilenameLabel.maximumNumberOfLines = 1
+        titlebarFilenameLabel.frame = titlebarFilenameContainer.bounds
+        titlebarFilenameLabel.autoresizingMask = [.width, .height]
+        titlebarFilenameContainer.addSubview(titlebarFilenameLabel)
+
+        let filenameAccessory = NSTitlebarAccessoryViewController()
+        filenameAccessory.layoutAttribute = .left
+        filenameAccessory.view = titlebarFilenameContainer
+        panel.addTitlebarAccessoryViewController(filenameAccessory)
+
+        let stack = titlebarActionStack
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.spacing = 6
+        stack.edgeInsets = NSEdgeInsets(top: 0, left: 2, bottom: 0, right: 8)
+
+        titlebarPositionLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+        titlebarPositionLabel.textColor = NSColor.secondaryLabelColor
+        titlebarPositionLabel.alignment = .center
+        titlebarPositionLabel.translatesAutoresizingMaskIntoConstraints = false
+        titlebarPositionLabel.widthAnchor.constraint(equalToConstant: 38).isActive = true
+        stack.addArrangedSubview(titlebarPositionLabel)
+
+        let actions: [(String, String, String, Selector)]
+        switch contentKind {
+        case .image:
+            actions = [
+                ("pencil", L10n.imageMergeContinueEditing, "E", #selector(editCurrent)),
+                ("doc.on.doc", L10n.tipConfirm, "C", #selector(copyCurrent)),
+                ("pin", L10n.tipPin, "P", #selector(pinCurrent)),
+            ]
+        case .text:
+            actions = [
+                ("doc.on.doc", L10n.historyPreviewCopyText, "C", #selector(copyCurrent)),
+                ("qrcode", L10n.historyPreviewConvertToQRCode, "Q", #selector(showQRCodeCurrent)),
+            ]
+        }
+        for action in actions {
+            let tooltip = Self.shortcutTooltip(action.1, key: action.2)
+            let symbol = NSImage(systemSymbolName: action.0, accessibilityDescription: action.1)?
+                .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 13, weight: .medium))
+                ?? NSImage()
+            let button = HistoryPreviewActionButton(image: symbol, target: self, action: action.3)
+            button.bezelStyle = .toolbar
+            button.isBordered = false
+            button.imagePosition = .imageOnly
+            button.contentTintColor = .secondaryLabelColor
+            button.hoverTip = tooltip
+            button.setAccessibilityLabel(action.1)
+            button.translatesAutoresizingMaskIntoConstraints = false
+            button.widthAnchor.constraint(equalToConstant: 30).isActive = true
+            button.heightAnchor.constraint(equalToConstant: 24).isActive = true
+            stack.addArrangedSubview(button)
+            actionButtons.append(button)
+            if action.3 == #selector(showQRCodeCurrent) {
+                qrCodeButton = button
+            }
+        }
+        updateTitlebarActionStackSize()
+
+        let accessory = NSTitlebarAccessoryViewController()
+        accessory.layoutAttribute = .right
+        accessory.view = stack
+        panel.addTitlebarAccessoryViewController(accessory)
+        updateTitlebarFilenameLayout()
+    }
+
+    private func handleKeyDown(_ event: NSEvent) -> Bool {
+        let blockingModifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
+        guard blockingModifiers.isEmpty else { return false }
+        switch Int(event.keyCode) {
+        case kVK_LeftArrow:
+            move(by: -1)
+        case kVK_RightArrow:
+            move(by: 1)
+        case kVK_Escape, kVK_Space:
+            close()
+        case kVK_ANSI_E:
+            guard contentKind == .image else { return false }
+            editCurrent()
+        case kVK_ANSI_P:
+            guard contentKind == .image else { return false }
+            pinCurrent()
+        case kVK_ANSI_C:
+            copyCurrent()
+        case kVK_ANSI_Q:
+            guard contentKind == .text else { return false }
+            showQRCodeCurrent()
+        default:
+            return false
+        }
+        return true
+    }
+
+    private func move(by offset: Int) {
+        guard entries.count > 1 else { return }
+        currentIndex = (currentIndex + offset + entries.count) % entries.count
+        updateWindowFrame(for: currentEntry, on: placementScreen, animated: true)
+        loadCurrentContent()
+    }
+
+    private func loadCurrentContent() {
+        loadGeneration += 1
+        let generation = loadGeneration
+        titlebarPositionLabel.stringValue = "\(currentIndex + 1) / \(entries.count)"
+        switch currentEntry.kind {
+        case .image:
+            loadCurrentImage(generation: generation)
+        case .text(let text):
+            text.load { [weak self] value in
+                guard let self, self.loadGeneration == generation else { return }
+                self.loadCurrentText(value)
+            }
+        case .video, .color:
+            return
+        }
+        updateTitlebarActionStackSize()
+        updateTitlebarFilenameLayout()
+    }
+
+    private func loadCurrentImage(generation: Int) {
+        let url = currentEntry.fileURL
+        textScrollView.isHidden = true
+        imageView.isHidden = false
+        imageView.image = nil
+        window?.title = url.lastPathComponent
+        titlebarFilenameLabel.stringValue = url.lastPathComponent
+        titlebarFilenameLabel.toolTip = url.lastPathComponent
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let image = NSImage(contentsOf: url)
+            DispatchQueue.main.async {
+                guard let self, self.loadGeneration == generation else { return }
+                self.imageView.image = image
+                self.imageView.animates = url.pathExtension.lowercased() == "gif"
+            }
+        }
+    }
+
+    private func loadCurrentText(_ text: String) {
+        imageView.image = nil
+        imageView.isHidden = true
+        textScrollView.isHidden = false
+        textView.string = text
+        textView.setSelectedRange(NSRange(location: 0, length: 0))
+        textView.frame.size.width = textScrollView.contentSize.width
+        textScrollView.contentView.scroll(to: .zero)
+        textScrollView.reflectScrolledClipView(textScrollView.contentView)
+        window?.title = L10n.historyPanelFilterText
+        titlebarFilenameLabel.stringValue = L10n.historyPanelFilterText
+        titlebarFilenameLabel.toolTip = L10n.historyPanelFilterText
+        let canGenerateQRCode = TextQRCodeWindowController.canGenerateQRCode(for: text)
+        qrCodeButton?.isEnabled = canGenerateQRCode
+        qrCodeButton?.hoverTip = canGenerateQRCode
+            ? Self.shortcutTooltip(L10n.historyPreviewConvertToQRCode, key: "Q")
+            : L10n.historyPreviewQRCodeTooLong
+        if let qrCodeButton, hoveredActionButton === qrCodeButton {
+            tooltipController.show(qrCodeButton.hoverTip, relativeTo: qrCodeButton)
+        }
+    }
+
+    private func updateWindowFrame(
+        for entry: HistoryEntry,
+        on screen: NSScreen?,
+        animated: Bool
+    ) {
+        guard let window,
+              let targetScreen = screen ?? window.screen ?? NSScreen.main ?? NSScreen.screens.first else { return }
+        let visibleFrame = targetScreen.visibleFrame
+        if case .text = entry.kind {
+            let safeWidth = max(360, visibleFrame.width - 128)
+            let safeHeight = max(280, visibleFrame.height - 96)
+            let contentSize = NSSize(width: min(720, safeWidth), height: min(520, safeHeight))
+            let frameSize = window.frameRect(forContentRect: NSRect(origin: .zero, size: contentSize)).size
+            let origin = NSPoint(
+                x: visibleFrame.midX - frameSize.width / 2,
+                y: visibleFrame.midY - frameSize.height / 2
+            )
+            window.setFrame(NSRect(origin: origin, size: frameSize), display: true, animate: animated)
+            return
+        }
+        let pixelSize = Self.pixelSize(for: entry.fileURL)
+        guard pixelSize.width > 0, pixelSize.height > 0 else { return }
+
+        let titlebarHeight = max(0, window.frameRect(forContentRect: NSRect(x: 0, y: 0, width: 100, height: 100)).height - 100)
+        let horizontalMargin = max(64, floor(visibleFrame.width * 0.08))
+        let verticalMargin: CGFloat = 32
+        let safeFrame = visibleFrame.insetBy(dx: horizontalMargin, dy: verticalMargin)
+        guard safeFrame.width > 0, safeFrame.height > titlebarHeight else { return }
+
+        let maxContentRect = window.contentRect(
+            forFrameRect: NSRect(origin: .zero, size: safeFrame.size)
+        )
+        let fitScale = min(
+            maxContentRect.width / pixelSize.width,
+            maxContentRect.height / pixelSize.height
+        )
+        let scale = min(1, fitScale)
+        let imageSize = NSSize(
+            width: max(1, floor(pixelSize.width * scale)),
+            height: max(1, floor(pixelSize.height * scale))
+        )
+        let minimumContentSize = NSSize(width: 360, height: 220)
+        let contentSize = NSSize(
+            width: min(maxContentRect.width, max(minimumContentSize.width, imageSize.width)),
+            height: min(maxContentRect.height, max(minimumContentSize.height, imageSize.height))
+        )
+        let frameSize = window.frameRect(forContentRect: NSRect(origin: .zero, size: contentSize)).size
+        let origin = NSPoint(
+            x: safeFrame.midX - frameSize.width / 2,
+            y: safeFrame.midY - frameSize.height / 2
+        )
+        window.setFrame(NSRect(origin: origin, size: frameSize), display: true, animate: animated)
+    }
+
+    private static func pixelSize(for url: URL) -> NSSize {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? NSNumber,
+              let height = properties[kCGImagePropertyPixelHeight] as? NSNumber else {
+            return NSImage(contentsOf: url)?.size ?? .zero
+        }
+        return NSSize(width: width.doubleValue, height: height.doubleValue)
+    }
+
+    private var currentEntry: HistoryEntry { entries[currentIndex] }
+
+    private static func shortcutTooltip(_ title: String, key: String) -> String {
+        "\(title) (\(key))"
+    }
+
+    private func startPreviewKeyMonitoring() {
+        guard previewKeyMonitor == nil else { return }
+        previewKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, event.window === self.window else { return event }
+            return self.handleKeyDown(event) ? nil : event
+        }
+    }
+
+    private func stopPreviewKeyMonitoring() {
+        if let previewKeyMonitor {
+            NSEvent.removeMonitor(previewKeyMonitor)
+            self.previewKeyMonitor = nil
+        }
+    }
+
+    private func startActionHoverTracking() {
+        guard actionHoverTimer == nil else { return }
+        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+            self?.refreshActionHoverState()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        actionHoverTimer = timer
+        refreshActionHoverState()
+    }
+
+    private func stopActionHoverTracking() {
+        actionHoverTimer?.invalidate()
+        actionHoverTimer = nil
+        hoveredActionButton = nil
+    }
+
+    private func refreshActionHoverState() {
+        guard let window, window.isVisible else {
+            if hoveredActionButton != nil {
+                hoveredActionButton = nil
+                tooltipController.hide()
+            }
+            return
+        }
+
+        let windowPoint = window.convertPoint(fromScreen: NSEvent.mouseLocation)
+        let hoveredButton = actionButtons.first { button in
+            guard !button.isHidden, button.window === window else { return false }
+            return button.bounds.contains(button.convert(windowPoint, from: nil))
+        }
+        guard hoveredActionButton !== hoveredButton else { return }
+
+        hoveredActionButton = hoveredButton
+        if let hoveredButton {
+            tooltipController.show(hoveredButton.hoverTip, relativeTo: hoveredButton)
+        } else {
+            tooltipController.hide()
+        }
+    }
+
+    func windowDidResize(_ notification: Notification) {
+        tooltipController.hide()
+        hoveredActionButton = nil
+        if contentKind == .text {
+            textView.frame.size.width = textScrollView.contentSize.width
+            textScrollView.contentView.scroll(to: NSPoint(x: 0, y: textScrollView.contentView.bounds.origin.y))
+            textScrollView.reflectScrolledClipView(textScrollView.contentView)
+        }
+        updateTitlebarFilenameLayout()
+    }
+
+    func windowDidMove(_ notification: Notification) {
+        tooltipController.hide()
+        hoveredActionButton = nil
+    }
+
+    private func updateTitlebarFilenameLayout() {
+        guard let window else { return }
+        let trafficLightReserve: CGFloat = 148
+        let accessoryGap: CGFloat = 20
+        let availableWidth = window.frame.width
+            - trafficLightReserve
+            - titlebarActionStack.frame.width
+            - accessoryGap
+        let width = min(280, max(0, floor(availableWidth)))
+        titlebarFilenameContainer.isHidden = width < 48
+        titlebarFilenameContainer.frame = NSRect(
+            origin: .zero,
+            size: NSSize(width: width, height: 24)
+        )
+    }
+
+    private func updateTitlebarActionStackSize() {
+        titlebarActionStack.layoutSubtreeIfNeeded()
+        let fittingSize = titlebarActionStack.fittingSize
+        titlebarActionStack.frame = NSRect(
+            origin: .zero,
+            size: NSSize(
+                width: ceil(fittingSize.width),
+                height: max(24, ceil(fittingSize.height))
+            )
+        )
+    }
+
+    @objc private func editCurrent() {
+        let entry = currentEntry
+        close()
+        onEdit(entry)
+    }
+
+    @objc private func pinCurrent() {
+        guard let image = NSImage(contentsOf: currentEntry.fileURL) else { return }
+        close()
+        PinLauncher.pin(image: image)
+    }
+
+    @objc private func copyCurrent() {
+        guard HistoryPanelEntryActions.copy(currentEntry) else { return }
+        close()
+    }
+
+    @objc private func showQRCodeCurrent() {
+        guard case .text(let text) = currentEntry.kind,
+              TextQRCodeWindowController.canGenerateQRCode(for: text.value) else { return }
+        let screen = window?.screen ?? placementScreen ?? NSScreen.main ?? NSScreen.screens.first
+        guard let screen else { return }
+        close()
+        TextQRCodeWindowController.present(text: text.value, screen: screen)
+    }
+}
+
+private enum HistoryPanelEntryActions {
+    static func copy(_ entry: HistoryEntry) -> Bool {
+        switch entry.kind {
+        case .image:
+            guard let image = NSImage(contentsOf: entry.fileURL) else { return false }
+            ClipboardManager.copyToClipboard(image: image)
+            ToastWindow.show()
+            return recordSuccessfulCopy(of: entry)
+        case .video:
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.writeObjects([entry.fileURL as NSURL])
+            ToastWindow.show(message: L10n.copiedToClipboard)
+            return recordSuccessfulCopy(of: entry)
+        case .color(let hex):
+            ClipboardManager.copyColorToClipboard(hex: hex)
+            ToastWindow.show(message: L10n.colorCopied(hex.uppercased()))
+            return recordSuccessfulCopy(of: entry)
+        case .text(let text):
+            ClipboardManager.copyHistoryTextToClipboard(text.value)
+            ToastWindow.show(message: L10n.copiedToClipboard)
+            return recordSuccessfulCopy(of: entry)
+        }
+    }
+
+    static func copyImages(_ entries: [HistoryEntry]) -> Bool {
+        let imageURLs = entries.compactMap { entry -> NSURL? in
+            guard case .image = entry.kind else { return nil }
+            return entry.fileURL as NSURL
+        }
+        guard !imageURLs.isEmpty else { return false }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        guard pasteboard.writeObjects(imageURLs) else { return false }
+        ToastWindow.show(message: L10n.copiedToClipboard)
+        if entries.count == 1, let entry = entries.first {
+            HistoryManager.shared.promoteCopiedEntryIfNeeded(entry)
+        }
+        return true
+    }
+
+    private static func recordSuccessfulCopy(of entry: HistoryEntry) -> Bool {
+        HistoryManager.shared.promoteCopiedEntryIfNeeded(entry)
+        return true
+    }
+}
+
+private extension NSColor {
+    convenience init?(hex: String) {
+        var trimmed = hex.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        if trimmed.hasPrefix("#") { trimmed.removeFirst() }
+        guard trimmed.count == 6, let value = UInt32(trimmed, radix: 16) else { return nil }
+        let r = CGFloat((value >> 16) & 0xFF) / 255.0
+        let g = CGFloat((value >> 8) & 0xFF) / 255.0
+        let b = CGFloat(value & 0xFF) / 255.0
+        self.init(srgbRed: r, green: g, blue: b, alpha: 1)
+    }
+}
+
+private extension NSScreen {
+    static func screenForMouseLocation() -> NSScreen? {
+        let mouse = NSEvent.mouseLocation
+        return NSScreen.screens.first(where: { $0.frame.contains(mouse) })
+    }
+}

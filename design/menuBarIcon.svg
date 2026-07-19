@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <g fill="none" stroke="#000000" stroke-width="52" stroke-linecap="round">
+    <path d="M156 328 V212 Q156 156 212 156 H328"/>
+    <path d="M696 156 H812 Q868 156 868 212 V328"/>
+    <path d="M156 696 V812 Q156 868 212 868 H328"/>
+    <path d="M696 868 H812 Q868 868 868 812 V696"/>
+  </g>
+  <path fill="#000000" fill-rule="evenodd"
+        d="M512 250 L740 774 H618 L572 660 H452 L406 774 H284 Z
+           M512 444 L482 558 H542 Z"/>
+</svg>

@@ -1,0 +1,238 @@
+{
+  "$schema": "urn:codex-engineering-standards:project-adoption:1",
+  "applicability": "applicable",
+  "artifacts": [
+    {
+      "id": "aulycshot-macos-app",
+      "profile": "macos-arm64-app",
+      "profileVersion": "1.0.0",
+      "type": "macos-arm64-app"
+    }
+  ],
+  "coreVersion": "2.0.1",
+  "exceptions": [],
+  "projectId": "aulycshot",
+  "releaseSignals": {
+    "ciPaths": [
+      ".github/workflows/ci.yml",
+      "Tests/test_release_tool.py"
+    ],
+    "releaseFiles": [
+      ".gitignore",
+      "AGENTS.md",
+      "CHANGELOG.md",
+      "docs/RELEASE.md",
+      "Makefile",
+      "aulycShot/App/Info.plist",
+      "scripts/bundle.sh",
+      "scripts/inject-build-metadata.sh",
+      "scripts/release_tool.py",
+      "scripts/prepare-formal-release.sh",
+      "scripts/release-check.sh",
+      "scripts/create-release-tag.sh",
+      "scripts/formal-release.sh",
+      "scripts/verify-formal-artifact.sh",
+      "scripts/install-release.sh",
+      "scripts/verify-installed.sh",
+      "scripts/publish-release.sh",
+      "Tests/test_release_tool.py"
+    ],
+    "versionSources": [
+      "aulycShot/App/Info.plist"
+    ]
+  },
+  "ruleBindings": [
+    {
+      "evidence": [
+        "AGENTS.md#versioning-and-release-profile"
+      ],
+      "ruleId": "REL-001"
+    },
+    {
+      "evidence": [
+        "AGENTS.md#versioning-and-release-profile"
+      ],
+      "ruleId": "REL-002"
+    },
+    {
+      "evidence": [
+        "AGENTS.md#release-classes"
+      ],
+      "ruleId": "REL-003"
+    },
+    {
+      "evidence": [
+        "docs/RELEASE.md#版本和发布提交"
+      ],
+      "ruleId": "REL-004"
+    },
+    {
+      "evidence": [
+        "docs/RELEASE.md#版本和发布提交"
+      ],
+      "ruleId": "REL-005"
+    },
+    {
+      "evidence": [
+        "docs/RELEASE.md#标签前门禁"
+      ],
+      "ruleId": "REL-006"
+    },
+    {
+      "evidence": [
+        "docs/RELEASE.md#精确标签正式构建"
+      ],
+      "ruleId": "REL-007"
+    },
+    {
+      "evidence": [
+        "docs/RELEASE.md#精确标签正式构建"
+      ],
+      "ruleId": "REL-008"
+    },
+    {
+      "evidence": [
+        "docs/RELEASE.md#精确标签正式构建"
+      ],
+      "ruleId": "REL-009"
+    },
+    {
+      "evidence": [
+        "docs/RELEASE.md#产物和安装后验证"
+      ],
+      "ruleId": "REL-010"
+    },
+    {
+      "evidence": [
+        "AGENTS.md#data-credentials-and-compatibility-identities"
+      ],
+      "ruleId": "REL-011"
+    },
+    {
+      "evidence": [
+        ".codex/standards.json"
+      ],
+      "ruleId": "REL-012"
+    },
+    {
+      "evidence": [
+        ".codex/standards.json"
+      ],
+      "ruleId": "REL-013"
+    },
+    {
+      "evidence": [
+        "AGENTS.md#github-source-publication",
+        "scripts/publish-release.sh"
+      ],
+      "ruleId": "REL-014"
+    },
+    {
+      "evidence": [
+        "AGENTS.md#versioning-and-release-profile"
+      ],
+      "ruleId": "MAC-001"
+    },
+    {
+      "evidence": [
+        "AGENTS.md#versioning-and-release-profile"
+      ],
+      "ruleId": "MAC-002"
+    },
+    {
+      "evidence": [
+        "docs/RELEASE.md#标签前门禁"
+      ],
+      "ruleId": "MAC-003"
+    },
+    {
+      "evidence": [
+        "docs/RELEASE.md#精确标签正式构建"
+      ],
+      "ruleId": "MAC-004"
+    },
+    {
+      "evidence": [
+        "docs/RELEASE.md#精确标签正式构建"
+      ],
+      "ruleId": "MAC-005"
+    },
+    {
+      "evidence": [
+        "docs/RELEASE.md#产物和安装后验证"
+      ],
+      "ruleId": "MAC-006"
+    }
+  ],
+  "schemaVersion": 1,
+  "trackedFiles": [
+    {
+      "path": ".gitignore",
+      "sha256": "cbbfdf5a2d254a9093d2e3f8b7f53fd06a194c7d208fdd99d544689189a19b2c"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "900e2aa598bd601922b4e259360c124539a618747ad34ba3f487cc9d4f365455"
+    },
+    {
+      "path": "AGENTS.md",
+      "sha256": "6c91679274385833f459d77d114298f31c04507b064955d39a9f59d5e431c930"
+    },
+    {
+      "path": "docs/RELEASE.md",
+      "sha256": "352ca6c0023e6fb1fcad9659ad4a3c128d739f3f0f9cb8ac7523777f1724851f"
+    },
+    {
+      "path": "Makefile",
+      "sha256": "c90a53977af69a6c55b7e25d7ca2bb242b490e6df5d8310609c9cb5a31f31939"
+    },
+    {
+      "path": "scripts/bundle.sh",
+      "sha256": "213a98699885a34392a3dabb552933c983b5c250afcfca3e82d76335d37786c0"
+    },
+    {
+      "path": "scripts/inject-build-metadata.sh",
+      "sha256": "acc060c9fa9cfcf1c3f3e486a7f3c5ad121c565c7d56cb9fdcc9d67c0e32f138"
+    },
+    {
+      "path": "scripts/release_tool.py",
+      "sha256": "91dfde167391c5e1967155c01d6308a42e945d985ed1735961c29c7df40f40b0"
+    },
+    {
+      "path": "scripts/prepare-formal-release.sh",
+      "sha256": "60b5938e4aa56a6f2dc0808dfd36d072c7e8bd2c45f721a33aa6ca94052920d3"
+    },
+    {
+      "path": "scripts/release-check.sh",
+      "sha256": "e9ae0bc84abeb44ae7227aa0e8cd44c407fcdc2bc7ddc3b602b02e3ba6bf81cb"
+    },
+    {
+      "path": "scripts/create-release-tag.sh",
+      "sha256": "a0d1e275ec906fe0974e9e10684460adf1ccb63ae7909300e3a8f2ee8d39e056"
+    },
+    {
+      "path": "scripts/formal-release.sh",
+      "sha256": "3dbf9b3ae73529adde714aaa717e95fa9a191f4b01dcf0f322073556d3b77111"
+    },
+    {
+      "path": "scripts/verify-formal-artifact.sh",
+      "sha256": "7684ef9b2235371403fbdf0964de05c3463d59a52cbea542930ff7626ca7ae1f"
+    },
+    {
+      "path": "scripts/install-release.sh",
+      "sha256": "e14da049e4002805d97871dba8363ba0a7b9d6a1540cd43b5a7b3063f0c76600"
+    },
+    {
+      "path": "scripts/verify-installed.sh",
+      "sha256": "be865f8c87ee757b7c3820c2f8f73b564f3b919375addc92d7a83272062c3908"
+    },
+    {
+      "path": "scripts/publish-release.sh",
+      "sha256": "97cc158d1ceb0b5ad260fb9fe8f1bd08074a7b83520ce2fc22518bca702149ba"
+    },
+    {
+      "path": "Tests/test_release_tool.py",
+      "sha256": "e153370e64c6a59ce636395d72d984199f5775c08662bc6ff633d6bf6b6592a1"
+    }
+  ]
+}

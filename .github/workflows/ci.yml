@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v6
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+      - name: Compile
+        run: bash scripts/compile-check.sh
+      - name: Test
+        run: |
+          PYTHONPYCACHEPREFIX=/tmp/aulycShot-pycache python3 -m unittest discover -s Tests -p 'test_*.py'
+          swift test
+      - name: Universal Release candidate
+        env:
+          CONFIG: release
+          UNIVERSAL: "1"
+          SIGN_IDENTITY: "-"
+        run: bash scripts/bundle.sh
