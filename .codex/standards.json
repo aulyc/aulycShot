@@ -172,7 +172,7 @@
     },
     {
       "path": ".github/workflows/ci.yml",
-      "sha256": "b4e95836d1895e7b3ad7e69af1d25d506d8cac8abb67056f9c39a6b92bc5d27e"
+      "sha256": "aaa8460c9998e3c890c001b368b2057fd8154fef68b76de7d06a75604459d72a"
     },
     {
       "path": "AGENTS.md",
@@ -180,7 +180,7 @@
     },
     {
       "path": "docs/RELEASE.md",
-      "sha256": "c2ea03e465b3ccc4f93cdc10a5b31ab1bf3dd00f60812d7b7a2c3d71fac9b3c1"
+      "sha256": "dfbc33414f5308d0ff7ef67d2a1ab0ec2cadc4f23a305a3b386af142fa275e03"
     },
     {
       "path": "Makefile",

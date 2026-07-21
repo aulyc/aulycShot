@@ -5,6 +5,10 @@ import XCTest
 final class ToolTipWindowTests: XCTestCase {
     @MainActor
     func testTooltipBelongsToOwnerFollowsAnchorAndDetachesWhenAppDeactivates() throws {
+        if ProcessInfo.processInfo.environment["AULYC_SKIP_WINDOW_SERVER_TESTS"] == "1" {
+            throw XCTSkip("Requires an interactive WindowServer session")
+        }
+
         _ = NSApplication.shared
 
         let owner = NSWindow(

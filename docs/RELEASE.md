@@ -51,6 +51,11 @@ make release-tag
 构建。候选必须是 Developer ID 签名，App 与 share extension 都只包含 `arm64`
 并启用 Hardened Runtime。
 
+GitHub hosted macOS runner 无法为 SwiftPM AppKit 窗口测试提供稳定的交互式
+WindowServer 会话，因此 CI 以 `AULYC_SKIP_WINDOW_SERVER_TESTS=1` 只跳过
+`ToolTipWindowTests` 的真实窗口排序用例。本机正式 `release-check` 不设置该变量，
+仍会执行完整的窗口创建、附着、移动、停用清理和可见性断言。
+
 `release-tag` 只在门禁通过后创建或验证与版本完全一致、不带 `v` 的 annotated
 tag。已有且指向其他 Commit 的标签会被拒绝，不会移动或覆盖。
 

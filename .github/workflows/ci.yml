@@ -18,6 +18,8 @@ jobs:
       - name: Compile
         run: bash scripts/compile-check.sh
       - name: Test
+        env:
+          AULYC_SKIP_WINDOW_SERVER_TESTS: "1"
         run: |
           PYTHONPYCACHEPREFIX=/tmp/aulycShot-pycache python3 -m unittest discover -s Tests -p 'test_*.py'
           swift test
