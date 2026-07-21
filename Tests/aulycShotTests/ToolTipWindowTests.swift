@@ -4,6 +4,8 @@ import XCTest
 
 final class ToolTipWindowTests: XCTestCase {
     func testTooltipBelongsToOwnerFollowsAnchorAndDetachesWhenAppDeactivates() throws {
+        _ = NSApplication.shared
+
         let owner = NSWindow(
             contentRect: NSRect(x: -10_000, y: -10_000, width: 400, height: 300),
             styleMask: [.titled],
