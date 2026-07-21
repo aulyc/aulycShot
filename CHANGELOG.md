@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Stabilize hosted macOS CI by separating interactive WindowServer tooltip checks from non-interactive verification
+
 ## [1.7.1] - 2026-07-21
 
 ### Added
