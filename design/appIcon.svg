@@ -1,49 +1,31 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <defs>
-    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#0A102A"/>
-      <stop offset="0.58" stop-color="#22145B"/>
-      <stop offset="1" stop-color="#35207A"/>
-    </linearGradient>
-    <linearGradient id="mark" x1="0.18" y1="0.12" x2="0.82" y2="0.9">
-      <stop offset="0" stop-color="#C084FC"/>
-      <stop offset="0.5" stop-color="#8B5CF6"/>
-      <stop offset="1" stop-color="#22D3EE"/>
-    </linearGradient>
-    <radialGradient id="glow" cx="0.72" cy="0.72" r="0.72">
-      <stop offset="0" stop-color="#22D3EE" stop-opacity="0.28"/>
-      <stop offset="1" stop-color="#22D3EE" stop-opacity="0"/>
-    </radialGradient>
-    <filter id="shadow" x="-30%" y="-30%" width="160%" height="170%">
-      <feGaussianBlur in="SourceAlpha" stdDeviation="22"/>
-      <feOffset dy="20"/>
-      <feComponentTransfer>
-        <feFuncA type="linear" slope="0.46"/>
-      </feComponentTransfer>
-      <feMerge>
-        <feMergeNode/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
-  </defs>
+  <title>aulycShot hand-drawn app icon</title>
 
-  <rect x="32" y="32" width="960" height="960" rx="224" fill="url(#background)"/>
-  <rect x="32" y="32" width="960" height="960" rx="224" fill="url(#glow)"/>
-  <rect x="54" y="54" width="916" height="916" rx="204" fill="none"
-        stroke="#FFFFFF" stroke-opacity="0.08" stroke-width="4"/>
+  <!-- Flat charcoal paper, matching the aulycMail icon family. -->
+  <rect width="1024" height="1024" fill="#2E2E31"/>
 
-  <g fill="none" stroke="url(#mark)" stroke-width="34" stroke-linecap="round">
-    <path d="M188 316 V214 Q188 176 226 176 H328"/>
-    <path d="M696 176 H798 Q836 176 836 214 V316"/>
-    <path d="M188 708 V810 Q188 848 226 848 H328"/>
-    <path d="M696 848 H798 Q836 848 836 810 V708"/>
+  <!-- Slightly uneven crop corners keep the screenshot meaning hand drawn. -->
+  <g fill="none" stroke="#D8D8DC" stroke-width="29"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M198 345 L196 230 Q196 218 210 218 L344 215"/>
+    <path d="M681 216 L820 221 Q833 222 833 236 L836 347"/>
+    <path d="M199 680 L203 798 Q204 811 218 812 L347 816"/>
+    <path d="M682 815 L816 811 Q830 810 831 796 L834 682"/>
   </g>
 
-  <g filter="url(#shadow)">
-    <path fill="url(#mark)" fill-rule="evenodd"
-          d="M512 238 L760 786 H625 L576 666 H448 L399 786 H264 Z
-             M512 444 L478 562 H546 Z"/>
-    <path d="M576 666 L694 786 H625 Z" fill="#22D3EE" opacity="0.88"/>
+  <!-- Hand-lettered lowercase a, derived from the menu bar mark. -->
+  <g fill="none" stroke="#D8D8DC" stroke-width="31"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M602 450
+             C566 413 505 416 454 453
+             C401 491 369 558 375 619
+             C380 673 415 704 461 696
+             C513 687 559 633 582 575
+             C603 521 613 470 602 450"/>
+    <path d="M602 450
+             C615 496 613 555 599 614
+             C587 665 596 697 626 701
+             C662 706 704 665 735 603"/>
   </g>
 </svg>

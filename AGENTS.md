@@ -150,9 +150,6 @@ This script builds the app bundle, kills any running instance, launches the new 
   controls. Keep persisted defaults in `Defaults.swift` aligned with visible
   controls and localized strings. Verify with `bash scripts/compile-check.sh`;
   use `bash scripts/rebuild-and-open.sh` for settings UI behavior.
-- `aulycShot/OCR/OCRPanel.swift` owns OCR result presentation and recognized
-  text selection. Keep recognition work off the main actor except for UI
-  updates. Verify with `bash scripts/compile-check.sh`.
 - `aulycShot/Capture/PinLauncher.swift` owns pinned-image window behavior,
   toolbar visibility, drag/resize behavior, and zoom interaction. Keep hover
   affordances and the above/below-100% drag model stable. Verify with

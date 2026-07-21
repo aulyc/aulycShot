@@ -14,13 +14,10 @@ class OverlayWindowController {
         case clipboard
         case pin
         case merge
-        case fullScreen
     }
 
     enum PostCaptureAction {
         case edit
-        case textRecognition
-        case copyImageText
         case record
 
         var cursorChipText: String {
@@ -29,10 +26,6 @@ class OverlayWindowController {
                 return L10n.dragToRecord
             case .edit:
                 return L10n.dragToScreenshot
-            case .textRecognition:
-                return L10n.dragToTextRecognition
-            case .copyImageText:
-                return L10n.dragToCopyImageText
             }
         }
     }
@@ -51,7 +44,6 @@ class OverlayWindowController {
         let windowBaseImage: NSImage?
         let isWindowCapture: Bool
         let editorState: EditWindowController.RestorableState
-        let keepsEditorAcrossSpaces: Bool
     }
 
     private var windows: [NSWindow] = []
@@ -63,11 +55,7 @@ class OverlayWindowController {
     private var editController: EditWindowController?
     private var activeSelectionView: SelectionView?
     private var activeScreen: NSScreen?
-    private var historyEntries: [HistoryEntry] = []
-    private var historyEntryIndex: Int?
-    private var historyEditorDrafts: [URL: EditWindowController.RestorableState] = [:]
     private var activeEditorContext: ActiveEditorContext?
-    private var currentEditHistoryDraft: CurrentEditHistoryDraft?
     private let windowDetector = WindowDetector()
     private var screenSnapshots: [CGDirectDisplayID: CGImage] = [:]
     private let onComplete: (NSImage?) -> Void
@@ -83,7 +71,6 @@ class OverlayWindowController {
     /// In image-edit mode, where `presetImage` came from. nil otherwise.
     private let presetSource: PresetSource?
     private let suspendedDraft: SuspendedEditDraft?
-    private let keepsEditorAcrossSpaces: Bool
     private var presentationScheduled = false
 
     private struct ActiveEditorContext {
@@ -97,20 +84,6 @@ class OverlayWindowController {
         let overrideBaseImage: NSImage?
         let windowBaseImage: NSImage?
         let isWindowCapture: Bool
-    }
-
-    private struct CurrentEditHistoryDraft {
-        let captureRect: CGRect
-        let screen: NSScreen
-        let selectionRect: NSRect
-        let selectionViewRect: NSRect
-        weak var hostSelectionView: SelectionView?
-        let selectionViewState: SelectionViewState
-        let preSnapshot: CGImage?
-        let overrideBaseImage: NSImage?
-        let windowBaseImage: NSImage?
-        let isWindowCapture: Bool
-        var editorState: EditWindowController.RestorableState?
     }
 
     private struct SelectionViewState {
@@ -157,7 +130,6 @@ class OverlayWindowController {
         self.presetImage = nil
         self.presetSource = nil
         self.suspendedDraft = nil
-        self.keepsEditorAcrossSpaces = false
         self.postCaptureAction = postCaptureAction
         self.onRecordingSelection = onRecordingSelection
         self.onRequestFocusReturn = onRequestFocusReturn
@@ -168,7 +140,6 @@ class OverlayWindowController {
     init(
         presetImage: NSImage,
         presetSource: PresetSource,
-        keepsEditorAcrossSpaces: Bool = false,
         onRequestFocusReturn: (() -> Void)? = nil,
         onSuspend: ((SuspendedEditDraft) -> Void)? = nil,
         onComplete: @escaping (NSImage?) -> Void
@@ -176,7 +147,6 @@ class OverlayWindowController {
         self.presetImage = presetImage
         self.presetSource = presetSource
         self.suspendedDraft = nil
-        self.keepsEditorAcrossSpaces = keepsEditorAcrossSpaces
         self.postCaptureAction = .edit
         self.onRecordingSelection = nil
         self.onRequestFocusReturn = onRequestFocusReturn
@@ -194,7 +164,6 @@ class OverlayWindowController {
         self.presetImage = nil
         self.presetSource = nil
         self.suspendedDraft = suspendedDraft
-        self.keepsEditorAcrossSpaces = suspendedDraft.keepsEditorAcrossSpaces
         self.postCaptureAction = .edit
         self.onRecordingSelection = onRecordingSelection
         self.onRequestFocusReturn = onRequestFocusReturn
@@ -333,11 +302,11 @@ class OverlayWindowController {
             if self?.editController?.deleteSelectedAnnotationFromKeyboard(for: event) == true {
                 return nil
             }
-            if self?.switchHistoryImageFromKeyboard(for: event) == true {
-                return nil
-            }
             if event.keyCode == 53 { // Escape
                 self?.cancel()
+                return nil
+            }
+            if self?.cycleSmartSelectionFromKeyboard(for: event) == true {
                 return nil
             }
             if self?.cycleSelectionAspectRatioFromKeyboard(for: event) == true {
@@ -413,12 +382,7 @@ class OverlayWindowController {
 
     private var usesAspectRatioSelection: Bool {
         guard presetImage == nil, suspendedDraft == nil else { return false }
-        switch postCaptureAction {
-        case .edit, .record:
-            return true
-        case .textRecognition, .copyImageText:
-            return false
-        }
+        return true
     }
 
     private static func aspectRatioCursorChipText(for action: PostCaptureAction, aspectRatio: CGFloat?) -> String {
@@ -429,8 +393,6 @@ class OverlayWindowController {
         case .record:
             guard let aspectRatio else { return L10n.dragToRecordAspectFree }
             return L10n.dragToRecordAspect(aspectRatioLabel(for: aspectRatio))
-        case .textRecognition, .copyImageText:
-            return action.cursorChipText
         }
     }
 
@@ -448,6 +410,20 @@ class OverlayWindowController {
             return preset.1
         }
         return String(format: "%.2f:1", Double(aspectRatio))
+    }
+
+    private func cycleSmartSelectionFromKeyboard(for event: NSEvent) -> Bool {
+        guard editController == nil, event.keyCode == 48 else { return false }
+        let disallowedModifiers: NSEvent.ModifierFlags = [.command, .option, .control]
+        guard event.modifierFlags.intersection(disallowedModifiers).isEmpty else { return false }
+
+        let mouseLocation = NSEvent.mouseLocation
+        guard let selectionView = windows.first(where: { $0.frame.contains(mouseLocation) })?.contentView as? SelectionView else {
+            return false
+        }
+        return selectionView.cycleSmartSelectionCandidate(
+            reverse: event.modifierFlags.contains(.shift)
+        )
     }
 
     private func cycleSelectionAspectRatioFromKeyboard(for event: NSEvent) -> Bool {
@@ -552,8 +528,6 @@ class OverlayWindowController {
             hint = L10n.clipboardEditExitHint
         case .pin:
             hint = L10n.pinEditExitHint
-        case .fullScreen:
-            hint = L10n.fullScreenEditExitHint
         case .merge:
             hint = L10n.mergeEditExitHint
         case .finder, nil:
@@ -697,7 +671,6 @@ class OverlayWindowController {
 
     private func makeSuspendedEditDraft() -> SuspendedEditDraft? {
         guard let editController,
-              !editController.blocksHistoryNavigation,
               let context = activeEditorContext,
               let editorState = editController.restorableState()
         else { return nil }
@@ -718,8 +691,7 @@ class OverlayWindowController {
             overrideBaseImage: context.overrideBaseImage,
             windowBaseImage: context.windowBaseImage,
             isWindowCapture: editController.isWindowCapture,
-            editorState: editorState,
-            keepsEditorAcrossSpaces: keepsEditorAcrossSpaces
+            editorState: editorState
         )
     }
 
@@ -749,10 +721,6 @@ class OverlayWindowController {
         activeSelectionView = nil
         activeScreen = nil
         activeEditorContext = nil
-        currentEditHistoryDraft = nil
-        historyEditorDrafts.removeAll()
-        historyEntries.removeAll()
-        historyEntryIndex = nil
     }
 
     // MARK: - Coordinate Conversion
@@ -840,33 +808,6 @@ extension OverlayWindowController: SelectionViewDelegate {
             switch postCaptureAction {
             case .edit:
                 break
-            case .textRecognition, .copyImageText:
-                let baseImage = imageForImmediateAction(
-                    captureRect: cgRect,
-                    screen: screen,
-                    preSnapshot: preSnapshot,
-                    windowBaseImage: windowBaseImage
-                )
-                tearDown()
-                onComplete(nil)
-                guard let baseImage else { return }
-                switch postCaptureAction {
-                case .edit:
-                    break
-                case .textRecognition:
-                    OCRPanel.present(
-                        image: baseImage, anchorRect: screenRect, screen: screen
-                    )
-                case .copyImageText:
-                    copyRecognizedTextToClipboard(
-                        from: baseImage,
-                        screen: screen,
-                        anchorRect: screenRect
-                    )
-                case .record:
-                    break
-                }
-                return
             case .record:
                 tearDown()
                 onComplete(nil)
@@ -888,9 +829,6 @@ extension OverlayWindowController: SelectionViewDelegate {
         } else {
             // Selection was adjusted — it no longer matches the clicked
             // window's bounds, so window-only effects no longer apply.
-            historyEntryIndex = nil
-            currentEditHistoryDraft = nil
-            historyEditorDrafts.removeAll()
             editController?.isWindowCapture = false
             editController?.updateLayout(
                 selectionRect: screenRect,
@@ -934,8 +872,7 @@ extension OverlayWindowController: SelectionViewDelegate {
             windowBaseImage: windowBaseImage,
             isWindowCapture: isWindowCapture,
             onRecordingSelection: onRecordingSelection,
-            onRequestFocusReturn: onRequestFocusReturn,
-            keepsHostWindowAcrossSpaces: keepsEditorAcrossSpaces
+            onRequestFocusReturn: onRequestFocusReturn
         ) { [weak self] finalImage in
             self?.tearDown()
             self?.onComplete(finalImage)
@@ -943,191 +880,9 @@ extension OverlayWindowController: SelectionViewDelegate {
         editController?.show()
     }
 
-    private func switchHistoryImageFromKeyboard(for event: NSEvent) -> Bool {
-        guard postCaptureAction == .edit,
-              let editController,
-              !editController.blocksHistoryNavigation
-        else {
-            return false
-        }
-        if HotkeyManager.eventMatchesPreviousHistoryImageHotkey(event) {
-            return switchHistoryImage(offset: 1)
-        }
-        if HotkeyManager.eventMatchesNextHistoryImageHotkey(event) {
-            return switchHistoryImage(offset: -1)
-        }
-        return false
-    }
-
-    private func switchHistoryImage(offset: Int) -> Bool {
-        refreshHistoryEntriesIfNeeded()
-        guard !historyEntries.isEmpty else { return false }
-
-        if historyEntryIndex == nil {
-            guard offset > 0 else { return true }
-            captureCurrentEditHistoryDraftIfNeeded()
-        } else if historyEntryIndex == currentEditDraftIndex {
-            currentEditHistoryDraft?.editorState = editController?.restorableState()
-        } else {
-            captureCurrentHistoryEditorDraftIfNeeded()
-        }
-
-        var nextIndex: Int
-        if let currentIndex = historyEntryIndex {
-            nextIndex = currentIndex + offset
-        } else {
-            guard offset > 0 else { return true }
-            nextIndex = 0
-        }
-        let minimumIndex = currentEditHistoryDraft == nil ? 0 : -1
-        guard nextIndex >= minimumIndex, nextIndex < historyEntries.count else { return true }
-
-        if nextIndex == currentEditDraftIndex {
-            return restoreCurrentEditHistoryDraft(at: nextIndex)
-        }
-
-        var image: NSImage?
-        while nextIndex >= 0, nextIndex < historyEntries.count {
-            image = HistoryManager.shared.image(for: historyEntries[nextIndex])
-            if image != nil {
-                break
-            }
-            nextIndex += offset
-        }
-        if nextIndex == currentEditDraftIndex {
-            return restoreCurrentEditHistoryDraft(at: nextIndex)
-        }
-        guard let image else {
-            return true
-        }
-        guard let screen = activeScreen ?? NSScreen.screens.first,
-              let window = windows.first(where: { $0.screen == screen }),
-              let selectionView = window.contentView as? SelectionView
-        else { return false }
-
-        editController?.tearDown()
-        editController = nil
-
-        let displayMetrics = Self.displayMetrics(for: image.size, on: screen)
-        let visibleRect = Self.visibleRectInSelectionView(for: screen)
-        let viewRect = NSRect(
-            x: visibleRect.midX - displayMetrics.viewportSize.width / 2,
-            y: visibleRect.midY - displayMetrics.viewportSize.height / 2,
-            width: displayMetrics.viewportSize.width,
-            height: displayMetrics.viewportSize.height
-        )
-        let screenRect = convertToScreenRect(viewRect, view: selectionView)
-        let cgRect = convertToCGRect(screenRect)
-
-        selectionView.updateSelectionRect(viewRect)
-        selectionView.selectionSizeLabelOverride = Self.scaleLabelText(
-            imageSize: image.size,
-            displaySize: displayMetrics.canvasSize
-        )
-        selectionView.selectionLocked = true
-        selectionView.selectionInteractionEnabled = false
-
-        activeSelectionView = selectionView
-        activeScreen = screen
-        historyEntryIndex = nextIndex
-        let historyDraft = historyEditorDrafts[historyEntries[nextIndex].fileURL]
-
-        showEditor(
-            captureRect: cgRect,
-            screen: screen,
-            selectionRect: screenRect,
-            selectionViewRect: viewRect,
-            hostSelectionView: selectionView,
-            preSnapshot: nil,
-            overrideBaseImage: image,
-            windowBaseImage: nil,
-            isWindowCapture: false
-        )
-        if let historyDraft {
-            editController?.restoreState(historyDraft)
-        }
-        return true
-    }
-
-    private var currentEditDraftIndex: Int? {
-        currentEditHistoryDraft == nil ? nil : -1
-    }
-
-    private func captureCurrentEditHistoryDraftIfNeeded() {
-        guard currentEditHistoryDraft == nil,
-              let editController,
-              let context = activeEditorContext,
-              let activeSelectionView = context.hostSelectionView
-        else { return }
-
-        currentEditHistoryDraft = CurrentEditHistoryDraft(
-            captureRect: context.captureRect,
-            screen: context.screen,
-            selectionRect: context.selectionRect,
-            selectionViewRect: context.selectionViewRect,
-            hostSelectionView: activeSelectionView,
-            selectionViewState: SelectionViewState(selectionView: activeSelectionView),
-            preSnapshot: context.preSnapshot,
-            overrideBaseImage: context.overrideBaseImage,
-            windowBaseImage: context.windowBaseImage,
-            isWindowCapture: editController.isWindowCapture,
-            editorState: editController.restorableState()
-        )
-    }
-
-    private func captureCurrentHistoryEditorDraftIfNeeded() {
-        guard let historyEntryIndex,
-              historyEntryIndex >= 0,
-              historyEntryIndex < historyEntries.count,
-              let editorState = editController?.restorableState()
-        else { return }
-
-        historyEditorDrafts[historyEntries[historyEntryIndex].fileURL] = editorState
-    }
-
-    private func restoreCurrentEditHistoryDraft(at index: Int) -> Bool {
-        guard let draft = currentEditHistoryDraft,
-              let selectionView = draft.hostSelectionView
-        else { return true }
-
-        editController?.tearDown()
-        editController = nil
-
-        selectionView.updateSelectionRect(draft.selectionViewRect)
-        draft.selectionViewState.apply(to: selectionView)
-
-        activeSelectionView = selectionView
-        activeScreen = draft.screen
-        historyEntryIndex = index
-
-        showEditor(
-            captureRect: draft.captureRect,
-            screen: draft.screen,
-            selectionRect: draft.selectionRect,
-            selectionViewRect: draft.selectionViewRect,
-            hostSelectionView: selectionView,
-            preSnapshot: draft.preSnapshot,
-            overrideBaseImage: draft.overrideBaseImage,
-            windowBaseImage: draft.windowBaseImage,
-            isWindowCapture: draft.isWindowCapture
-        )
-        if let editorState = draft.editorState {
-            editController?.restoreState(editorState)
-        }
-        return true
-    }
-
-    private func refreshHistoryEntriesIfNeeded() {
-        guard historyEntries.isEmpty else { return }
-        historyEntries = HistoryManager.shared.imageEntries()
-    }
-
     func selectionDidChange(rect: NSRect, inView view: NSView) {
         guard let _ = view.window else { return }
         // A resize/move drag changes the rect away from the clicked window.
-        historyEntryIndex = nil
-        currentEditHistoryDraft = nil
-        historyEditorDrafts.removeAll()
         editController?.isWindowCapture = false
         let screenRect = convertToScreenRect(rect, view: view)
         let cgRect = convertToCGRect(screenRect)
@@ -1154,56 +909,6 @@ extension OverlayWindowController: SelectionViewDelegate {
             selectionViewRect: rect,
             captureRect: cgRect
         )
-    }
-
-    private func imageForImmediateAction(
-        captureRect: CGRect,
-        screen: NSScreen,
-        preSnapshot: CGImage?,
-        windowBaseImage: NSImage?
-    ) -> NSImage? {
-        if let windowBaseImage {
-            return windowBaseImage
-        }
-        if let preSnapshot {
-            return ScreenCapturer.crop(from: preSnapshot, captureRect: captureRect, screen: screen)
-        }
-        let overlayWindowIDs = windows.map { CGWindowID($0.windowNumber) }
-        return ScreenCapturer.capture(
-            rect: captureRect,
-            screen: screen,
-            excludingWindowNumbers: overlayWindowIDs
-        )
-    }
-
-    private func copyRecognizedTextToClipboard(from image: NSImage, screen: NSScreen, anchorRect: NSRect) {
-        let centerAnchor = NSPoint(x: anchorRect.midX, y: anchorRect.midY)
-        ToastWindow.show(
-            message: L10n.copyImageTextCopying,
-            on: screen,
-            centerAnchor: centerAnchor,
-            duration: 60
-        )
-
-        Task { @MainActor in
-            let text = await OCRService.recognize(image: image)
-            if text.isEmpty {
-                ToastWindow.show(
-                    message: L10n.copyImageTextNoText,
-                    on: screen,
-                    centerAnchor: centerAnchor,
-                    duration: 1.5
-                )
-            } else {
-                ClipboardManager.copyToClipboard(text: text)
-                ToastWindow.show(
-                    message: L10n.copyImageTextCopied,
-                    on: screen,
-                    centerAnchor: centerAnchor,
-                    duration: 1.5
-                )
-            }
-        }
     }
 
     private func imageForWindowSelection(

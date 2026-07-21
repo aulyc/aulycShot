@@ -491,7 +491,6 @@ final class ImageMergeWindowController: NSWindowController, NSWindowDelegate {
     @objc private func copyClicked() {
         guard let image = renderOrToast() else { return }
         ClipboardManager.copyToClipboard(image: image)
-        HistoryManager.shared.add(image: image)
         ToastWindow.show()
     }
 

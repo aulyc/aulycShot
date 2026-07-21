@@ -5,7 +5,7 @@
 <h1 align="center">aulycShot</h1>
 
 <p align="center">
-  The fastest menu bar screenshot tool for macOS: double-tap <code>⌘</code> to capture, annotate, scroll-stitch, beautify, and pin.
+  The fastest menu bar screenshot tool for macOS: double-tap <code>⌘</code> to capture, annotate, scroll-stitch, and pin.
 </p>
 
 <p align="center">
@@ -32,7 +32,7 @@
   <a href="https://github.com/aulyc/aulycShot/issues">Issues</a>
 </p>
 
-**The fastest way to grab, mark up, and share screenshots on macOS.** Double-tap `⌘` from anywhere — snap to a window, drag a region, scroll-stitch a long page, then annotate and beautify in one tight floating window. Lives in your menu bar. No Dock icon, no telemetry, no subscription, no third-party dependencies.
+**The fastest way to grab, mark up, and share screenshots on macOS.** Double-tap `⌘` from anywhere — snap to a window, drag a region, scroll-stitch a long page, then annotate in one tight floating window. Lives in your menu bar. No Dock icon, no telemetry, no subscription, no third-party dependencies.
 
 <p align="center">
   <img src="images/editor.png" alt="aulycShot annotation editor — arrows, numbered callouts, mosaic, highlighter and text layered on a screenshot in a single floating toolbar" width="760" />
@@ -49,9 +49,8 @@
 - **Snap-to-window or pixel-perfect region.** Hover any window for a one-click capture, or drag a region with full Retina output across every connected display.
 - **A real annotation editor.** Arrows, numbered callouts, text, mosaic, highlighter, pen — all editable, draggable, rotatable and undoable *after* you place them.
 - **Scroll-stitch long content.** Capture a scrolling area, watch the stitched preview live, and keep editing the merged result.
-- **Beautify and pin.** Wrap shots in gradient or wallpaper backgrounds with rounded corners and shadow, or pin the final image floating above any window.
+- **Pin screenshots.** Keep the final image floating above any window as a ready reference.
 - **Edit Finder images too.** Select a single image file in Finder and trigger the same shortcut to load it straight into the editor — the original is never touched.
-- **Menu bar history.** Recent screenshots and picked colors are one click away from re-copying — local-only, configurable size.
 - **Built with pure AppKit.** No SwiftUI, no Electron, no telemetry. Small, fast, and respectful of macOS.
 
 ## Showcase
@@ -62,38 +61,27 @@
     <img src="images/window-snap.png" alt="Smart window detection — green dashed bounds snap to an app window" /><br/>
     <sub><b>Snap to any window in one click</b><br/>No precise dragging — aulycShot detects window bounds for you.</sub>
   </td>
-  <td width="50%" align="center">
-    <img src="images/history.png" alt="Menu bar history with screenshot thumbnails and picked color hex codes" /><br/>
-    <sub><b>History at the menu bar</b><br/>Re-copy any recent screenshot or picked hex color in a click.</sub>
-  </td>
 </tr>
 <tr>
   <td width="50%" align="center">
     <img src="images/scroll-stitch.png" alt="Scroll capture stitching a long page into a single tall screenshot with live preview" /><br/>
     <sub><b>Scroll-stitch long pages</b><br/>Scroll inside the selection, watch frames merge live, and keep editing the result.</sub>
   </td>
-  <td width="50%" align="center">
-    <img src="images/beautify.png" alt="Beautify mode wrapping a screenshot in a gradient background with rounded corners and shadow" /><br/>
-    <sub><b>Beautify in one click</b><br/>Gradient or wallpaper backgrounds, rounded corners, shadow and padding — all adjustable.</sub>
-  </td>
 </tr>
 </table>
 
 ## Features
 
-- **Edit any image directly** — select a single image file in Finder (Desktop or any window) and trigger the screenshot shortcut to open that image in the annotation editor instead of taking a screenshot. The original file is never modified; the edited result goes to the clipboard and history like a normal capture.
-- **Fast region and window capture** — drag any area, or hover and click a detected window to snap to its bounds.
+- **Edit any image directly** — select a single image file in Finder (Desktop or any window) and trigger the screenshot shortcut to open that image in the annotation editor instead of taking a screenshot. The original file is never modified; the edited result goes to the clipboard like a normal capture.
+- **Smart selection and free-form capture** — hover accessible controls, icons, or windows; press `Tab` to cycle through element, window, and current-screen bounds; or drag any custom area.
 - **Multi-display support** — creates overlays on every connected screen and captures at full Retina resolution.
 - **Full annotation editor** — rectangle, ellipse, arrow, pen, highlighter, mosaic, numbered callouts, and text.
 - **Editable annotations** — move existing marks, change color and size, rotate supported annotations, bend arrows/callouts, edit text, delete marks, and use undo/redo.
 - **Scroll capture** — capture a selected scrolling area, preview the stitched image live, and merge it back into the editor.
-- **Beautify mode** — wrap screenshots in rounded corners, soft shadow, gradient presets, wallpaper background, and adjustable padding.
-- **Color picker** — use the macOS color sampler, copy the picked hex value, and keep it in history.
 - **Pin to screen** — float the current screenshot above other windows as a draggable reference image.
 - **Save or copy** — save as PNG, confirm to copy PNG/TIFF data to the clipboard, or cancel without output.
-- **Recent history** — menu bar history with thumbnails and picked colors for quick re-copy, with a configurable cache size.
 - **Custom trigger** — use the default double-tap `⌘`, or record a custom global shortcut in Settings.
-- **Settings and localization** — UI in Simplified Chinese, Traditional Chinese, English, Japanese, Korean, French, Russian, and Vietnamese, plus menu bar icon toggle, launch at login, demo mode, permission status, shortcut recording, and history cache size.
+- **Settings and localization** — UI in Simplified Chinese and English, plus menu bar icon toggle, launch at login, demo mode, permission status, and shortcut recording.
 - **Menu bar app** — runs as an agent app without a Dock icon.
 
 ## Requirements
@@ -146,7 +134,7 @@ The app bundle is output to the hidden path `.cache/build/aulycShot.app`; DMGs a
 
 1. Double-tap `⌘ Command`, press your custom shortcut, or choose **Take Screenshot** from the menu bar.
 2. Hover a window and click to capture it, or drag to select any region.
-3. Use the floating toolbar to annotate, pick a color, start scroll capture, beautify, save, pin, cancel, or confirm.
+3. Use the floating toolbar to annotate, start scroll capture, save, pin, cancel, or confirm.
 4. Click the green checkmark or press `Enter` to copy the final image to the clipboard. Press `Esc` or click `x` to cancel.
 
 To edit an existing image instead of taking a screenshot, click a single image file in Finder (so it's the current Finder selection), then trigger the same shortcut. aulycShot copies the file into a temporary working location and opens it in the editor with the toolbar already up. If anything other than exactly one image is selected, the shortcut behaves as a normal screenshot trigger.
@@ -162,11 +150,9 @@ To edit an existing image instead of taking a screenshot, click a single image f
 | Mosaic | Brush pixelated regions over sensitive content, with adjustable block size |
 | Numbered | Add incrementing callout badges; drag while placing to add an arrow |
 | Text | Add editable single-line text with color and 10-100 pt size controls |
-| Eyedropper | Pick any screen color and copy its `#RRGGBB` value |
 | Undo / Redo | Revert and restore editor changes |
 | Move Selection | Drag the whole selected screenshot region after selection |
 | Scroll Capture | Scroll inside the selected area, stitch frames, and continue editing the merged result |
-| Beautify | Add gradient or wallpaper backgrounds, rounded corners, shadow, and padding |
 | Save | Save the current result as a PNG |
 | Pin | Keep the current result floating above other windows |
 | Confirm | Copy the final result to the clipboard |
@@ -177,24 +163,18 @@ When an annotation is selected, aulycShot shows adjustment handles where support
 
 Open Settings from the menu bar to configure:
 
-- Language: Simplified Chinese, Traditional Chinese, English, Japanese, Korean, French, Russian, or Vietnamese
+- Language: Simplified Chinese or English
 - Menu bar icon visibility
 - Launch at login
 - Demo Mode, which allows external screen recorders to capture aulycShot's overlay and editor
 - Screenshot shortcut: keep double-tap `⌘`, record a custom shortcut, or restore the default
-- History cache size, from 5 to 20 recent screenshots/colors
 - Accessibility and Screen Recording permission shortcuts
-
-## History
-
-The menu bar **History** submenu stores recent screenshots and picked colors in `~/Library/Application Support/aulycShot/History`. Click an image entry to copy it back to the clipboard, click a color entry to copy its hex value, or clear the full history from the submenu.
 
 ## Project Structure
 
 - `aulycShot/App/` — app entry point, delegate, and bundle metadata
-- `aulycShot/Capture/` — overlay, selection, window detection, ScreenCaptureKit capture, scroll stitching, clipboard, and history
-- `aulycShot/Editor/` — annotation models, editor canvas, floating toolbar, beautify rendering, mosaic, scroll preview, and pin windows
-- `aulycShot/OCR/` — text recognition service, result panel, and recognized-region selection
+- `aulycShot/Capture/` — overlay, selection, window detection, ScreenCaptureKit capture, scroll stitching, and clipboard
+- `aulycShot/Editor/` — annotation models, editor canvas, floating toolbar, mosaic, scroll preview, and pin windows
 - `aulycShot/Trigger/` — double-tap `⌘` monitor and custom Carbon hotkey registration
 - `aulycShot/UI/` — menu bar controller, toast, cursor chip, and tooltips
 - `aulycShot/Settings/` — startup/settings window and preferences UI

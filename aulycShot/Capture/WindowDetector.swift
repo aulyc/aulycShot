@@ -4,6 +4,7 @@ import CoreGraphics
 struct DetectedWindow {
     let name: String
     let windowID: CGWindowID
+    let ownerPID: pid_t
     let layer: Int
     let frame: CGRect   // CG coordinates (global, top-left origin)
 
@@ -15,6 +16,13 @@ struct DetectedWindow {
 class WindowDetector {
     private var windows: [DetectedWindow] = []
     private let ownPID = ProcessInfo.processInfo.processIdentifier
+    private let accessibilityDetector = AccessibilityElementDetector()
+    private let accessibilityQueue = DispatchQueue(
+        label: "com.aulyc.aulycshot.smart-selection",
+        qos: .userInteractive
+    )
+    private let requestLock = NSLock()
+    private var requestGeneration = 0
 
     /// Snapshot all visible windows (excluding this app).
     func refresh() {
@@ -38,7 +46,7 @@ class WindowDetector {
 
             // Keep this app's own menus/popups detectable so aulycShot can capture
             // its visible transient UI. Only screen-saver-level chrome (toasts,
-            // tooltips, countdown and progress panels) is excluded.
+            // tooltips and progress panels) is excluded.
             // The capture overlay itself is created after refresh(), so it is
             // never in this snapshot.
             if pid == ownPID && layer >= Int(CGWindowLevelForKey(.screenSaverWindow)) {
@@ -66,7 +74,13 @@ class WindowDetector {
             let name = info[kCGWindowOwnerName as String] as? String ?? ""
             let windowID = info[kCGWindowNumber as String] as? CGWindowID ?? 0
 
-            return DetectedWindow(name: name, windowID: windowID, layer: layer, frame: rect)
+            return DetectedWindow(
+                name: name,
+                windowID: windowID,
+                ownerPID: pid,
+                layer: layer,
+                frame: rect
+            )
         }
     }
 
@@ -83,5 +97,88 @@ class WindowDetector {
         // CGWindowListCopyWindowInfo returns windows in front-to-back z-order,
         // so the first hit is the topmost window.
         return windows.first { $0.frame.contains(cgPoint) }
+    }
+
+    func baseCandidates(
+        at cgPoint: CGPoint,
+        screenFrame: CGRect,
+        displayID: CGDirectDisplayID
+    ) -> [SmartSelectionCandidate] {
+        let detectedWindow = windowAt(cgPoint: cgPoint)
+        let windowCandidate = detectedWindow.map {
+            SmartSelectionCandidate(
+                kind: .window($0.windowID),
+                frame: $0.frame,
+                ownerPID: $0.ownerPID
+            )
+        }
+        let screenCandidate = SmartSelectionCandidate(
+            kind: .screen(displayID),
+            frame: screenFrame
+        )
+        return SmartSelectionPolicy.orderedCandidates(
+            element: nil,
+            window: windowCandidate,
+            screen: screenCandidate,
+            at: cgPoint
+        )
+    }
+
+    func requestCandidates(
+        at cgPoint: CGPoint,
+        screenFrame: CGRect,
+        displayID: CGDirectDisplayID,
+        completion: @escaping ([SmartSelectionCandidate]) -> Void
+    ) {
+        guard screenFrame.contains(cgPoint), AXIsProcessTrusted() else { return }
+
+        let detectedWindow = windowAt(cgPoint: cgPoint)
+        let windowCandidate = detectedWindow.map {
+            SmartSelectionCandidate(
+                kind: .window($0.windowID),
+                frame: $0.frame,
+                ownerPID: $0.ownerPID
+            )
+        }
+        let screenCandidate = SmartSelectionCandidate(
+            kind: .screen(displayID),
+            frame: screenFrame
+        )
+        let preferredPID = detectedWindow?.ownerPID
+        let generation = beginCandidateRequest()
+
+        accessibilityQueue.asyncAfter(deadline: .now() + .milliseconds(24)) { [weak self] in
+            guard let self, self.isCurrentCandidateRequest(generation) else { return }
+            let elementCandidate = self.accessibilityDetector.elementCandidate(
+                at: cgPoint,
+                preferredPID: preferredPID,
+                screenFrame: screenFrame
+            )
+            guard self.isCurrentCandidateRequest(generation) else { return }
+
+            let candidates = SmartSelectionPolicy.orderedCandidates(
+                element: elementCandidate,
+                window: windowCandidate,
+                screen: screenCandidate,
+                at: cgPoint
+            )
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.isCurrentCandidateRequest(generation) else { return }
+                completion(candidates)
+            }
+        }
+    }
+
+    private func beginCandidateRequest() -> Int {
+        requestLock.lock()
+        defer { requestLock.unlock() }
+        requestGeneration &+= 1
+        return requestGeneration
+    }
+
+    private func isCurrentCandidateRequest(_ generation: Int) -> Bool {
+        requestLock.lock()
+        defer { requestLock.unlock() }
+        return requestGeneration == generation
     }
 }

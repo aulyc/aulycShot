@@ -53,11 +53,6 @@
 	<array>
 		<string>en</string>
 		<string>zh-Hans</string>
-		<string>ja</string>
-		<string>ko</string>
-		<string>fr</string>
-		<string>ru</string>
-		<string>vi</string>
 	</array>
 	<key>CFBundleName</key>
 	<string>aulycShot</string>

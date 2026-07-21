@@ -5,7 +5,7 @@
 <h1 align="center">aulycShot</h1>
 
 <p align="center">
-  Công cụ chụp màn hình trên thanh menu macOS: nhấn đúp <code>⌘</code> để chụp, chú thích, ghép ảnh dài, làm đẹp và ghim.
+  Công cụ chụp màn hình trên thanh menu macOS: nhấn đúp <code>⌘</code> để chụp, chú thích, ghép ảnh dài và ghim.
 </p>
 
 <p align="center">
@@ -44,9 +44,8 @@
 - **Chụp cửa sổ hoặc vùng chính xác**: bấm vào cửa sổ được phát hiện, hoặc kéo chọn vùng với độ phân giải Retina.
 - **Trình chỉnh sửa chú thích thật sự**: mũi tên, số thứ tự, chữ, mosaic, bút tô sáng và bút vẽ đều có thể chỉnh lại sau khi đặt.
 - **Chụp dài**: cuộn trong vùng chọn, xem bản ghép trực tiếp, rồi tiếp tục chỉnh sửa ảnh đã ghép.
-- **Làm đẹp và ghim**: thêm nền, bo góc, bóng, khoảng đệm, hoặc ghim ảnh nổi trên các cửa sổ khác.
+- **Ghim ảnh chụp**: giữ ảnh hoàn chỉnh nổi trên các cửa sổ khác để tham khảo.
 - **Chỉnh ảnh từ Finder**: chọn một ảnh trong Finder và mở thẳng vào trình chỉnh sửa mà không sửa tệp gốc.
-- **Lịch sử cục bộ**: sao chép lại nhanh ảnh chụp và màu đã chọn từ thanh menu.
 - **AppKit thuần**: không SwiftUI, không Electron, không đo lường từ xa.
 
 ## Xem trước
@@ -54,11 +53,9 @@
 <table>
 <tr>
   <td width="50%" align="center"><img src="images/window-snap.png" alt="Smart window detection" /><br/><sub><b>Chụp cửa sổ một lần bấm</b><br/>aulycShot tự phát hiện viền cửa sổ.</sub></td>
-  <td width="50%" align="center"><img src="images/history.png" alt="Menu bar history" /><br/><sub><b>Lịch sử trên thanh menu</b><br/>Sao chép lại ảnh và màu gần đây.</sub></td>
 </tr>
 <tr>
   <td width="50%" align="center"><img src="images/scroll-stitch.png" alt="Scroll capture" /><br/><sub><b>Ghép trang dài</b><br/>Cuộn và xem kết quả ghép trực tiếp.</sub></td>
-  <td width="50%" align="center"><img src="images/beautify.png" alt="Beautify mode" /><br/><sub><b>Làm đẹp một lần bấm</b><br/>Nền, bo góc, bóng và khoảng đệm đều có thể chỉnh.</sub></td>
 </tr>
 </table>
 
@@ -101,7 +98,7 @@ bash scripts/rebuild-and-open.sh
 
 1. Nhấn đúp `⌘ Command`, bấm phím tắt tùy chỉnh, hoặc chọn chụp màn hình từ thanh menu.
 2. Bấm vào cửa sổ để chụp hoặc kéo chọn vùng bất kỳ.
-3. Dùng thanh công cụ nổi để chú thích, lấy màu, chụp cuộn, làm đẹp, lưu, ghim hoặc xác nhận.
+3. Dùng thanh công cụ nổi để chú thích, chụp cuộn, lưu, ghim hoặc xác nhận.
 4. Bấm dấu tích xanh hoặc `Enter` để sao chép kết quả. `Esc` hoặc `x` để hủy.
 
 ## Công cụ chỉnh sửa
@@ -113,12 +110,11 @@ bash scripts/rebuild-and-open.sh
 | Bút / bút tô sáng | Vẽ tự do hoặc đánh dấu trong suốt |
 | Mosaic | Làm mờ vùng nhạy cảm bằng pixel |
 | Số thứ tự / chữ | Thêm nhãn đánh số và văn bản có thể chỉnh |
-| Lấy màu | Sao chép màu màn hình dạng `#RRGGBB` |
-| Chụp cuộn / làm đẹp / ghim | Hoàn thiện và chia sẻ ảnh |
+| Chụp cuộn / ghim | Hoàn thiện và chia sẻ ảnh |
 
 ## Cài đặt
 
-Bạn có thể đổi ngôn ngữ, biểu tượng thanh menu, khởi chạy khi đăng nhập, chế độ demo, phím tắt, kích thước lịch sử và lối tắt quyền hệ thống. Giao diện hỗ trợ 简体中文, 繁體中文, English, 日本語, 한국어, Français, Русский và Tiếng Việt.
+Bạn có thể đổi ngôn ngữ, biểu tượng thanh menu, khởi chạy khi đăng nhập, chế độ demo, phím tắt và lối tắt quyền hệ thống. Giao diện hỗ trợ 简体中文 và English.
 
 ## Star History
 

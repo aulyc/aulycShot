@@ -15,14 +15,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var recordingCancelLocalMonitor: Any?
     private var recordingCancelGlobalMonitor: Any?
     private var recordingCancelRequested = false
-    private var historyPanelController: HistoryPanelController?
-    private var countdownActive = false
     private var appInitialized = false
     private var suspendedEditDraft: OverlayWindowController.SuspendedEditDraft?
     private var pendingReopenSettingsWorkItem: DispatchWorkItem?
     private var pendingOpenImageURLs: [URL] = []
-    private var startupDialogShown = false
-    private let clipboardTextHistoryMonitor = ClipboardTextHistoryMonitor()
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return false
@@ -30,8 +26,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         registerShareHandoffObserver()
-        clipboardTextHistoryMonitor.start()
-
         let startupPlan = AppStartupPlan.make(
             launchAtLoginEnabled: LaunchAtLogin.isEnabled,
             allRequiredPermissionsGranted: AppPermissions.allRequiredGranted,
@@ -41,18 +35,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             ensureStatusBarController()
         }
 
+        if !appInitialized, startupPlan.shouldInitializeApp {
+            initializeApp()
+        }
         if appInitialized {
             flushPendingOpenImageURLs()
-        } else if startupPlan.shouldInitializeApp {
-            initializeApp()
-            flushPendingOpenImageURLs()
-        } else if startupPlan.shouldShowStartupDialog {
+        }
+        if startupPlan.shouldShowStartupDialog {
             showStartupDialog()
         }
-    }
-
-    func applicationWillTerminate(_ notification: Notification) {
-        clipboardTextHistoryMonitor.stop()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -78,7 +69,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showStartupDialog() {
-        startupDialogShown = true
         let settingsController = configuredSettingsController()
         settingsController.showAsStartupDialog()
     }
@@ -87,10 +77,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let settingsController = SettingsWindowController.shared
         settingsController.onMenuBarToggle = { [weak self] visible in
             self?.statusBarController?.setMenuBarVisible(visible)
-        }
-        settingsController.onLaunch = { [weak self] in
-            self?.startupDialogShown = false
-            self?.initializeApp()
         }
         return settingsController
     }
@@ -114,13 +100,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         ImageMergeLauncher.shared.onContinueEditing = { [weak self] image in
             self?.continueEditingMergedImage(image)
         }
-        historyPanelController = HistoryPanelController { [weak self] entry in
-            _ = self?.launchImageFile(entry.fileURL)
-        }
-
         keyMonitor = KeyMonitor(
-            onTrigger: { [weak self] in self?.handleDoubleTapCommand() },
-            onCountdownTrigger: { [weak self] in self?.handleCountdownTrigger() }
+            onTrigger: { [weak self] in self?.handleDoubleTapCommand() }
         )
 
         NotificationCenter.default.addObserver(
@@ -140,22 +121,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             onTakeScreenshot: { [weak self] in
                 self?.performWhenInitialized { $0.handleTrigger() }
             },
-            onTakeFullScreenScreenshot: { [weak self] in
-                self?.performWhenInitialized { $0.handleFullScreenScreenshotTrigger() }
-            },
             onRecord: { [weak self] in
                 self?.performWhenInitialized { $0.handleRecordingTrigger() }
             },
             onMergeImages: { [weak self] in
                 self?.performWhenInitialized { $0.handleImageMergeMenuTrigger() }
-            },
-            onColorPicker: { [weak self] in
-                self?.performWhenInitialized { $0.handleColorPickerTrigger() }
-            },
-            onOpenHistoryPanel: { [weak self] in
-                self?.performWhenInitialized {
-                    $0.handleHistoryPanelTrigger(holdOpenUntilMouseEnters: true)
-                }
             },
             onOpenSettings: { [weak self] in
                 guard let self else { return }
@@ -181,7 +151,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func applyHotkeyState() {
         if HotkeyManager.shared.isRecording {
             HotkeyManager.shared.unregister()
-            HotkeyManager.shared.unregisterCountdown()
             unregisterNonScreenshotHotkeys()
             keyMonitor?.isEnabled = false
             return
@@ -198,7 +167,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 HotkeyManager.shared.unregister()
             }
-            HotkeyManager.shared.unregisterCountdown()
             return
         }
 
@@ -207,12 +175,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             HotkeyManager.shared.register { [weak self] in
                 self?.handleTrigger(fromShortcut: true)
             }
-            HotkeyManager.shared.registerCountdown { [weak self] in
-                self?.handleCountdownTrigger()
-            }
         } else {
             HotkeyManager.shared.unregister()
-            HotkeyManager.shared.unregisterCountdown()
         }
 
         // Double-tap ⌘ does two jobs: it's the default screenshot trigger
@@ -264,22 +228,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             HotkeyManager.shared.unregisterClipboardImageEdit()
         }
 
-        if Defaults.hasCustomTextRecognitionHotkey {
-            HotkeyManager.shared.registerTextRecognition { [weak self] in
-                self?.handleTextRecognitionTrigger()
-            }
-        } else {
-            HotkeyManager.shared.unregisterTextRecognition()
-        }
-
-        if Defaults.hasCustomCopyImageTextHotkey {
-            HotkeyManager.shared.registerCopyImageText { [weak self] in
-                self?.handleCopyImageTextTrigger()
-            }
-        } else {
-            HotkeyManager.shared.unregisterCopyImageText()
-        }
-
         if Defaults.hasCustomRecordHotkey {
             HotkeyManager.shared.registerRecord { [weak self] in
                 self?.handleRecordingTrigger()
@@ -296,29 +244,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             HotkeyManager.shared.unregisterImageMerge()
         }
 
-        if Defaults.hasCustomFullScreenScreenshotHotkey {
-            HotkeyManager.shared.registerFullScreenScreenshot { [weak self] in
-                self?.handleFullScreenScreenshotTrigger(fromShortcut: true)
-            }
-        } else {
-            HotkeyManager.shared.unregisterFullScreenScreenshot()
-        }
-
-        if Defaults.hasCustomColorPickerHotkey {
-            HotkeyManager.shared.registerColorPicker { [weak self] in
-                self?.handleColorPickerTrigger()
-            }
-        } else {
-            HotkeyManager.shared.unregisterColorPicker()
-        }
-
-        if Defaults.hasCustomHistoryPanelHotkey {
-            HotkeyManager.shared.registerHistoryPanel { [weak self] in
-                self?.handleHistoryPanelTrigger(holdOpenUntilMouseEnters: true)
-            }
-        } else {
-            HotkeyManager.shared.unregisterHistoryPanel()
-        }
     }
 
     private func unregisterNonScreenshotHotkeys() {
@@ -327,13 +252,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         HotkeyManager.shared.unregisterClipboardTextPin()
         HotkeyManager.shared.unregisterSelectedImageEdit()
         HotkeyManager.shared.unregisterClipboardImageEdit()
-        HotkeyManager.shared.unregisterTextRecognition()
-        HotkeyManager.shared.unregisterCopyImageText()
         HotkeyManager.shared.unregisterRecord()
         HotkeyManager.shared.unregisterImageMerge()
-        HotkeyManager.shared.unregisterFullScreenScreenshot()
-        HotkeyManager.shared.unregisterColorPicker()
-        HotkeyManager.shared.unregisterHistoryPanel()
     }
 
     @discardableResult
@@ -352,10 +272,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             flushPendingOpenImageURLs()
         } else {
             initializeApp()
-            if startupDialogShown {
-                SettingsWindowController.shared.dismissStartupDialogForExternalOpen()
-                startupDialogShown = false
-            }
             flushPendingOpenImageURLs()
         }
 
@@ -371,7 +287,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @discardableResult
     private func openImageURLs(_ urls: [URL]) -> Bool {
-        guard overlayController == nil, recordingEngine == nil, !countdownActive else { return true }
+        guard overlayController == nil, recordingEngine == nil else { return true }
         guard let url = urls.lazy.compactMap(Self.resolvedImageFileURL).first(where: Self.isImageFile) else {
             ToastWindow.show(message: L10n.openImageNoImage)
             return false
@@ -408,10 +324,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
-    private func handleHistoryPanelTrigger(holdOpenUntilMouseEnters: Bool = false) {
-        historyPanelController?.toggleFromUserRequest(holdOpenUntilMouseEnters: holdOpenUntilMouseEnters)
-    }
-
     /// KeyMonitor entry point for plain double-tap ⌘. While an overlay is
     /// active this is the default copy-to-clipboard hotkey; otherwise it falls
     /// through to the regular screenshot trigger.
@@ -445,7 +357,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func handleRecordingTrigger() {
-        guard overlayController == nil, recordingEngine == nil, !countdownActive else { return }
+        guard overlayController == nil, recordingEngine == nil else { return }
         let focusRestorer = SourceAppFocusRestorer.captureFrontmostApplication()
         overlayController = OverlayWindowController(
             postCaptureAction: .record,
@@ -513,23 +425,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return nil
     }
 
-    /// Countdown-triggered capture. It never checks image-edit sources; the
-    /// user explicitly asked for a delayed screen capture.
-    func handleCountdownTrigger() {
-        guard overlayController == nil, recordingEngine == nil, !countdownActive else { return }
-        countdownActive = true
-        CountdownWindow.start(
-            seconds: Defaults.countdownSeconds,
-            onFinish: { [weak self] in
-                self?.countdownActive = false
-                self?.startCapture()
-            },
-            onCancel: { [weak self] in
-                self?.countdownActive = false
-            }
-        )
-    }
-
     /// Pin-hotkey trigger: pin Finder selection onto the screen. Skipped while
     /// a capture overlay is up.
     func handleSelectedImagePinTrigger() {
@@ -552,7 +447,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func handleSelectedImageEditTrigger() {
-        guard overlayController == nil, recordingEngine == nil, !countdownActive else { return }
+        guard overlayController == nil, recordingEngine == nil else { return }
         guard let controller = launchSelectedImageEdit() else {
             ToastWindow.show(message: L10n.selectedImageEditNoImage)
             return
@@ -562,7 +457,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func handleClipboardImageEditTrigger() {
-        guard overlayController == nil, recordingEngine == nil, !countdownActive else { return }
+        guard overlayController == nil, recordingEngine == nil else { return }
         guard let controller = launchClipboardImageEdit() else {
             ToastWindow.show(message: L10n.clipboardImageEditNoImage)
             return
@@ -573,13 +468,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @discardableResult
     func handlePinnedImageEditRequest(_ image: NSImage, beforePresent: () -> Void) -> Bool {
-        guard overlayController == nil, recordingEngine == nil, !countdownActive else { return false }
+        guard overlayController == nil, recordingEngine == nil else { return false }
         beforePresent()
 
         guard let controller = ImageEditLauncher.launch(
             generatedImage: image,
             source: .pin,
-            keepsEditorAcrossSpaces: Defaults.pinAcrossSpaces,
             onSuspend: { [weak self] draft in
                 self?.handleEditSuspension(draft)
             },
@@ -595,76 +489,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
-    func handleTextRecognitionTrigger() {
-        guard overlayController == nil, recordingEngine == nil, !countdownActive else { return }
-        startCapture(postCaptureAction: .textRecognition)
-    }
-
-    func handleCopyImageTextTrigger() {
-        guard overlayController == nil, recordingEngine == nil, !countdownActive else { return }
-        startCapture(postCaptureAction: .copyImageText)
-    }
-
     func handleImageMergeMenuTrigger() {
-        guard overlayController == nil, recordingEngine == nil, !countdownActive else { return }
+        guard overlayController == nil, recordingEngine == nil else { return }
         ImageMergeLauncher.shared.openEmpty()
     }
 
     func handleImageMergeShortcutTrigger() {
         guard overlayController == nil,
               recordingEngine == nil,
-              !countdownActive,
               !ImageMergeLauncher.shared.isWorkbenchActive
         else { return }
         ImageMergeLauncher.shared.openFromShortcutSources()
-    }
-
-    func handleColorPickerTrigger() {
-        guard overlayController == nil, recordingEngine == nil, !countdownActive else { return }
-        let focusRestorer = SourceAppFocusRestorer.captureFrontmostApplication()
-        NSApp.activate(ignoringOtherApps: true)
-        let didStart = ColorPickerRunner.shared.run(onFinished: {
-            focusRestorer.restore()
-        })
-        if !didStart {
-            focusRestorer.restore()
-        }
-    }
-
-    func handleFullScreenScreenshotTrigger(fromShortcut: Bool = false) {
-        guard overlayController == nil, recordingEngine == nil, !countdownActive else { return }
-        if fromShortcut {
-            UpdateChecker.shared.checkFromScreenshotShortcutIfDue()
-        }
-
-        let focusRestorer = SourceAppFocusRestorer.captureFrontmostApplication()
-        let cursorPoint = NSEvent.mouseLocation
-        let screen = NSScreen.screens.first(where: { $0.frame.contains(cursorPoint) })
-            ?? NSScreen.main
-            ?? NSScreen.screens.first
-        guard let screen,
-              let displayID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID,
-              let image = ScreenCapturer.capture(rect: CGDisplayBounds(displayID), screen: screen),
-              let controller = ImageEditLauncher.launch(
-                generatedImage: image,
-                source: .fullScreen,
-                onRequestFocusReturn: {
-                    focusRestorer.restore()
-                },
-                onSuspend: { [weak self] draft in
-                    self?.handleEditSuspension(draft)
-                },
-                onComplete: { [weak self] finalImage in
-                    self?.handleEditCompletion(finalImage)
-                }
-              )
-        else {
-            ToastWindow.show(message: L10n.fullScreenScreenshotFailed)
-            return
-        }
-
-        overlayController = controller
-        applyHotkeyState()
     }
 
     func startCapture(postCaptureAction: OverlayWindowController.PostCaptureAction = .edit) {
@@ -691,27 +526,153 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func handleEditCompletion(_ finalImage: NSImage?) {
         if let finalImage = finalImage {
-            let quality = Defaults.screenshotClipboardQuality
-            if quality.usesLossyCompression {
-                ToastWindow.show(message: L10n.screenshotQualityCompressingClipboard, duration: 600)
-            }
-            ImageOutputEncoder.encodeClipboardAsync(image: finalImage, quality: quality) { result in
-                if quality.usesLossyCompression {
-                    ToastWindow.dismiss()
-                }
-                switch result {
-                case .failure:
-                    HistoryManager.shared.add(image: finalImage)
-                    ToastWindow.show(message: L10n.screenshotCompressionFailed, duration: 3.0)
-                case .success(let output):
-                    ClipboardManager.copyToClipboard(imageOutput: output)
-                    HistoryManager.shared.add(image: finalImage)
-                    ToastWindow.show()
-                }
-            }
+            performConfiguredScreenshotOutput(finalImage)
         }
         overlayController = nil
         applyHotkeyState()
+    }
+
+    private func performConfiguredScreenshotOutput(_ image: NSImage) {
+        let mode = Defaults.screenshotOutputMode
+        if mode.copiesToClipboard, mode.savesToDirectory {
+            copyAndSaveScreenshot(image)
+        } else if mode.copiesToClipboard {
+            copyScreenshotToClipboard(
+                image,
+                quality: Defaults.screenshotQuality,
+                showsFeedback: true
+            ) { _ in }
+        } else if mode.savesToDirectory {
+            saveScreenshotToConfiguredDirectory(
+                image,
+                quality: Defaults.screenshotQuality,
+                showsFeedback: true
+            ) { _ in }
+        }
+    }
+
+    private func copyScreenshotToClipboard(
+        _ image: NSImage,
+        quality: ScreenshotImageQuality,
+        showsFeedback: Bool,
+        completion: @escaping (Bool) -> Void
+    ) {
+        if showsFeedback, quality.usesLossyCompression {
+            ToastWindow.show(message: L10n.screenshotQualityCompressingClipboard, duration: 600)
+        }
+        ImageOutputEncoder.encodeClipboardAsync(image: image, quality: quality) { result in
+            if showsFeedback, quality.usesLossyCompression {
+                ToastWindow.dismiss()
+            }
+            switch result {
+            case .failure:
+                if showsFeedback {
+                    ToastWindow.show(message: L10n.screenshotCompressionFailed, duration: 3.0)
+                }
+                completion(false)
+            case .success(let output):
+                ClipboardManager.copyToClipboard(imageOutput: output)
+                if showsFeedback {
+                    ToastWindow.show()
+                }
+                completion(true)
+            }
+        }
+    }
+
+    private func saveScreenshotToConfiguredDirectory(
+        _ image: NSImage,
+        quality: ScreenshotImageQuality,
+        showsFeedback: Bool,
+        completion: @escaping (Result<URL, Error>) -> Void
+    ) {
+        if showsFeedback, quality.usesLossyCompression {
+            ToastWindow.show(message: L10n.screenshotQualityCompressingSave, duration: 600)
+        }
+        ImageOutputEncoder.encodeAsync(image: image, quality: quality) { result in
+            if showsFeedback, quality.usesLossyCompression {
+                ToastWindow.dismiss()
+            }
+            switch result {
+            case .failure(let error):
+                if showsFeedback {
+                    ToastWindow.show(message: L10n.screenshotCompressionFailed, duration: 3.0)
+                }
+                completion(.failure(error))
+            case .success(let output):
+                do {
+                    let filename = OutputFilename.imageFileName(fileExtension: output.fileExtension)
+                    let destination = try SaveDestination.uniqueFile(
+                        in: Defaults.screenshotSaveDirectory,
+                        fileName: filename
+                    )
+                    try output.data.write(to: destination, options: .atomic)
+                    if showsFeedback {
+                        let directoryPath = SaveDestination.displayPath(destination.deletingLastPathComponent())
+                        ToastWindow.show(message: L10n.screenshotSaved(to: directoryPath))
+                    }
+                    completion(.success(destination))
+                } catch {
+                    if showsFeedback {
+                        ToastWindow.show(message: L10n.screenshotSaveFailed(error.localizedDescription), duration: 3.5)
+                    }
+                    completion(.failure(error))
+                }
+            }
+        }
+    }
+
+    private func copyAndSaveScreenshot(_ image: NSImage) {
+        let quality = Defaults.screenshotQuality
+        let showsProgress = quality.usesLossyCompression
+        if showsProgress {
+            ToastWindow.show(message: L10n.screenshotOutputProcessing, duration: 600)
+        }
+
+        var clipboardSucceeded: Bool?
+        var saveResult: Result<URL, Error>?
+
+        let finishIfReady = {
+            guard let clipboardSucceeded,
+                  let saveResult
+            else {
+                return
+            }
+
+            if showsProgress {
+                ToastWindow.dismiss()
+            }
+
+            switch (clipboardSucceeded, saveResult) {
+            case (true, .success(let destination)):
+                let directoryPath = SaveDestination.displayPath(destination.deletingLastPathComponent())
+                ToastWindow.show(message: L10n.screenshotCopiedAndSaved(to: directoryPath))
+            case (true, .failure(let error)):
+                ToastWindow.show(message: L10n.screenshotSaveFailed(error.localizedDescription), duration: 3.5)
+            case (false, .success):
+                ToastWindow.show(message: L10n.screenshotCompressionFailed, duration: 3.0)
+            case (false, .failure(let error)):
+                ToastWindow.show(message: L10n.screenshotSaveFailed(error.localizedDescription), duration: 3.5)
+            }
+        }
+
+        copyScreenshotToClipboard(
+            image,
+            quality: quality,
+            showsFeedback: false
+        ) { succeeded in
+            clipboardSucceeded = succeeded
+            finishIfReady()
+        }
+
+        saveScreenshotToConfiguredDirectory(
+            image,
+            quality: quality,
+            showsFeedback: false
+        ) { result in
+            saveResult = result
+            finishIfReady()
+        }
     }
 
     private func handleEditSuspension(_ draft: OverlayWindowController.SuspendedEditDraft) {
@@ -761,7 +722,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func continueEditingMergedImage(_ image: NSImage) {
-        guard overlayController == nil, recordingEngine == nil, !countdownActive else { return }
+        guard overlayController == nil, recordingEngine == nil else { return }
         let focusRestorer = SourceAppFocusRestorer.captureFrontmostApplication()
         guard let controller = ImageEditLauncher.launch(
             generatedImage: image,
@@ -958,7 +919,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func saveRecordingToConfiguredDirectory(tmpURL: URL, format: ScreenRecordingFormat) {
         do {
-            let filename = FilenameTemplate.recordingFileName(fileExtension: format.fileExtension)
+            let filename = OutputFilename.recordingFileName(fileExtension: format.fileExtension)
             let destination = try SaveDestination.uniqueFile(in: Defaults.recordingSaveDirectory, fileName: filename)
             saveRecording(tmpURL: tmpURL, destination: destination, format: format)
         } catch {
@@ -994,12 +955,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showSavedRecording(_ destination: URL) {
-        HistoryManager.shared.addFile(destination)
         let directoryPath = SaveDestination.displayPath(destination.deletingLastPathComponent())
         ToastWindow.show(message: L10n.recordingSaved(to: directoryPath))
-        if Defaults.autoRevealSavedFiles {
-            NSWorkspace.shared.activateFileViewerSelecting([destination])
-        }
     }
 
     private func openSettings() {

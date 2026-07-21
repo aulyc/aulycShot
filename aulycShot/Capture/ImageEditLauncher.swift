@@ -52,7 +52,6 @@ enum ImageEditLauncher {
     static func launch(
         generatedImage image: NSImage,
         source: OverlayWindowController.PresetSource = .merge,
-        keepsEditorAcrossSpaces: Bool = false,
         onRequestFocusReturn: (() -> Void)? = nil,
         onSuspend: ((OverlayWindowController.SuspendedEditDraft) -> Void)? = nil,
         onComplete: @escaping (NSImage?) -> Void
@@ -61,7 +60,6 @@ enum ImageEditLauncher {
         return present(
             image,
             source: source,
-            keepsEditorAcrossSpaces: keepsEditorAcrossSpaces,
             onRequestFocusReturn: onRequestFocusReturn,
             onSuspend: onSuspend,
             onComplete: onComplete
@@ -71,7 +69,6 @@ enum ImageEditLauncher {
     private static func present(
         _ image: NSImage,
         source: OverlayWindowController.PresetSource,
-        keepsEditorAcrossSpaces: Bool = false,
         onRequestFocusReturn: (() -> Void)?,
         onSuspend: ((OverlayWindowController.SuspendedEditDraft) -> Void)?,
         onComplete: @escaping (NSImage?) -> Void
@@ -79,7 +76,6 @@ enum ImageEditLauncher {
         let controller = OverlayWindowController(
             presetImage: image,
             presetSource: source,
-            keepsEditorAcrossSpaces: keepsEditorAcrossSpaces,
             onRequestFocusReturn: onRequestFocusReturn,
             onSuspend: onSuspend,
             onComplete: onComplete

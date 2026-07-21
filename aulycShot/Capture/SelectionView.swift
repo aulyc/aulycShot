@@ -70,24 +70,22 @@ class SelectionView: NSView {
     /// Full-screen snapshot taken before overlays appear, preserving transient menus/popups.
     var backgroundSnapshot: NSImage?
 
-    // MARK: - Window Detection
+    // MARK: - Smart Selection
 
-    /// Set by OverlayWindowController so the view can detect windows under the cursor.
+    /// Set by OverlayWindowController so the view can resolve element, window,
+    /// and screen candidates under the cursor.
     var windowDetector: WindowDetector?
 
-    /// The window rect currently highlighted under the cursor (view coordinates).
-    /// This is clipped to the overlay's visible bounds so the hover cutout
-    /// stays drawable even when the real window extends off screen.
-    private var hoverWindowRect: NSRect?
-    /// The full detected window rect in view coordinates. This may extend
-    /// outside `bounds`; use it for the actual clicked-window capture so the
-    /// output keeps the real window dimensions.
-    private var hoverWindowFullRect: NSRect?
-    private var hoverWindowID: CGWindowID?
+    private var hoverState = SmartSelectionHoverState()
+    /// Visible candidate rect, clipped to this display's overlay bounds.
+    private var hoverCandidateRect: NSRect?
+    /// Full candidate rect. Windows may extend beyond the current display.
+    private var hoverCandidateFullRect: NSRect?
+    private var lastHoverCGPoint: CGPoint?
 
-    /// Pending window selection — confirmed on mouseUp if no significant drag occurs.
-    private var pendingWindowRect: NSRect?
-    private var pendingWindowID: CGWindowID?
+    /// Pending smart candidate — confirmed on mouseUp if no significant drag occurs.
+    private var pendingCandidate: SmartSelectionCandidate?
+    private var pendingCandidateRect: NSRect?
     private let windowClickThreshold: CGFloat = 4
 
     // MARK: - Constants
@@ -105,7 +103,19 @@ class SelectionView: NSView {
 
     func refreshHoverAtCurrentMouseLocation() {
         guard state == .idle, !selectionLocked else { return }
-        updateWindowHover(screenPoint: NSEvent.mouseLocation)
+        updateSmartSelectionHover(screenPoint: NSEvent.mouseLocation)
+    }
+
+    @discardableResult
+    func cycleSmartSelectionCandidate(reverse: Bool) -> Bool {
+        guard state == .idle,
+              !selectionLocked,
+              !hoverState.isEmpty
+        else { return false }
+
+        hoverState.cycle(reverse: reverse)
+        applyCurrentHoverCandidate()
+        return true
     }
 
     func updateSelectionRect(_ rect: NSRect) {
@@ -115,10 +125,10 @@ class SelectionView: NSView {
     }
 
     /// Translate the selection rect by `delta` from the supplied
-    /// `originalRect` and notify the delegate. Used by the editor toolbar's
-    /// drag-handle button — it captures the rect at mouseDown and forwards
-    /// per-frame deltas while the user drags. Mirrors the clamping done by
-    /// the in-rect `.move` gesture so the selection stays on screen.
+    /// `originalRect` and notify the delegate. Used by the editor's selection
+    /// border overlay, which captures the rect at mouseDown and forwards
+    /// cumulative deltas while the user drags. Mirrors the clamping done by
+    /// the pre-editor in-rect `.move` gesture so the selection stays on screen.
     func moveByExternalDrag(deltaFromOriginal delta: CGSize, originalRect: NSRect) {
         var newRect = originalRect.offsetBy(dx: delta.width, dy: delta.height)
         newRect.origin.x = max(0, min(bounds.width - newRect.width, newRect.origin.x))
@@ -181,14 +191,14 @@ class SelectionView: NSView {
             return
         }
 
-        // On a highlighted window: defer confirmation until mouseUp.
+        // On a highlighted smart candidate: defer confirmation until mouseUp.
         // If the user drags past the threshold, fall through to free-form drawing.
-        if state == .idle, let hoverRect = hoverWindowRect {
-            pendingWindowRect = hoverWindowFullRect ?? hoverRect
-            pendingWindowID = hoverWindowID
-            hoverWindowRect = nil
-            hoverWindowFullRect = nil
-            hoverWindowID = nil
+        if state == .idle,
+           let candidate = currentHoverCandidate,
+           let hoverRect = hoverCandidateRect {
+            pendingCandidate = candidate
+            pendingCandidateRect = hoverCandidateFullRect ?? hoverRect
+            clearHover()
             selectionOrigin = point
             dragStart = point
             selectionRect = NSRect(origin: point, size: .zero)
@@ -226,6 +236,8 @@ class SelectionView: NSView {
         }
 
         // Start drawing new selection
+        pendingCandidate = nil
+        pendingCandidateRect = nil
         selectionOrigin = point
         selectionRect = NSRect(origin: point, size: .zero)
         state = .drawing
@@ -259,16 +271,16 @@ class SelectionView: NSView {
 
         switch dragAction {
         case .drawNew:
-            // If still within click threshold, keep the pending window rect alive
-            if pendingWindowRect != nil {
+            // If still within click threshold, keep the pending smart candidate alive
+            if pendingCandidateRect != nil {
                 let dx = abs(point.x - dragStart.x)
                 let dy = abs(point.y - dragStart.y)
                 if dx < windowClickThreshold && dy < windowClickThreshold {
                     return  // no visual update yet — wait for more movement or mouseUp
                 }
-                // Drag exceeded threshold → discard window snap, proceed with free draw
-                pendingWindowRect = nil
-                pendingWindowID = nil
+                // Drag exceeded threshold → discard smart snap, proceed with free draw
+                pendingCandidate = nil
+                pendingCandidateRect = nil
             }
             NSCursor.crosshair.set()
             selectionRect = SelectionView.dragRect(
@@ -317,15 +329,20 @@ class SelectionView: NSView {
 
         switch dragAction {
         case .drawNew:
-            // Click without drag → confirm the pending window selection
-            if let windowRect = pendingWindowRect {
-                let windowID = pendingWindowID
-                pendingWindowRect = nil
-                pendingWindowID = nil
-                selectionRect = windowRect
+            // Click without drag → confirm the pending smart candidate
+            if let candidateRect = pendingCandidateRect,
+               let candidate = pendingCandidate {
+                pendingCandidate = nil
+                pendingCandidateRect = nil
+                selectionRect = candidateRect
                 state = .selected
                 dragAction = .none
-                delegate?.selectionDidComplete(rect: windowRect, inView: self, isWindowSelection: true, windowID: windowID)
+                delegate?.selectionDidComplete(
+                    rect: candidateRect,
+                    inView: self,
+                    isWindowSelection: candidate.isWindowSelection,
+                    windowID: candidate.windowID
+                )
                 needsDisplay = true
                 return
             }
@@ -359,9 +376,9 @@ class SelectionView: NSView {
             return
         }
 
-        // In idle state, detect windows under cursor for hover highlight
+        // In idle state, resolve smart candidates under the cursor for hover highlight
         if state == .idle && !selectionLocked {
-            updateWindowHover(with: event)
+            updateSmartSelectionHover(with: event)
             return
         }
 
@@ -398,9 +415,13 @@ class SelectionView: NSView {
         }
     }
 
-    // MARK: - Window Hover
+    // MARK: - Smart Selection Hover
 
-    private func updateWindowHover(with event: NSEvent) {
+    private var currentHoverCandidate: SmartSelectionCandidate? {
+        hoverState.currentCandidate
+    }
+
+    private func updateSmartSelectionHover(with event: NSEvent) {
         guard let win = self.window else {
             clearHover()
             NSCursor.crosshair.set()
@@ -411,13 +432,15 @@ class SelectionView: NSView {
         let viewPoint = convert(event.locationInWindow, from: nil)
         let windowPoint = convert(viewPoint, to: nil)
         let screenPoint = win.convertPoint(toScreen: windowPoint)
-        updateWindowHover(screenPoint: screenPoint)
+        updateSmartSelectionHover(screenPoint: screenPoint)
     }
 
-    private func updateWindowHover(screenPoint: NSPoint) {
+    private func updateSmartSelectionHover(screenPoint: NSPoint) {
         guard let detector = windowDetector,
               let win = self.window,
-              let screen = win.screen else {
+              let screen = win.screen,
+              let displayID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
+        else {
             clearHover()
             NSCursor.crosshair.set()
             return
@@ -426,43 +449,86 @@ class SelectionView: NSView {
         // Convert screen point → CG point
         let primaryHeight = NSScreen.screens[0].frame.height
         let cgPoint = CGPoint(x: screenPoint.x, y: primaryHeight - screenPoint.y)
+        let screenFrame = CGDisplayBounds(displayID)
+        var baseCandidates = detector.baseCandidates(
+            at: cgPoint,
+            screenFrame: screenFrame,
+            displayID: displayID
+        )
+        if let previous = currentHoverCandidate,
+           case .element = previous.kind,
+           previous.frame.contains(cgPoint) {
+            baseCandidates.insert(previous, at: 0)
+        }
+        lastHoverCGPoint = cgPoint
+        applyHoverCandidates(baseCandidates)
 
-        if let detected = detector.windowAt(cgPoint: cgPoint) {
-            // Convert CG window frame → AppKit screen coords → view coords
-            let appKitY = primaryHeight - detected.frame.origin.y - detected.frame.height
-            let viewRect = NSRect(
-                x: detected.frame.origin.x - screen.frame.origin.x,
-                y: appKitY - screen.frame.origin.y,
-                width: detected.frame.width,
-                height: detected.frame.height
-            )
-            // Clamp to view bounds
-            let clamped = viewRect.intersection(bounds)
-            guard !clamped.isNull, clamped.width > 1, clamped.height > 1 else {
-                clearHover()
-                NSCursor.crosshair.set()
-                return
-            }
-            if hoverWindowRect != clamped
-                || hoverWindowFullRect != viewRect
-                || hoverWindowID != detected.windowID {
-                hoverWindowRect = clamped
-                hoverWindowFullRect = viewRect
-                hoverWindowID = detected.windowID
-                needsDisplay = true
-            }
-            NSCursor.pointingHand.set()
-        } else {
+        guard !baseCandidates.isEmpty else {
             clearHover()
             NSCursor.crosshair.set()
+            return
+        }
+
+        detector.requestCandidates(
+            at: cgPoint,
+            screenFrame: screenFrame,
+            displayID: displayID
+        ) { [weak self] candidates in
+            guard let self,
+                  self.state == .idle,
+                  !self.selectionLocked,
+                  self.lastHoverCGPoint == cgPoint
+            else { return }
+            self.applyHoverCandidates(candidates)
+        }
+    }
+
+    private func applyHoverCandidates(_ candidates: [SmartSelectionCandidate]) {
+        guard !candidates.isEmpty else {
+            clearHover()
+            NSCursor.crosshair.set()
+            return
+        }
+
+        hoverState.replaceCandidates(candidates)
+        applyCurrentHoverCandidate()
+        NSCursor.pointingHand.set()
+    }
+
+    private func applyCurrentHoverCandidate() {
+        guard let candidate = currentHoverCandidate,
+              let screen = window?.screen else {
+            clearHover()
+            return
+        }
+
+        let primaryHeight = NSScreen.screens[0].frame.height
+        let appKitY = primaryHeight - candidate.frame.origin.y - candidate.frame.height
+        let viewRect = NSRect(
+            x: candidate.frame.origin.x - screen.frame.origin.x,
+            y: appKitY - screen.frame.origin.y,
+            width: candidate.frame.width,
+            height: candidate.frame.height
+        )
+        let clamped = viewRect.intersection(bounds)
+        guard !clamped.isNull, clamped.width > 1, clamped.height > 1 else {
+            clearHover()
+            return
+        }
+
+        if hoverCandidateRect != clamped || hoverCandidateFullRect != viewRect {
+            hoverCandidateRect = clamped
+            hoverCandidateFullRect = viewRect
+            needsDisplay = true
         }
     }
 
     private func clearHover() {
-        if hoverWindowRect != nil {
-            hoverWindowRect = nil
-            hoverWindowFullRect = nil
-            hoverWindowID = nil
+        if hoverCandidateRect != nil || !hoverState.isEmpty {
+            hoverState.clear()
+            hoverCandidateRect = nil
+            hoverCandidateFullRect = nil
+            lastHoverCGPoint = nil
             needsDisplay = true
         }
     }
@@ -479,8 +545,8 @@ class SelectionView: NSView {
             snapshot.draw(in: bounds)
         }
 
-        // Hover highlight for window detection (idle state, before any click)
-        if state == .idle, let hoverRect = hoverWindowRect {
+        // Hover highlight for smart selection (idle state, before any click)
+        if state == .idle, let hoverRect = hoverCandidateRect {
             // Dark overlay with cutout (even-odd fill preserves snapshot underneath)
             let path = CGMutablePath()
             path.addRect(bounds)

@@ -5,7 +5,6 @@ import UniformTypeIdentifiers
 
 class EditWindowController {
     private var canvasView: EditCanvasView?
-    private var beautifyContainerView: BeautifyContainerView?
     private var canvasScrollView: EditorScrollView?
     private var selectionChromeOverlay: SelectionChromeOverlay?
     private weak var hostSelectionView: SelectionView?
@@ -24,11 +23,6 @@ class EditWindowController {
     private let onRecordingSelection: ((NSRect, NSScreen) -> Void)?
     private let onRequestFocusReturn: (() -> Void)?
     private var activeTool: EditTool = .none
-    private var beautifySubToolbarView: BeautifySubToolbar?
-    private var isBeautifyActive: Bool = false
-    private var currentBeautifyPreset: BeautifyPreset?
-    private var currentBeautifyPadding: CGFloat = CGFloat(Defaults.lastBeautifyPadding)
-    private var currentBeautifyShadowEnabled: Bool = Defaults.lastBeautifyShadowEnabled
 
     /// True when the capture came from clicking a single window (not a free
     /// drag). Drives the rounded-corner + drop-shadow effect on the final
@@ -48,7 +42,6 @@ class EditWindowController {
     /// Used as the base image and annotation clip mask for clicked-window
     /// captures so the final corners match the system window exactly.
     private let windowBaseImage: NSImage?
-    private let keepsHostWindowAcrossSpaces: Bool
 
     // Scroll capture state
     private var scrollCapturer: ScrollCapturer?
@@ -74,10 +67,6 @@ class EditWindowController {
     private var scrollCropView: ScrollCropView?
     private var scrollCropControlWindow: ScrollCropControlWindow?
 
-    var blocksHistoryNavigation: Bool {
-        isScrollCaptureBusy || isCropping
-    }
-
     private var isScrollCaptureBusy: Bool {
         isScrollCapturing || isScrollCaptureFinalizing
     }
@@ -92,14 +81,6 @@ class EditWindowController {
 
     struct RestorableState {
         let canvasState: EditCanvasView.RestorableState
-        let beautifyState: BeautifyState
-    }
-
-    struct BeautifyState {
-        let isActive: Bool
-        let presetID: String?
-        let padding: CGFloat
-        let shadowEnabled: Bool
     }
 
     // Drawing properties
@@ -122,10 +103,6 @@ class EditWindowController {
     private var currentEmoji: String?
     private var recentEmojis: [String] = Defaults.recentEmojis
     private var emojiPopover: NSPopover?
-    /// Last color sampled from the toolbar eyedropper. Persisted locally and
-    /// shown as an ink-bottle control for color-capable annotation tools.
-    private var pickedColorSwatch: NSColor?
-
     var isTextEditing: Bool {
         canvasView?.isTextEditing == true
     }
@@ -142,7 +119,6 @@ class EditWindowController {
         isWindowCapture: Bool = false,
         onRecordingSelection: ((NSRect, NSScreen) -> Void)? = nil,
         onRequestFocusReturn: (() -> Void)? = nil,
-        keepsHostWindowAcrossSpaces: Bool = false,
         onComplete: @escaping (NSImage?) -> Void
     ) {
         self.captureRect = captureRect
@@ -153,12 +129,10 @@ class EditWindowController {
         self.preSnapshot = preSnapshot
         self.overrideBaseImage = overrideBaseImage
         self.windowBaseImage = windowBaseImage
-        self.keepsHostWindowAcrossSpaces = keepsHostWindowAcrossSpaces
         self.isWindowCapture = isWindowCapture
         self.onRecordingSelection = onRecordingSelection
         self.onRequestFocusReturn = onRequestFocusReturn
         self.onComplete = onComplete
-        self.pickedColorSwatch = Self.color(fromHex: Defaults.lastPickedColorHex)
     }
 
     func show() {
@@ -200,26 +174,26 @@ class EditWindowController {
             self?.handleEmojiStamped()
         }
 
-        let container = BeautifyContainerView(canvasView: canvas)
-        container.autoresizingMask = []
-
-        scrollView.documentView = container
+        scrollView.documentView = canvas
         scrollView.editorCanvasView = canvas
         scrollView.isInteractionEnabled = overrideBaseImage != nil
 
         self.canvasScrollView = scrollView
         self.canvasView = canvas
-        self.beautifyContainerView = container
         hostSelectionView.addSubview(scrollView)
         resetCanvasScrollPosition()
 
-        // Sits above `scrollView` so the dashed border + handles stay
-        // visible when beautify expands the canvas frame with a gradient
-        // background. Only handle hits are claimed; everything else falls
-        // through to the canvas / SelectionView underneath.
+        // Sits above `scrollView` so the selection border remains interactive
+        // after the editor canvas takes ownership of the selection interior.
+        // Handles resize, the border moves the selection, and all other hits
+        // fall through to the canvas / SelectionView underneath.
         let overlay = SelectionChromeOverlay(frame: hostSelectionView.bounds)
         overlay.autoresizingMask = [.width, .height]
         overlay.selectionView = hostSelectionView
+        overlay.onMoveStart = { [weak self] in
+            self?.canvasView?.commitActiveTextEditing()
+        }
+        overlay.update(rect: selectionViewRect)
         hostSelectionView.addSubview(overlay)
         self.selectionChromeOverlay = overlay
 
@@ -265,20 +239,14 @@ class EditWindowController {
         tv.onToolSelected = { [weak self] tool in self?.selectTool(tool) }
         tv.onUndo = { [weak self] in _ = self?.canvasView?.undo() }
         tv.onRedo = { [weak self] in _ = self?.canvasView?.redo() }
-        tv.onColorPicker = { [weak self] in self?.runColorPicker() }
         tv.onScrollCapture = { [weak self] in self?.toggleScrollCapture() }
-        tv.onBeautify = { [weak self] in self?.toggleBeautify() }
         tv.onInsertImage = { [weak self] in self?.showInsertImageMenu() }
         tv.onQRCode = { [weak self] in self?.performQRCodeRecognition() }
-        tv.onOCR = { [weak self] in self?.performOCR() }
         tv.onSave = { [weak self] in self?.save() }
         tv.onPin = { [weak self] in self?.pin() }
         tv.onRecord = { [weak self] in self?.record() }
         tv.onClose = { [weak self] in self?.close() }
         tv.onConfirm = { [weak self] in self?.confirm() }
-        tv.onMoveSelectionStart = { [weak self] in self?.handleMoveSelectionStart() }
-        tv.onMoveSelectionDrag = { [weak self] delta in self?.handleMoveSelectionDrag(delta: delta) }
-        tv.onMoveSelectionEnd = { [weak self] in self?.handleMoveSelectionEnd() }
     }
 
     /// Primary + side toolbars currently on screen.
@@ -302,7 +270,7 @@ class EditWindowController {
         }
     }
 
-    /// Frame the option sub-toolbars (color/size, text, beautify) anchor
+    /// Frame the option sub-toolbars (color/size and text) anchor
     /// against — the primary toolbar when it exists, otherwise the side
     /// toolbar, so options still appear if the user emptied the primary bar.
     private var subToolbarAnchorFrame: NSRect? {
@@ -321,37 +289,11 @@ class EditWindowController {
 
         let canvasSize = canvasContentSize(for: selectionViewRect.size)
         canvasView?.updateViewportSize(canvasSize)
-        beautifyContainerView?.canvasSizeDidChange()
         canvasView?.captureRect = captureRect
         canvasView?.captureScreen = screen
 
-        if isBeautifyActive {
-            canvasView?.beautifyCornerRadius = isWindowCapture ? nil : BeautifyRenderer.innerCornerRadius
-            beautifyContainerView?.setInnerShadowCornerRadius(
-                isWindowCapture ? WindowEffects.cornerRadiusPoints : BeautifyRenderer.innerCornerRadius
-            )
-            beautifyContainerView?.setInnerShadowInset(
-                isWindowCapture ? BeautifyRenderer.windowInnerShadowInset : 0
-            )
-        }
-
-        // Beautify caches the cropped screenshot in `externalBaseImage` so the
-        // canvas can clip it to rounded corners. Without re-cropping here, a
-        // selection resize would just stretch the cached image to the new
-        // canvas frame instead of revealing a different region of the screen.
-        if isBeautifyActive,
-           let canvasView,
-           canvasView.previewImage == nil {
-            canvasView.externalBaseImage = windowShapedBaseImage(
-                from: canvasView.resolveBaseImageForEditing()
-            )
-        }
-
         canvasView?.needsDisplay = true
-
-        // Resize the scroll view (and beautified outer when active) before
-        // positioning floating chrome so toolbar anchors against the right rect.
-        updateCanvasFrameForBeautify()
+        updateCanvasFrame()
 
         updateCaptureActionAvailability()
         repositionFloatingChrome()
@@ -375,8 +317,6 @@ class EditWindowController {
     }
 
     private func selectTool(_ tool: EditTool) {
-        // Beautify stays active — tools and beautify coexist so the user
-        // can draw on top of the beautified live preview.
         dismissQRCodeOverlay()
 
         if tool != .none {
@@ -514,7 +454,6 @@ class EditWindowController {
         case .pen, .line:
             showColorSizeSubToolbar(
                 sizes: EditorStyleDefaults.standardLineSizes,
-                dynamicColor: pickedColorSwatch,
                 currentSize: currentLineWidth,
                 onSize: { [weak self] size in
                     self?.setCurrentDrawingLineWidth(size)
@@ -523,11 +462,9 @@ class EditWindowController {
         case .arrow:
             showColorSizeSubToolbar(
                 sizes: EditorStyleDefaults.standardLineSizes,
-                dynamicColor: pickedColorSwatch,
                 currentSize: currentLineWidth,
                 width: ColorSizeSubToolbar.preferredWidth(
                     sizes: EditorStyleDefaults.standardLineSizes,
-                    dynamicColor: pickedColorSwatch,
                     showsShapeFillModes: false,
                     showsArrowStyles: true
                 ),
@@ -542,11 +479,9 @@ class EditWindowController {
         case .rectangle, .ellipse:
             showColorSizeSubToolbar(
                 sizes: EditorStyleDefaults.standardLineSizes,
-                dynamicColor: pickedColorSwatch,
                 currentSize: currentLineWidth,
                 width: ColorSizeSubToolbar.preferredWidth(
                     sizes: EditorStyleDefaults.standardLineSizes,
-                    dynamicColor: pickedColorSwatch,
                     showsShapeFillModes: true,
                     showsShapeStrokeStyles: true,
                     shapeStrokePreviewShape: tool == .ellipse ? .ellipse : .rectangle
@@ -567,7 +502,6 @@ class EditWindowController {
         case .magnifier:
             showColorSizeSubToolbar(
                 sizes: EditorStyleDefaults.standardLineSizes,
-                dynamicColor: pickedColorSwatch,
                 currentSize: currentLineWidth,
                 onSize: { [weak self] size in
                     self?.setCurrentDrawingLineWidth(size)
@@ -577,7 +511,6 @@ class EditWindowController {
             showColorSizeSubToolbar(
                 sizes: EditorStyleDefaults.markerLineSizes,
                 currentColor: currentMarkerColor,
-                dynamicColor: pickedColorSwatch,
                 currentSize: currentMarkerLineWidth,
                 sizeMaxValue: CGFloat(Defaults.markerLineWidthMax),
                 onColor: { [weak self] color in
@@ -594,9 +527,8 @@ class EditWindowController {
         case .numbered:
             showColorSizeSubToolbar(
                 sizes: [],
-                dynamicColor: pickedColorSwatch,
                 currentSize: 0,
-                width: pickedColorSwatch == nil ? 200 : 225
+                width: 200
             )
         case .mosaic:
             showMosaicSubToolbar()
@@ -611,7 +543,6 @@ class EditWindowController {
     private func showColorSizeSubToolbar(
         sizes: [CGFloat],
         currentColor: NSColor? = nil,
-        dynamicColor: NSColor? = nil,
         currentSize: CGFloat,
         width: CGFloat? = nil,
         sizeMinValue: CGFloat = CGFloat(Defaults.editorLineWidthMin),
@@ -627,10 +558,8 @@ class EditWindowController {
         onArrowStyle: ((ArrowStyle) -> Void)? = nil
     ) {
         guard let hostSelectionView, let toolbarFrame = subToolbarAnchorFrame else { return }
-        let offset: CGFloat = isBeautifyActive ? (36 + 4) : 0
         let resolvedWidth = width ?? ColorSizeSubToolbar.preferredWidth(
             sizes: sizes,
-            dynamicColor: dynamicColor,
             showsShapeFillModes: shapeFillMode != nil,
             showsArrowStyles: arrowStyle != nil,
             showsShapeStrokeStyles: shapeStrokeStyle != nil,
@@ -640,8 +569,7 @@ class EditWindowController {
             width: resolvedWidth,
             height: 36,
             toolbarFrame: toolbarFrame,
-            in: hostSelectionView.bounds,
-            offset: offset
+            in: hostSelectionView.bounds
         )
 
         let resolvedColor = currentColor ?? self.currentColor
@@ -649,7 +577,6 @@ class EditWindowController {
             frame: subRect,
             sizes: sizes,
             currentColor: resolvedColor,
-            dynamicColor: dynamicColor,
             currentSize: currentSize,
             sizeMinValue: sizeMinValue,
             sizeMaxValue: sizeMaxValue,
@@ -689,20 +616,17 @@ class EditWindowController {
 
     private func showTextSubToolbar() {
         guard let hostSelectionView, let toolbarFrame = subToolbarAnchorFrame else { return }
-        let offset: CGFloat = isBeautifyActive ? (36 + 4) : 0
         let subRect = subToolbarRect(
-            width: TextSubToolbar.preferredWidth(dynamicColor: pickedColorSwatch),
+            width: TextSubToolbar.preferredWidth,
             height: 36,
             toolbarFrame: toolbarFrame,
-            in: hostSelectionView.bounds,
-            offset: offset
+            in: hostSelectionView.bounds
         )
 
         let view = TextSubToolbar(
             frame: subRect,
             currentColor: currentColor,
             currentFontSize: currentFontSize,
-            dynamicColor: pickedColorSwatch,
             strokeEnabled: currentTextStroke,
             calloutEnabled: currentTextCallout
         )
@@ -747,13 +671,11 @@ class EditWindowController {
 
     private func showMosaicSubToolbar() {
         guard let hostSelectionView, let toolbarFrame = subToolbarAnchorFrame else { return }
-        let offset: CGFloat = isBeautifyActive ? (36 + 4) : 0
         let subRect = subToolbarRect(
             width: MosaicSubToolbar.preferredWidth,
             height: 36,
             toolbarFrame: toolbarFrame,
-            in: hostSelectionView.bounds,
-            offset: offset
+            in: hostSelectionView.bounds
         )
 
         let view = MosaicSubToolbar(frame: subRect, currentBlockSize: currentMosaicBlockSize)
@@ -776,7 +698,6 @@ class EditWindowController {
 
     private func showEmojiSubToolbar() {
         guard let hostSelectionView, let toolbarFrame = subToolbarAnchorFrame else { return }
-        let offset: CGFloat = isBeautifyActive ? (36 + 4) : 0
         let width = min(
             EmojiSubToolbar.preferredVisibleWidth,
             max(EmojiSubToolbar.minimumVisibleWidth, hostSelectionView.bounds.width - 16)
@@ -785,8 +706,7 @@ class EditWindowController {
             width: width,
             height: 42,
             toolbarFrame: toolbarFrame,
-            in: hostSelectionView.bounds,
-            offset: offset
+            in: hostSelectionView.bounds
         )
 
         let view = EmojiSubToolbar(
@@ -874,23 +794,16 @@ class EditWindowController {
             let toolbarFrame = subToolbarAnchorFrame
         else { return }
 
-        // When the beautify gradient picker is up, keep the tool's color/size
-        // sub-toolbar shifted below it so the two rows don't overlap.
-        let offset: CGFloat = isBeautifyActive ? (36 + 4) : 0
         subToolbarView.frame = subToolbarRect(
             width: subToolbarView.frame.width,
             height: subToolbarView.frame.height,
             toolbarFrame: toolbarFrame,
-            in: hostSelectionView.bounds,
-            offset: offset
+            in: hostSelectionView.bounds
         )
     }
 
-    /// Reposition the main toolbar, beautify gradient row, tool color/size
-    /// row, and selection chrome overlay against the current `selectionViewRect`
-    /// and beautify state. Called whenever the underlying geometry changes —
-    /// beautify toggles, preset/padding changes, or the user resizes the
-    /// selection.
+    /// Reposition the main toolbar, option row, and selection chrome overlay
+    /// against the current selection geometry.
     private func repositionFloatingChrome() {
         guard let hostSelectionView else { return }
         if let toolbarView {
@@ -907,234 +820,14 @@ class EditWindowController {
             )
         }
         updateSubToolbarPosition()
-        if isBeautifyActive,
-           let toolbarFrame = subToolbarAnchorFrame,
-           let beautifySub = beautifySubToolbarView {
-            beautifySub.frame = subToolbarRect(
-                width: beautifySub.frame.width,
-                height: beautifySub.frame.height,
-                toolbarFrame: toolbarFrame,
-                in: hostSelectionView.bounds
-            )
-        }
-        selectionChromeOverlay?.update(
-            rect: selectionViewRect,
-            active: isBeautifyActive && canvasView?.hasPreviewImage != true
-        )
+        selectionChromeOverlay?.update(rect: selectionViewRect)
     }
 
-    // MARK: - Move-selection drag handle
-
-    /// Original selection rect captured at the moment the user pressed the
-    /// move-selection drag handle. Per-frame deltas are applied against
-    /// this so the rect doesn't drift if a frame is missed.
-    private var moveSelectionStartRect: NSRect = .zero
-
-    private func handleMoveSelectionStart() {
-        canvasView?.commitActiveTextEditing()
-        moveSelectionStartRect = hostSelectionView?.currentSelectionRect ?? .zero
-    }
-
-    private func handleMoveSelectionDrag(delta: CGSize) {
-        hostSelectionView?.moveByExternalDrag(
-            deltaFromOriginal: delta,
-            originalRect: moveSelectionStartRect
-        )
-    }
-
-    private func handleMoveSelectionEnd() {
-        hostSelectionView?.finalizeExternalDrag()
-        moveSelectionStartRect = .zero
-    }
-
-    // MARK: - Beautify
-
-    private func toggleBeautify() {
-        dismissQRCodeOverlay()
-        if isBeautifyActive {
-            deactivateBeautify()
-        } else {
-            activateBeautify()
-        }
-    }
-
-    private func activateBeautify() {
-        guard let canvasView, let container = beautifyContainerView else {
-            return
-        }
-        let preset = BeautifyPreset.defaultPreset
-
-        // Beautify and annotation tools coexist — don't clear the active tool.
-
-        // The canvas draws its content (previewImage or externalBaseImage)
-        // inside the beautify card. Normal selections use a fixed card clip;
-        // clicked-window captures use the window's own rounded alpha mask.
-        canvasView.beautifyCornerRadius = isWindowCapture ? nil : BeautifyRenderer.innerCornerRadius
-        container.setInnerShadowCornerRadius(
-            isWindowCapture ? WindowEffects.cornerRadiusPoints : BeautifyRenderer.innerCornerRadius
-        )
-        container.setInnerShadowInset(
-            isWindowCapture ? BeautifyRenderer.windowInnerShadowInset : 0
-        )
-        if canvasView.previewImage == nil, canvasView.externalBaseImage == nil {
-            canvasView.externalBaseImage = windowShapedBaseImage(
-                from: canvasView.resolveBaseImageForEditing()
-            )
-        }
-
-        currentBeautifyPreset = preset
-        if preset.isWallpaper {
-            container.wallpaperImage = nil
-            loadBeautifyWallpaper(presetID: preset.id)
-        }
-        container.setBeautify(preset: preset)
-        container.setPadding(currentBeautifyPadding)
-        container.setShadowEnabled(currentBeautifyShadowEnabled)
-        isBeautifyActive = true
-        toolbars.forEach { $0.setBeautifyActive(true) }
-        showBeautifySubToolbar(selecting: preset)
-        Defaults.lastBeautifyPresetID = preset.id
-
-        updateCanvasFrameForBeautify()
-        repositionFloatingChrome()
-        updateEditorInteractionState()
-        canvasView.needsDisplay = true
-        bringEditorToFront()
-    }
-
-    private func deactivateBeautify() {
-        guard let canvasView, let container = beautifyContainerView else {
-            return
-        }
-        currentBeautifyPreset = nil
-
-        canvasView.beautifyCornerRadius = nil
-        canvasView.externalBaseImage = nil
-
-        container.setBeautify(preset: nil)
-        container.setPadding(nil)
-        container.setInnerShadowCornerRadius(BeautifyRenderer.innerCornerRadius)
-        container.setInnerShadowInset(0)
-        isBeautifyActive = false
-        toolbars.forEach { $0.setBeautifyActive(false) }
-        beautifySubToolbarView?.removeFromSuperview()
-        beautifySubToolbarView = nil
-
-        updateCanvasFrameForBeautify()
-        repositionFloatingChrome()
-        updateEditorInteractionState()
-        canvasView.needsDisplay = true
-        bringEditorToFront()
-    }
-
-    private func applyBeautifyPreset(_ preset: BeautifyPreset) {
-        guard let container = beautifyContainerView else {
-            return
-        }
-        currentBeautifyPreset = preset
-
-        if preset.isWallpaper {
-            container.wallpaperImage = nil
-            loadBeautifyWallpaper(presetID: preset.id)
-        } else {
-            container.wallpaperImage = nil
-        }
-
-        container.setBeautify(preset: preset)
-        Defaults.lastBeautifyPresetID = preset.id
-        beautifySubToolbarView?.currentPresetID = preset.id
-        canvasView?.needsDisplay = true
-        updateCanvasFrameForBeautify()
-        repositionFloatingChrome()
-    }
-
-    private func applyBeautifyPadding(_ padding: CGFloat) {
-        currentBeautifyPadding = padding
-        Defaults.lastBeautifyPadding = Double(padding)
-        beautifyContainerView?.setPadding(padding)
-        updateCanvasFrameForBeautify()
-        repositionFloatingChrome()
-        canvasView?.needsDisplay = true
-    }
-
-    private func applyBeautifyShadowEnabled(_ enabled: Bool) {
-        currentBeautifyShadowEnabled = enabled
-        Defaults.lastBeautifyShadowEnabled = enabled
-        beautifyContainerView?.setShadowEnabled(enabled)
-        canvasView?.needsDisplay = true
-    }
-
-    private func loadBeautifyWallpaper(presetID: String) {
-        BeautifyRenderer.loadWallpaperImage(for: screen) { [weak self] image in
-            guard let self else { return }
-            guard self.isBeautifyActive,
-                  self.currentBeautifyPreset?.id == presetID,
-                  self.currentBeautifyPreset?.isWallpaper == true else {
-                return
-            }
-            self.beautifyContainerView?.wallpaperImage = image
-            self.beautifyContainerView?.needsDisplay = true
-            self.canvasView?.needsDisplay = true
-        }
-    }
-
-    private func showBeautifySubToolbar(selecting preset: BeautifyPreset) {
-        guard let hostSelectionView, let toolbarFrame = subToolbarAnchorFrame else {
-            return
-        }
-
-        beautifySubToolbarView?.removeFromSuperview()
-
-        let width = BeautifySubToolbar.preferredWidth(presetCount: BeautifyPreset.defaults.count)
-        let height: CGFloat = 36
-        let subRect = subToolbarRect(
-            width: width,
-            height: height,
-            toolbarFrame: toolbarFrame,
-            in: hostSelectionView.bounds
-        )
-
-        let view = BeautifySubToolbar(
-            frame: subRect,
-            presets: BeautifyPreset.defaults,
-            screen: screen,
-            initialPadding: currentBeautifyPadding,
-            initialShadowEnabled: currentBeautifyShadowEnabled
-        )
-        view.currentPresetID = preset.id
-        view.onPresetSelected = { [weak self] selected in
-            self?.applyBeautifyPreset(selected)
-        }
-        view.onPaddingChanged = { [weak self] padding in
-            self?.applyBeautifyPadding(padding)
-        }
-        view.onShadowEnabledChanged = { [weak self] enabled in
-            self?.applyBeautifyShadowEnabled(enabled)
-        }
-        styleFloatingHUD(view)
-        hostSelectionView.addSubview(view)
-        beautifySubToolbarView = view
-    }
-
-    private func updateCanvasFrameForBeautify() {
-        guard
-            let canvasView,
-            let canvasScrollView,
-            let hostSelectionView,
-            let container = beautifyContainerView
-        else {
-            return
-        }
-
-        if isBeautifyActive {
-            canvasScrollView.frame = outerVisualRect(in: hostSelectionView.bounds)
-        } else {
-            canvasScrollView.frame = selectionViewRect
-        }
-
+    private func updateCanvasFrame() {
+        guard let canvasView, let canvasScrollView else { return }
+        canvasScrollView.frame = selectionViewRect
         updateCanvasScrollAvailability()
         resetCanvasScrollPosition()
-        container.needsDisplay = true
         canvasView.needsDisplay = true
     }
 
@@ -1162,38 +855,6 @@ class EditWindowController {
             scrollView.contentView.setBoundsOrigin(.zero)
             scrollView.reflectScrolledClipView(scrollView.contentView)
         }
-    }
-
-    /// The on-screen rect of the canvas/scroll view. When beautify is on this
-    /// is the outer (gradient + inner image) rect, anchored so the inner
-    /// image stays exactly where the user drew the selection — the gradient
-    /// is allowed to spill past the screen edges rather than shifting the
-    /// inner image to fit. The `bounds` parameter is kept for call-site
-    /// symmetry; it isn't read here.
-    private func outerVisualRect(in bounds: NSRect) -> NSRect {
-        _ = bounds
-        guard isBeautifyActive, let container = beautifyContainerView else {
-            return selectionViewRect
-        }
-        let outer = container.outerSize
-        guard outer.width > 0, outer.height > 0 else {
-            return selectionViewRect
-        }
-        let p = container.customPadding ?? BeautifyRenderer.padding(for: container.innerImageSize)
-        if isCanvasTallerThanViewport {
-            return NSRect(
-                x: selectionViewRect.minX - p,
-                y: selectionViewRect.minY - p,
-                width: selectionViewRect.width + 2 * p,
-                height: selectionViewRect.height + 2 * p
-            )
-        }
-        return NSRect(
-            x: selectionViewRect.minX - p,
-            y: selectionViewRect.minY - p,
-            width: outer.width,
-            height: outer.height
-        )
     }
 
     // MARK: - Scroll Capture
@@ -1252,11 +913,6 @@ class EditWindowController {
             "start-requested",
             metadata: scrollCaptureStartMetadata(mode: mode, diagnosticID: diagnosticID)
         )
-
-        if isBeautifyActive {
-            logScrollCapture("deactivate-beautify-before-start")
-            deactivateBeautify()
-        }
 
         if mode == .automatic {
             // Automatic scroll posts synthetic events; without Accessibility
@@ -1543,7 +1199,6 @@ class EditWindowController {
         )
         canvasView?.loadPreviewImage(image)
         hostSelectionView?.selectionSizeLabelOverride = Self.sizeLabelText(for: image.size)
-        beautifyContainerView?.canvasSizeDidChange()
         updateCanvasScrollAvailability()
         canvasScrollView?.scrollToTop()
         updateEditorInteractionState()
@@ -1634,7 +1289,7 @@ class EditWindowController {
         guard let finalImage = currentCompositeImage() else { return }
         let targetScreen = screen
         let focusReturn = onRequestFocusReturn
-        let quality = Defaults.screenshotSaveQuality
+        let quality = Defaults.screenshotQuality
 
         tearDown()
         onComplete(nil)
@@ -1648,17 +1303,12 @@ class EditWindowController {
                 ToastWindow.dismiss()
             }
 
-            var shouldReturnFocus = true
             switch result {
             case .failure:
                 ToastWindow.show(message: L10n.screenshotCompressionFailed, on: targetScreen, duration: 3.0)
             case .success(let output):
                 do {
-                    let filename = FilenameTemplate.imageFileName(
-                        for: finalImage,
-                        fileExtension: output.fileExtension,
-                        imageSize: output.pixelSize
-                    )
+                    let filename = OutputFilename.imageFileName(fileExtension: output.fileExtension)
                     let destination = try SaveDestination.uniqueFile(
                         in: Defaults.screenshotSaveDirectory,
                         fileName: filename
@@ -1666,10 +1316,6 @@ class EditWindowController {
                     try output.data.write(to: destination, options: .atomic)
                     let directoryPath = SaveDestination.displayPath(destination.deletingLastPathComponent())
                     ToastWindow.show(message: L10n.screenshotSaved(to: directoryPath), on: targetScreen)
-                    if Defaults.autoRevealSavedFiles {
-                        NSWorkspace.shared.activateFileViewerSelecting([destination])
-                        shouldReturnFocus = false
-                    }
                 } catch {
                     ToastWindow.show(
                         message: L10n.screenshotSaveFailed(error.localizedDescription),
@@ -1679,24 +1325,8 @@ class EditWindowController {
                 }
             }
 
-            if shouldReturnFocus {
-                focusReturn?()
-            }
+            focusReturn?()
         }
-    }
-
-    /// Text-recognition action: exits the selection/editor, then opens the OCR
-    /// panel anchored to the original selection. Uses the raw capture (no
-    /// annotations) so recognition is not polluted by drawn marks.
-    private func performOCR() {
-        canvasView?.commitActiveTextEditing()
-        let baseImage = canvasView?.resolveBaseImageForEditing() ?? currentCompositeImage()
-        let anchorRect = selectionRect
-        let targetScreen = screen
-        tearDown()
-        onComplete(nil)
-        guard let baseImage else { return }
-        OCRPanel.present(image: baseImage, anchorRect: anchorRect, screen: targetScreen)
     }
 
     private func performQRCodeRecognition() {
@@ -1843,15 +1473,6 @@ class EditWindowController {
         requestFocusReturn()
     }
 
-    private func toolUsesPickedColorSwatch(_ tool: EditTool) -> Bool {
-        switch tool {
-        case .rectangle, .ellipse, .line, .arrow, .pen, .marker, .numbered, .text:
-            return true
-        default:
-            return false
-        }
-    }
-
     private func setShapeFillMode(_ mode: ShapeFillMode) {
         currentShapeFillMode = mode
         canvasView?.currentShapeFillMode = mode
@@ -1905,18 +1526,6 @@ class EditWindowController {
         }
     }
 
-    private static func color(fromHex hex: String?) -> NSColor? {
-        guard var trimmed = hex?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() else {
-            return nil
-        }
-        if trimmed.hasPrefix("#") { trimmed.removeFirst() }
-        guard trimmed.count == 6, let value = UInt32(trimmed, radix: 16) else { return nil }
-        let r = CGFloat((value >> 16) & 0xFF) / 255.0
-        let g = CGFloat((value >> 8) & 0xFF) / 255.0
-        let b = CGFloat(value & 0xFF) / 255.0
-        return NSColor(srgbRed: r, green: g, blue: b, alpha: 1.0)
-    }
-
     private static func hex(from color: NSColor) -> String? {
         guard let rgb = color.usingColorSpace(.sRGB) ?? color.usingColorSpace(.deviceRGB) else {
             return nil
@@ -1925,21 +1534,6 @@ class EditWindowController {
         let g = Int(round(max(0, min(1, rgb.greenComponent)) * 255))
         let b = Int(round(max(0, min(1, rgb.blueComponent)) * 255))
         return String(format: "#%02X%02X%02X", r, g, b)
-    }
-
-    /// Trigger the system color sampler (loupe). The picked color's hex is
-    /// copied to the clipboard and the color becomes the toolbar ink-bottle
-    /// color for color-capable tools. It does not directly change the active
-    /// tool color.
-    private func runColorPicker() {
-        canvasView?.commitActiveTextEditing()
-        ColorPickerRunner.shared.run(on: screen) { [weak self] swatchColor, _ in
-            guard let self else { return }
-            self.pickedColorSwatch = swatchColor
-            if self.toolUsesPickedColorSwatch(self.activeTool) {
-                self.showSubToolbar(for: self.activeTool)
-            }
-        }
     }
 
     private func showInsertImageMenu() {
@@ -2060,10 +1654,6 @@ class EditWindowController {
             if result.count == recentEmojiLimit { break }
         }
         return result
-    }
-
-    private func cancelActiveColorSampler() {
-        ColorPickerRunner.shared.cancel()
     }
 
     func confirmFromKeyboard() {
@@ -2195,7 +1785,6 @@ class EditWindowController {
 
     func tearDown() {
         dismissQRCodeOverlay()
-        cancelActiveColorSampler()
         if isScrollCapturing {
             logScrollCapture("teardown-while-capturing")
         }
@@ -2240,18 +1829,11 @@ class EditWindowController {
         dismissEmojiPopover()
         subToolbarView?.removeFromSuperview()
         subToolbarView = nil
-        beautifySubToolbarView?.removeFromSuperview()
-        beautifySubToolbarView = nil
-        isBeautifyActive = false
     }
 
     private func bringEditorToFront() {
         guard let hostWindow = hostSelectionView?.window else { return }
-        if keepsHostWindowAcrossSpaces {
-            hostWindow.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        } else {
-            hostWindow.collectionBehavior = []
-        }
+        hostWindow.collectionBehavior = []
         NSApp.activate(ignoringOtherApps: true)
         hostWindow.makeKeyAndOrderFront(nil)
         if activeTool == .none, canvasView?.hasPreviewImage != true {
@@ -2263,64 +1845,14 @@ class EditWindowController {
 
     func restorableState() -> RestorableState? {
         guard let canvasView else { return nil }
-        return RestorableState(
-            canvasState: canvasView.restorableState(),
-            beautifyState: BeautifyState(
-                isActive: isBeautifyActive,
-                presetID: currentBeautifyPreset?.id,
-                padding: currentBeautifyPadding,
-                shadowEnabled: currentBeautifyShadowEnabled
-            )
-        )
+        return RestorableState(canvasState: canvasView.restorableState())
     }
 
     func restoreState(_ state: RestorableState) {
-        if state.beautifyState.isActive {
-            applyBeautifyState(state.beautifyState)
-        } else if isBeautifyActive {
-            deactivateBeautify()
-        }
         canvasView?.restoreState(state.canvasState)
-        beautifyContainerView?.canvasSizeDidChange()
-        if state.beautifyState.isActive {
-            updateCanvasFrameForBeautify()
-            repositionFloatingChrome()
-        }
         updateCanvasScrollAvailability()
         updateEditorInteractionState()
         updateHistoryButtons(canUndo: canvasView?.canUndo == true, canRedo: canvasView?.canRedo == true)
-    }
-
-    private func applyBeautifyState(_ state: BeautifyState) {
-        guard let canvasView, let container = beautifyContainerView else { return }
-        let preset = BeautifyPreset.preset(forID: state.presetID) ?? .defaultPreset
-
-        canvasView.beautifyCornerRadius = isWindowCapture ? nil : BeautifyRenderer.innerCornerRadius
-        container.setInnerShadowCornerRadius(
-            isWindowCapture ? WindowEffects.cornerRadiusPoints : BeautifyRenderer.innerCornerRadius
-        )
-        container.setInnerShadowInset(
-            isWindowCapture ? BeautifyRenderer.windowInnerShadowInset : 0
-        )
-        if canvasView.previewImage == nil, canvasView.externalBaseImage == nil {
-            canvasView.externalBaseImage = windowShapedBaseImage(
-                from: canvasView.resolveBaseImageForEditing()
-            )
-        }
-
-        currentBeautifyPreset = preset
-        currentBeautifyPadding = state.padding
-        currentBeautifyShadowEnabled = state.shadowEnabled
-        if preset.isWallpaper {
-            container.wallpaperImage = nil
-            loadBeautifyWallpaper(presetID: preset.id)
-        }
-        container.setBeautify(preset: preset)
-        container.setPadding(state.padding)
-        container.setShadowEnabled(state.shadowEnabled)
-        isBeautifyActive = true
-        toolbars.forEach { $0.setBeautifyActive(true) }
-        showBeautifySubToolbar(selecting: preset)
     }
 
     private func currentCompositeImage() -> NSImage? {
@@ -2347,25 +1879,12 @@ class EditWindowController {
 
         guard let composite = canvasView?.compositeImage(
             fallbackBaseImage: fallbackBaseImage,
-            beautifyPreset: currentBeautifyPreset,
-            beautifyPadding: isBeautifyActive ? currentBeautifyPadding : nil,
-            beautifyShadowEnabled: isBeautifyActive ? currentBeautifyShadowEnabled : true,
-            wallpaperImage: isBeautifyActive ? beautifyContainerView?.wallpaperImage : nil,
-            annotationClipMask: annotationClipMask,
-            beautifyInnerClipRadius: isBeautifyActive && isWindowCapture ? nil : BeautifyRenderer.innerCornerRadius,
-            beautifyInnerShadowCornerRadius: isBeautifyActive && isWindowCapture
-                ? WindowEffects.cornerRadiusPoints
-                : BeautifyRenderer.innerCornerRadius,
-            beautifyInnerShadowInset: isBeautifyActive && isWindowCapture
-                ? BeautifyRenderer.windowInnerShadowInset
-                : 0
+            annotationClipMask: annotationClipMask
         ) else { return nil }
 
-        // Window captures get rounded corners — and, when enabled, a
-        // macOS-style drop shadow — mimicking the system's native window
-        // screenshots. Skipped while beautify is active (beautify supplies its
-        // own card styling) and for scroll-capture stitched results.
-        guard isWindowCapture, !isBeautifyActive, canvasView?.hasPreviewImage != true else {
+        // Window captures get rounded corners and, when enabled, a macOS-style
+        // drop shadow. Scroll-capture stitched results keep their own shape.
+        guard isWindowCapture, canvasView?.hasPreviewImage != true else {
             return composite
         }
 
@@ -2436,17 +1955,13 @@ class EditWindowController {
         let isBlocked = isScrollCaptureBusy || isCropping
         // Once the editor is up, the canvas owns clicks inside the selection
         // rect for the entire session — drawing tools, adjust-mode handles,
-        // and dragging existing annotations all go through it. The legacy
-        // "click inside the selection moves the whole rect" gesture has
-        // moved to a dedicated toolbar handle so adjust-mode clicks on
-        // empty canvas don't get hijacked.
-        // When beautify is on, handle hits go through `selectionChromeOverlay`
-        // (which sits above the canvas); the SelectionView itself stays
-        // available for any clicks that fall outside the gradient frame so the
-        // user can still adjust the selection.
+        // and dragging existing annotations all go through it. Selection
+        // handles and the border remain interactive through
+        // `selectionChromeOverlay`, which sits above the canvas and claims
+        // only those narrow edge regions.
         hostSelectionView?.annotationToolActive = !isBlocked
         hostSelectionView?.selectionInteractionEnabled = !(isBlocked || hasPreview || hasFixedImage)
-        canvasScrollView?.isInteractionEnabled = (activeTool != .none) || hasPreview || hasFixedImage || isBeautifyActive
+        canvasScrollView?.isInteractionEnabled = (activeTool != .none) || hasPreview || hasFixedImage
         hostSelectionView?.needsDisplay = true
     }
 
@@ -2455,7 +1970,7 @@ class EditWindowController {
         let height = size.height
         let margin: CGFloat = 8
 
-        let referenceRect = outerVisualRect(in: bounds)
+        let referenceRect = selectionViewRect
         let x = clampedX(
             referenceRect.midX - width / 2,
             width: width,
@@ -2489,7 +2004,7 @@ class EditWindowController {
         let height = size.height
         let margin: CGFloat = 8
 
-        let referenceRect = outerVisualRect(in: bounds)
+        let referenceRect = selectionViewRect
         var x = referenceRect.maxX + margin
         if x + width > bounds.maxX - margin {
             x = referenceRect.minX - width - margin
@@ -2519,14 +2034,13 @@ class EditWindowController {
         width: CGFloat,
         height: CGFloat,
         toolbarFrame: NSRect,
-        in bounds: NSRect,
-        offset: CGFloat = 0
+        in bounds: NSRect
     ) -> NSRect {
         let margin: CGFloat = 8
         let x = clampedX(toolbarFrame.midX - width / 2, width: width, in: bounds, margin: margin)
-        var y = toolbarFrame.minY - height - 4 - offset
+        var y = toolbarFrame.minY - height - 4
         if y < margin {
-            y = min(toolbarFrame.maxY + 4 + offset, bounds.maxY - height - margin)
+            y = min(toolbarFrame.maxY + 4, bounds.maxY - height - margin)
         }
         y = max(margin, min(bounds.maxY - height - margin, y))
 
@@ -2606,8 +2120,8 @@ private final class ClosureMenuItem: NSMenuItem {
 
 private final class EditorScrollView: NSScrollView {
     weak var editorCanvasView: EditCanvasView?
-    /// When `true`, every viewport click is captured (drawing tools, long
-    /// screenshot preview, beautify chrome). When `false` the scroll view
+    /// When `true`, every viewport click is captured by drawing tools or a
+    /// long-screenshot preview. When `false` the scroll view
     /// only forwards clicks that the canvas itself claimed, so empty
     /// viewport clicks fall through to the SelectionView underneath where
     /// its resize handles live.
@@ -2669,27 +2183,17 @@ class ToolbarView: NSView {
     var onToolSelected: ((EditTool) -> Void)?
     var onUndo: (() -> Void)?
     var onRedo: (() -> Void)?
-    var onColorPicker: (() -> Void)?
     var onScrollCapture: (() -> Void)?
-    var onBeautify: (() -> Void)?
     var onInsertImage: (() -> Void)?
     var onQRCode: (() -> Void)?
-    var onOCR: (() -> Void)?
     var onSave: (() -> Void)?
     var onPin: (() -> Void)?
     var onRecord: (() -> Void)?
     var onClose: (() -> Void)?
     var onConfirm: (() -> Void)?
-    /// Press-and-drag callbacks for the "move selection" handle. The first
-    /// fires on mouseDown so the controller can capture the starting rect;
-    /// the second fires on every drag with the cumulative window-space
-    /// delta from the press; the third fires on mouseUp.
-    var onMoveSelectionStart: (() -> Void)?
-    var onMoveSelectionDrag: ((CGSize) -> Void)?
-    var onMoveSelectionEnd: (() -> Void)?
 
     /// Every button keyed by its id — drives selection state, enable/disable,
-    /// and frame lookups. `MoveSelectionDragHandle` values are not `ToolButton`s.
+    /// and frame lookups.
     private var buttons: [ToolbarItemID: NSView] = [:]
     /// Last tool the controller selected. Tracked so a second click on the
     /// already-selected tool button toggles back to "no tool" (adjust mode).
@@ -2717,8 +2221,8 @@ class ToolbarView: NSView {
         }
     }
 
-    /// Sets the active highlight on a stateful button (scroll capture,
-    /// beautify). No-op if this toolbar doesn't hold the item.
+    /// Sets the active highlight on a stateful button. No-op if this toolbar
+    /// doesn't hold the item.
     func setActive(_ active: Bool, for id: ToolbarItemID) {
         (buttons[id] as? ToolButton)?.isSelected = active
     }
@@ -2739,7 +2243,6 @@ class ToolbarView: NSView {
     // Convenience wrappers so callers don't repeat the id literals.
     func setScrollCaptureActive(_ active: Bool) { setActive(active, for: .scrollCapture) }
     func setScrollCaptureEnabled(_ enabled: Bool) { setEnabled(enabled, for: .scrollCapture) }
-    func setBeautifyActive(_ active: Bool) { setActive(active, for: .beautify) }
     func setUndoEnabled(_ enabled: Bool) { setEnabled(enabled, for: .undo) }
     func setRedoEnabled(_ enabled: Bool) { setEnabled(enabled, for: .redo) }
     func setRecordingEnabled(_ enabled: Bool) {
@@ -2768,19 +2271,9 @@ class ToolbarView: NSView {
     }
 
     private func makeButton(for id: ToolbarItemID, index: Int, frame: NSRect) -> NSView {
-        // The move-selection handle is a press-drag gesture, not a tap target.
-        if id.kind == .dragHandle {
-            let handle = MoveSelectionDragHandle(frame: frame)
-            handle.hoverTip = id.tooltip
-            handle.onDragStart = { [weak self] in self?.onMoveSelectionStart?() }
-            handle.onDrag = { [weak self] delta in self?.onMoveSelectionDrag?(delta) }
-            handle.onDragEnd = { [weak self] in self?.onMoveSelectionEnd?() }
-            return handle
-        }
-
         let btn = ToolButton(
             frame: frame,
-            symbolName: id.symbolName,
+            image: id.toolbarIconImage(pointSize: 14),
             normalColor: id.normalColor,
             selectedColor: id.selectedColor
         )
@@ -2807,19 +2300,15 @@ class ToolbarView: NSView {
             // mode (no tool, but existing marks remain draggable).
             onToolSelected?(tool == currentTool ? .none : tool)
         case .insertImage:   onInsertImage?()
-        case .colorPicker:   onColorPicker?()
         case .undo:          onUndo?()
         case .redo:          onRedo?()
         case .scrollCapture: onScrollCapture?()
-        case .beautify:      onBeautify?()
         case .qrCode:        onQRCode?()
-        case .ocr:           onOCR?()
         case .save:          onSave?()
         case .pin:           onPin?()
         case .record:        onRecord?()
         case .close:         onClose?()
         case .confirm:       onConfirm?()
-        case .moveSelection: break  // handled by MoveSelectionDragHandle
         }
     }
 }
@@ -2838,7 +2327,7 @@ class ToolButton: NSButton {
     private let selectedColor: NSColor
     private var hoverTrackingArea: NSTrackingArea?
 
-    init(frame: NSRect, symbolName: String, normalColor: NSColor, selectedColor: NSColor) {
+    init(frame: NSRect, image: NSImage?, normalColor: NSColor, selectedColor: NSColor) {
         self.normalColor = normalColor
         self.selectedColor = selectedColor
         super.init(frame: frame)
@@ -2847,13 +2336,26 @@ class ToolButton: NSButton {
         isBordered = false
         setButtonType(.momentaryPushIn)
 
-        if let img = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
-            let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
-            image = img.withSymbolConfiguration(config)
-        }
+        self.image = image
 
         contentTintColor = normalColor
         wantsLayer = true
+    }
+
+    convenience init(
+        frame: NSRect,
+        symbolName: String,
+        normalColor: NSColor,
+        selectedColor: NSColor
+    ) {
+        let symbol = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)
+        let configuration = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
+        self.init(
+            frame: frame,
+            image: symbol?.withSymbolConfiguration(configuration),
+            normalColor: normalColor,
+            selectedColor: selectedColor
+        )
     }
 
     required init?(coder: NSCoder) {
@@ -2882,7 +2384,7 @@ class ToolButton: NSButton {
         guard let tip = hoverTip, let window else { return }
         let frameInWindow = convert(bounds, to: nil)
         let frameOnScreen = window.convertToScreen(frameInWindow)
-        ToolTipWindow.show(text: tip, anchor: frameOnScreen)
+        ToolTipWindow.show(text: tip, anchor: frameOnScreen, relativeTo: window)
     }
 
     override func mouseExited(with event: NSEvent) {
@@ -2910,130 +2412,6 @@ class ToolButton: NSButton {
             contentTintColor = normalColor
         }
         super.draw(dirtyRect)
-    }
-}
-
-// MARK: - Move-selection Drag Handle
-
-/// Toolbar button that lets the user drag the entire selection rect by
-/// pressing-and-holding it. Visually mirrors `ToolButton` so it sits in the
-/// row consistently, but it acts as a drag handle rather than a tap target
-/// — `mouseDown` starts a drag, `mouseDragged` reports cumulative deltas in
-/// window coordinates, and `mouseUp` finalizes.
-final class MoveSelectionDragHandle: NSView {
-    var onDragStart: (() -> Void)?
-    var onDrag: ((CGSize) -> Void)?
-    var onDragEnd: (() -> Void)?
-    var hoverTip: String?
-
-    private var pressStartLocation: NSPoint?
-    private var isPressed: Bool = false {
-        didSet { needsDisplay = true }
-    }
-    private var hoverTrackingArea: NSTrackingArea?
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        wantsLayer = true
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override var acceptsFirstResponder: Bool { true }
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-
-    override func resetCursorRects() {
-        super.resetCursorRects()
-        addCursorRect(bounds, cursor: NSCursor.openHand)
-    }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let area = hoverTrackingArea {
-            removeTrackingArea(area)
-        }
-        let area = NSTrackingArea(
-            rect: bounds,
-            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(area)
-        hoverTrackingArea = area
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        super.mouseEntered(with: event)
-        guard let tip = hoverTip, let window else { return }
-        let frameInWindow = convert(bounds, to: nil)
-        let frameOnScreen = window.convertToScreen(frameInWindow)
-        ToolTipWindow.show(text: tip, anchor: frameOnScreen)
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        super.mouseExited(with: event)
-        ToolTipWindow.hide()
-    }
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        if window == nil { ToolTipWindow.hide() }
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        ToolTipWindow.hide()
-        pressStartLocation = event.locationInWindow
-        isPressed = true
-        NSCursor.closedHand.set()
-        onDragStart?()
-    }
-
-    override func mouseDragged(with event: NSEvent) {
-        guard let start = pressStartLocation else { return }
-        let delta = CGSize(
-            width: event.locationInWindow.x - start.x,
-            height: event.locationInWindow.y - start.y
-        )
-        onDrag?(delta)
-    }
-
-    override func mouseUp(with event: NSEvent) {
-        pressStartLocation = nil
-        isPressed = false
-        NSCursor.openHand.set()
-        onDragEnd?()
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        if isPressed {
-            let bg = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: 6, yRadius: 6)
-            AdaptiveChrome.selectedFill.setFill()
-            bg.fill()
-        }
-
-        let symbolName = "arrow.up.and.down.and.arrow.left.and.right"
-        let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
-        guard let img = NSImage(
-            systemSymbolName: symbolName,
-            accessibilityDescription: "Move selection"
-        )?.withSymbolConfiguration(config) else { return }
-
-        let tint = NSImage(size: img.size, flipped: false) { rect in
-            img.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1)
-            NSColor.labelColor.set()
-            rect.fill(using: .sourceAtop)
-            return true
-        }
-
-        let drawRect = NSRect(
-            x: bounds.midX - tint.size.width / 2,
-            y: bounds.midY - tint.size.height / 2,
-            width: tint.size.width,
-            height: tint.size.height
-        )
-        tint.draw(in: drawRect)
     }
 }
 
@@ -3735,15 +3113,10 @@ private class ColorSizeSubToolbar: NSView {
     private let sizes: [CGFloat]
     private let sizeMinValue: CGFloat
     private let sizeMaxValue: CGFloat
-    private let dynamicColor: NSColor?
     private let showsShapeFillModes: Bool
     private let showsShapeStrokeStyles: Bool
     private let shapeStrokePreviewShape: ShapeStrokePreviewShape
-    private let baseColors: [NSColor] = EditorStyleDefaults.paletteColors
-    private var colors: [NSColor] {
-        guard let dynamicColor else { return baseColors }
-        return baseColors + [dynamicColor]
-    }
+    private let colors: [NSColor] = EditorStyleDefaults.paletteColors
 
     private static let leadingPad: CGFloat = 12
     private static let sizeSliderWidth: CGFloat = 136
@@ -3761,7 +3134,6 @@ private class ColorSizeSubToolbar: NSView {
 
     static func preferredWidth(
         sizes: [CGFloat],
-        dynamicColor: NSColor?,
         showsShapeFillModes: Bool,
         showsArrowStyles: Bool = false,
         showsShapeStrokeStyles: Bool = false,
@@ -3773,7 +3145,7 @@ private class ColorSizeSubToolbar: NSView {
             x += 8 + 1 + 9
         }
 
-        let colorCount = baseColorCount + (dynamicColor == nil ? 0.0 : 1.0)
+        let colorCount = baseColorCount
         x += colorCount * swatchSize + max(colorCount - 1, 0) * swatchGap
 
         if showsArrowStyles {
@@ -3809,7 +3181,6 @@ private class ColorSizeSubToolbar: NSView {
         frame: NSRect,
         sizes: [CGFloat] = [2, 4, 6],
         currentColor: NSColor = .red,
-        dynamicColor: NSColor? = nil,
         currentSize: CGFloat = 3.0,
         sizeMinValue: CGFloat = CGFloat(Defaults.editorLineWidthMin),
         sizeMaxValue: CGFloat = CGFloat(Defaults.editorLineWidthMax),
@@ -3822,7 +3193,6 @@ private class ColorSizeSubToolbar: NSView {
         self.sizeMinValue = sizeMinValue
         self.sizeMaxValue = max(sizeMinValue, sizeMaxValue)
         self.currentColor = currentColor
-        self.dynamicColor = dynamicColor
         self.currentSize = min(max(currentSize, sizeMinValue), max(sizeMinValue, sizeMaxValue))
         self.currentShapeFillMode = shapeFillMode
         self.currentShapeStrokeStyle = shapeStrokeStyle
@@ -3874,22 +3244,14 @@ private class ColorSizeSubToolbar: NSView {
             x += 9
         }
 
-        // Color swatches. The dynamic picked color uses an ink-bottle glyph
-        // rather than another static-looking palette dot.
+        // Color swatches.
         let swatchSize: CGFloat = ColorSizeSubToolbar.swatchSize
         for (i, color) in colors.enumerated() {
-            let style: ColorSwatchView.Style = (dynamicColor != nil && i == baseColors.count)
-                ? .pickedInkBottle
-                : .paletteDot
             let swatch = ColorSwatchView(
                 frame: NSRect(x: x, y: midY - swatchSize/2, width: swatchSize, height: swatchSize),
                 color: color,
-                isSelected: colorsMatch(color, currentColor),
-                style: style
+                isSelected: colorsMatch(color, currentColor)
             )
-            if style == .pickedInkBottle {
-                swatch.hoverTip = L10n.tipPickedInkBottle
-            }
             swatch.itemIndex = i
             let click = NSClickGestureRecognizer(target: self, action: #selector(colorTapped(_:)))
             swatch.addGestureRecognizer(click)
@@ -4071,7 +3433,7 @@ private class MosaicSubToolbar: NSView {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     private func setup() {
-        var x = Self.leadingPad
+        let x = Self.leadingPad
         let midY = bounds.midY
 
         let s = HUDSlider(
@@ -4140,12 +3502,7 @@ private class TextSubToolbar: NSView {
     private var strokeCheckbox: HUDCheckboxButton!
     private var calloutCheckbox: HUDCheckboxButton!
 
-    private let dynamicColor: NSColor?
-    private let baseColors: [NSColor] = EditorStyleDefaults.paletteColors
-    private var colors: [NSColor] {
-        guard let dynamicColor else { return baseColors }
-        return baseColors + [dynamicColor]
-    }
+    private let colors: [NSColor] = EditorStyleDefaults.paletteColors
 
     // Layout metrics, shared between `setup()` and `preferredWidth` so the
     // view is always wide enough for everything it lays out.
@@ -4159,8 +3516,8 @@ private class TextSubToolbar: NSView {
     private static var baseColorCount: CGFloat { CGFloat(EditorStyleDefaults.paletteColors.count) }
 
     /// Right edge of the last color swatch — the swatch row's extent.
-    private static func swatchRowEnd(hasDynamicColor: Bool) -> CGFloat {
-        let colorCount = baseColorCount + (hasDynamicColor ? 1.0 : 0.0)
+    private static var swatchRowEnd: CGFloat {
+        let colorCount = baseColorCount
         return leadingPad + sliderWidth + 8 + 1 + 9
             + colorCount * swatchSize + max(colorCount - 1, 0) * swatchGap
     }
@@ -4179,8 +3536,8 @@ private class TextSubToolbar: NSView {
         checkboxWidth(title: L10n.textCalloutEffect)
     }
 
-    static func preferredWidth(dynamicColor: NSColor?) -> CGFloat {
-        swatchRowEnd(hasDynamicColor: dynamicColor != nil)
+    static var preferredWidth: CGFloat {
+        swatchRowEnd
             + separatorGap + 1 + checkboxGap
             + strokeCheckboxWidth + checkboxGap + calloutCheckboxWidth
             + trailingPad
@@ -4190,13 +3547,11 @@ private class TextSubToolbar: NSView {
         frame: NSRect,
         currentColor: NSColor,
         currentFontSize: CGFloat,
-        dynamicColor: NSColor? = nil,
         strokeEnabled: Bool,
         calloutEnabled: Bool
     ) {
         self.currentColor = currentColor
         self.currentFontSize = currentFontSize
-        self.dynamicColor = dynamicColor
         self.strokeEnabled = strokeEnabled
         self.calloutEnabled = calloutEnabled
         super.init(frame: frame)
@@ -4239,22 +3594,14 @@ private class TextSubToolbar: NSView {
         addSubview(sep)
         x += 1 + 9
 
-        // Color swatches. The dynamic picked color uses an ink-bottle glyph
-        // rather than another static-looking palette dot.
+        // Color swatches.
         let swatchSize: CGFloat = TextSubToolbar.swatchSize
         for (i, color) in colors.enumerated() {
-            let style: ColorSwatchView.Style = (dynamicColor != nil && i == baseColors.count)
-                ? .pickedInkBottle
-                : .paletteDot
             let swatch = ColorSwatchView(
                 frame: NSRect(x: x, y: midY - swatchSize / 2, width: swatchSize, height: swatchSize),
                 color: color,
-                isSelected: colorsMatch(color, currentColor),
-                style: style
+                isSelected: colorsMatch(color, currentColor)
             )
-            if style == .pickedInkBottle {
-                swatch.hoverTip = L10n.tipPickedInkBottle
-            }
             swatch.itemIndex = i
             let click = NSClickGestureRecognizer(target: self, action: #selector(colorTapped(_:)))
             swatch.addGestureRecognizer(click)
@@ -4455,24 +3802,15 @@ private final class ArrowStyleButtonView: NSView {
 // MARK: - Color Swatch View
 
 private class ColorSwatchView: NSView {
-    enum Style {
-        case paletteDot
-        case pickedInkBottle
-    }
-
     let color: NSColor
-    private let style: Style
-    var hoverTip: String?
     var isSelected: Bool = false {
         didSet { needsDisplay = true }
     }
     var itemIndex: Int = 0
-    private var hoverTrackingArea: NSTrackingArea?
 
-    init(frame: NSRect, color: NSColor, isSelected: Bool, style: Style = .paletteDot) {
+    init(frame: NSRect, color: NSColor, isSelected: Bool) {
         self.color = color
         self.isSelected = isSelected
-        self.style = style
         super.init(frame: frame)
     }
 
@@ -4482,50 +3820,7 @@ private class ColorSwatchView: NSView {
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let area = hoverTrackingArea {
-            removeTrackingArea(area)
-        }
-        let area = NSTrackingArea(
-            rect: bounds,
-            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(area)
-        hoverTrackingArea = area
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        super.mouseEntered(with: event)
-        guard let tip = hoverTip, let window else { return }
-        let frameInWindow = convert(bounds, to: nil)
-        let frameOnScreen = window.convertToScreen(frameInWindow)
-        ToolTipWindow.show(text: tip, anchor: frameOnScreen)
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        super.mouseExited(with: event)
-        ToolTipWindow.hide()
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        ToolTipWindow.hide()
-        super.mouseDown(with: event)
-    }
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        if window == nil { ToolTipWindow.hide() }
-    }
-
     override func draw(_ dirtyRect: NSRect) {
-        if style == .pickedInkBottle {
-            drawInkBottle()
-            return
-        }
-
         // Draw color circle
         let inset: CGFloat = isSelected ? 1 : 2
         let path = NSBezierPath(ovalIn: bounds.insetBy(dx: inset, dy: inset))
@@ -4549,87 +3844,6 @@ private class ColorSwatchView: NSView {
         }
     }
 
-    private func drawInkBottle() {
-        let unit = min(bounds.width, bounds.height) / 18.0
-        let origin = NSPoint(
-            x: bounds.midX - 9.0 * unit,
-            y: bounds.midY - 9.0 * unit
-        )
-
-        func rect(_ x: CGFloat, _ y: CGFloat, _ width: CGFloat, _ height: CGFloat) -> NSRect {
-            NSRect(
-                x: origin.x + x * unit,
-                y: origin.y + y * unit,
-                width: width * unit,
-                height: height * unit
-            )
-        }
-
-        if isSelected {
-            let ring = NSBezierPath(ovalIn: bounds.insetBy(dx: 0.75, dy: 0.75))
-            accentGreen.setStroke()
-            ring.lineWidth = 2
-            ring.stroke()
-        }
-
-        let bodyRect = rect(4.5, 4.0, 9.0, 9.8)
-        let bodyPath = NSBezierPath(
-            roundedRect: bodyRect,
-            xRadius: 2.2 * unit,
-            yRadius: 2.2 * unit
-        )
-
-        AdaptiveChrome.subtleFill.setFill()
-        bodyPath.fill()
-
-        let inkPath = NSBezierPath()
-        let inset = 0.75 * unit
-        let inkBottom = bodyRect.minY + inset
-        let inkLeft = bodyRect.minX + inset
-        let inkRight = bodyRect.maxX - inset
-        let inkTop = bodyRect.minY + bodyRect.height * 0.58
-        inkPath.move(to: NSPoint(x: inkLeft, y: inkBottom))
-        inkPath.line(to: NSPoint(x: inkLeft, y: inkTop))
-        inkPath.curve(
-            to: NSPoint(x: inkRight, y: inkTop - 0.2 * unit),
-            controlPoint1: NSPoint(x: bodyRect.minX + bodyRect.width * 0.36, y: inkTop + 1.15 * unit),
-            controlPoint2: NSPoint(x: bodyRect.minX + bodyRect.width * 0.62, y: inkTop - 1.05 * unit)
-        )
-        inkPath.line(to: NSPoint(x: inkRight, y: inkBottom))
-        inkPath.close()
-
-        NSGraphicsContext.current?.saveGraphicsState()
-        bodyPath.addClip()
-        color.setFill()
-        inkPath.fill()
-        NSGraphicsContext.current?.restoreGraphicsState()
-
-        let neckRect = rect(7.0, 12.7, 4.0, 2.0)
-        let neckPath = NSBezierPath(roundedRect: neckRect, xRadius: 0.7 * unit, yRadius: 0.7 * unit)
-        NSColor.secondaryLabelColor.setFill()
-        neckPath.fill()
-
-        let capRect = rect(6.2, 14.2, 5.6, 1.8)
-        let capPath = NSBezierPath(roundedRect: capRect, xRadius: 0.8 * unit, yRadius: 0.8 * unit)
-        NSColor.labelColor.setFill()
-        capPath.fill()
-
-        let highlight = NSBezierPath()
-        highlight.move(to: NSPoint(x: bodyRect.minX + 2.5 * unit, y: bodyRect.minY + 2.1 * unit))
-        highlight.line(to: NSPoint(x: bodyRect.minX + 2.5 * unit, y: bodyRect.maxY - 2.3 * unit))
-        NSColor.quaternaryLabelColor.setStroke()
-        highlight.lineWidth = 1
-        highlight.lineCapStyle = .round
-        highlight.stroke()
-
-        NSColor.secondaryLabelColor.setStroke()
-        bodyPath.lineWidth = 1
-        bodyPath.stroke()
-
-        AdaptiveChrome.border.setStroke()
-        capPath.lineWidth = 0.6
-        capPath.stroke()
-    }
 }
 
 // MARK: - HUD Slider
@@ -5256,320 +4470,127 @@ private final class HUDCheckboxButton: NSButton {
     }
 }
 
-// MARK: - Beautify Sub-toolbar
-
-private class BeautifySubToolbar: NSView {
-    var onPresetSelected: ((BeautifyPreset) -> Void)?
-    var currentPresetID: String? {
-        didSet { updateSelection() }
-    }
-
-    var onPaddingChanged: ((CGFloat) -> Void)?
-    var onShadowEnabledChanged: ((Bool) -> Void)?
-
-    private var swatchButtons: [BeautifySwatchView] = []
-    private let presets: [BeautifyPreset]
-    private let initialPadding: CGFloat
-    private let initialShadowEnabled: Bool
-    private let screen: NSScreen
-    private var paddingSlider: HUDSlider?
-    private var shadowCheckbox: HUDCheckboxButton?
-    private let swatchDiameter: CGFloat = 24
-    private let swatchSpacing: CGFloat = 8
-    private let innerPadding: CGFloat = 12
-    private let sliderWidth: CGFloat = 120
-    private let sliderHeight: CGFloat = 20
-    private let checkboxWidth: CGFloat = BeautifySubToolbar.preferredCheckboxWidth()
-    private let checkboxHeight: CGFloat = 20
-
-    init(
-        frame: NSRect,
-        presets: [BeautifyPreset],
-        screen: NSScreen,
-        initialPadding: CGFloat = BeautifyRenderer.paddingSliderDefault,
-        initialShadowEnabled: Bool = true
-    ) {
-        self.presets = presets
-        self.screen = screen
-        self.initialPadding = initialPadding
-        self.initialShadowEnabled = initialShadowEnabled
-        super.init(frame: frame)
-        setup()
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-
-    static func preferredWidth(presetCount: Int) -> CGFloat {
-        let diameter: CGFloat = 24
-        let spacing: CGFloat = 8
-        let innerPad: CGFloat = 12
-        let separatorGap: CGFloat = 10
-        let sliderWidth: CGFloat = 120
-        let checkboxWidth: CGFloat = preferredCheckboxWidth()
-        let trailingPad: CGFloat = 12
-        let swatches = CGFloat(presetCount) * diameter + CGFloat(max(presetCount - 1, 0)) * spacing
-        return innerPad + swatches + separatorGap + sliderWidth + separatorGap + checkboxWidth + trailingPad
-    }
-
-    private static func preferredCheckboxWidth() -> CGFloat {
-        let font = NSFont.systemFont(ofSize: 12, weight: .medium)
-        let textWidth = ceil((L10n.beautifyShadowEffect as NSString).size(withAttributes: [.font: font]).width)
-        return max(104, 16 + 8 + textWidth)
-    }
-
-    private func setup() {
-        var x: CGFloat = innerPadding
-        let midY = bounds.midY
-        for (i, preset) in presets.enumerated() {
-            let rect = NSRect(
-                x: x,
-                y: midY - swatchDiameter / 2,
-                width: swatchDiameter,
-                height: swatchDiameter
-            )
-            let swatch = BeautifySwatchView(
-                frame: rect,
-                preset: preset,
-                isSelected: preset.id == currentPresetID
-            )
-            swatch.itemIndex = i
-            if preset.isWallpaper {
-                BeautifyRenderer.loadWallpaperImage(for: screen) { [weak swatch] image in
-                    swatch?.wallpaperThumbnail = image
-                }
-            }
-            let click = NSClickGestureRecognizer(target: self, action: #selector(swatchTapped(_:)))
-            swatch.addGestureRecognizer(click)
-            addSubview(swatch)
-            swatchButtons.append(swatch)
-            x += swatchDiameter + swatchSpacing
-        }
-
-        // After the loop, `x` has an extra swatchSpacing; back up to the right
-        // edge of the last swatch, then lay out: 4 px gap → 1 px separator →
-        // 5 px gap → slider. Total = separatorGap (10 px).
-        let lastSwatchRightEdge = x - swatchSpacing
-        let sepX = lastSwatchRightEdge + 4
-        let sep = AdaptiveSeparatorView(frame: NSRect(x: sepX, y: 6, width: 1, height: bounds.height - 12))
-        addSubview(sep)
-
-        // Horizontal padding slider, 5 px to the right of the separator.
-        let sliderX = sepX + 1 + 5
-        let slider = HUDSlider(
-            value: Double(initialPadding),
-            minValue: Double(BeautifyRenderer.paddingSliderMin),
-            maxValue: Double(BeautifyRenderer.paddingSliderMax),
-            target: self,
-            action: #selector(paddingSliderChanged(_:))
-        )
-        slider.isContinuous = true
-        slider.frame = NSRect(
-            x: sliderX,
-            y: midY - sliderHeight / 2,
-            width: sliderWidth,
-            height: sliderHeight
-        )
-        addSubview(slider)
-        paddingSlider = slider
-
-        let shadowSepX = sliderX + sliderWidth + 5
-        let shadowSep = AdaptiveSeparatorView(frame: NSRect(x: shadowSepX, y: 6, width: 1, height: bounds.height - 12))
-        addSubview(shadowSep)
-
-        let checkbox = HUDCheckboxButton(
-            frame: NSRect(
-                x: shadowSepX + 1 + 6,
-                y: midY - checkboxHeight / 2,
-                width: checkboxWidth,
-                height: checkboxHeight
-            ),
-            title: L10n.beautifyShadowEffect,
-            target: self,
-            action: #selector(shadowCheckboxChanged(_:))
-        )
-        checkbox.state = initialShadowEnabled ? .on : .off
-        addSubview(checkbox)
-        shadowCheckbox = checkbox
-    }
-
-    @objc private func swatchTapped(_ gesture: NSGestureRecognizer) {
-        guard let view = gesture.view as? BeautifySwatchView else { return }
-        let index = view.itemIndex
-        guard index < presets.count else { return }
-        let preset = presets[index]
-        currentPresetID = preset.id
-        onPresetSelected?(preset)
-    }
-
-    @objc private func paddingSliderChanged(_ sender: HUDSlider) {
-        let clamped = max(
-            BeautifyRenderer.paddingSliderMin,
-            min(BeautifyRenderer.paddingSliderMax, CGFloat(sender.doubleValue))
-        )
-        onPaddingChanged?(clamped)
-    }
-
-    @objc private func shadowCheckboxChanged(_ sender: NSButton) {
-        onShadowEnabledChanged?(sender.state == .on)
-    }
-
-    private func updateSelection() {
-        for swatch in swatchButtons {
-            swatch.isSelected = (swatch.preset.id == currentPresetID)
-        }
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: 8, yRadius: 8)
-        AdaptiveChrome.toolbarBackground.setFill()
-        path.fill()
-    }
-}
-
-private class BeautifySwatchView: NSView {
-    let preset: BeautifyPreset
-    var isSelected: Bool = false {
-        didSet { needsDisplay = true }
-    }
-    var itemIndex: Int = 0
-    var wallpaperThumbnail: NSImage? {
-        didSet { needsDisplay = true }
-    }
-
-    init(frame: NSRect, preset: BeautifyPreset, isSelected: Bool) {
-        self.preset = preset
-        self.isSelected = isSelected
-        super.init(frame: frame)
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-
-    override func draw(_ dirtyRect: NSRect) {
-        let inset: CGFloat = isSelected ? 1 : 2
-        let circleRect = bounds.insetBy(dx: inset, dy: inset)
-        let clipPath = NSBezierPath(ovalIn: circleRect)
-        NSGraphicsContext.saveGraphicsState()
-        clipPath.addClip()
-
-        if preset.isWallpaper, let wpImage = wallpaperThumbnail {
-            wpImage.draw(in: circleRect, from: .zero, operation: .sourceOver, fraction: 1.0)
-        } else if preset.isWallpaper {
-            // Fallback: draw a landscape-like icon
-            NSColor(red: 0.4, green: 0.65, blue: 0.45, alpha: 1).setFill()
-            circleRect.fill()
-            let sky = NSRect(x: circleRect.origin.x, y: circleRect.midY,
-                             width: circleRect.width, height: circleRect.height / 2)
-            NSColor(red: 0.55, green: 0.75, blue: 0.92, alpha: 1).setFill()
-            sky.fill()
-        } else if let gradient = NSGradient(starting: preset.startColor, ending: preset.endColor) {
-            gradient.draw(in: circleRect, angle: preset.angleDegrees)
-        } else {
-            preset.startColor.setFill()
-            circleRect.fill()
-        }
-        NSGraphicsContext.restoreGraphicsState()
-
-        // Subtle outer border keeps both light and dark presets visible
-        let border = NSBezierPath(ovalIn: circleRect)
-        AdaptiveChrome.border.setStroke()
-        border.lineWidth = 0.5
-        border.stroke()
-
-        if isSelected {
-            let ring = NSBezierPath(ovalIn: bounds)
-            accentGreen.setStroke()
-            ring.lineWidth = 2
-            ring.stroke()
-        }
-    }
-}
-
 // MARK: - Selection Chrome Overlay
 
-/// Sits above the editor's `canvasScrollView` (so the dashed border + handles
-/// stay visible even when beautify expands the canvas frame with a gradient
-/// background). Empty space falls through; only handle hits are claimed, and
-/// they drive `SelectionView`'s external resize API so the rest of the editor
-/// reuses the existing resize → relayout pipeline.
+/// Sits above the editor's `canvasScrollView` so the selection remains
+/// adjustable while the canvas owns its interior. Handle hits resize, border
+/// hits move the whole selection, and every other hit falls through.
 final class SelectionChromeOverlay: NSView {
     weak var selectionView: SelectionView?
+    var onMoveStart: (() -> Void)?
 
     private(set) var selectionRectInView: NSRect = .zero
-    private(set) var isActiveAndVisible: Bool = false
 
-    private let accentColor = NSColor(red: 0, green: 212.0/255.0, blue: 106.0/255.0, alpha: 1.0)
-    private let handleSize: CGFloat = 8
     private let handleHitSize: CGFloat = 12
-    private let borderWidth: CGFloat = 2.0
-    private let dashPattern: [CGFloat] = [6, 4]
+    private let borderHitSize: CGFloat = 7
 
-    private var dragHandle: SelectionView.HandlePosition?
+    private enum DragAction {
+        case none
+        case move
+        case resize(SelectionView.HandlePosition)
+    }
+
+    private var dragAction: DragAction = .none
+    private var dragStartPoint: NSPoint = .zero
     private var dragOriginalRect: NSRect = .zero
 
     override var isFlipped: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    func update(rect: NSRect, active: Bool) {
-        let changed = (rect != selectionRectInView) || (active != isActiveAndVisible)
+    func update(rect: NSRect) {
         selectionRectInView = rect
-        isActiveAndVisible = active
-        if changed {
-            needsDisplay = true
-        }
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        guard isActiveAndVisible else { return nil }
+        guard let selectionView, selectionView.selectionInteractionEnabled else { return nil }
         // `point` is in the superview's coordinate space.
         let local = convert(point, from: superview)
-        guard SelectionView.hitTestHandle(
+        let handle = SelectionView.hitTestHandle(
             point: local,
             rect: selectionRectInView,
             hitSize: handleHitSize
-        ) != nil else {
-            return nil
-        }
-        return self
+        )
+        return handle != nil || Self.isBorderHit(
+            point: local,
+            rect: selectionRectInView,
+            hitSize: borderHitSize
+        ) ? self : nil
     }
 
     override func mouseDown(with event: NSEvent) {
+        guard let selectionView, selectionView.selectionInteractionEnabled else { return }
         let point = convert(event.locationInWindow, from: nil)
-        guard let handle = SelectionView.hitTestHandle(
+        dragOriginalRect = selectionView.currentSelectionRect ?? selectionRectInView
+        if let handle = SelectionView.hitTestHandle(
             point: point,
             rect: selectionRectInView,
             hitSize: handleHitSize
-        ) else { return }
-        dragHandle = handle
-        dragOriginalRect = selectionRectInView
-        SelectionView.setCursorForHandle(handle)
+        ) {
+            dragAction = .resize(handle)
+            SelectionView.setCursorForHandle(handle)
+        } else if Self.isBorderHit(
+            point: point,
+            rect: selectionRectInView,
+            hitSize: borderHitSize
+        ) {
+            dragAction = .move
+            dragStartPoint = point
+            onMoveStart?()
+            NSCursor.closedHand.set()
+        }
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard let handle = dragHandle, let selectionView else { return }
+        guard let selectionView else { return }
         let point = convert(event.locationInWindow, from: nil)
-        selectionView.resizeByExternalDrag(
-            handle: handle,
-            originalRect: dragOriginalRect,
-            currentPoint: point
-        )
+        switch dragAction {
+        case .none:
+            return
+        case .move:
+            selectionView.moveByExternalDrag(
+                deltaFromOriginal: CGSize(
+                    width: point.x - dragStartPoint.x,
+                    height: point.y - dragStartPoint.y
+                ),
+                originalRect: dragOriginalRect
+            )
+        case let .resize(handle):
+            selectionView.resizeByExternalDrag(
+                handle: handle,
+                originalRect: dragOriginalRect,
+                currentPoint: point
+            )
+        }
     }
 
     override func mouseUp(with event: NSEvent) {
-        defer { dragHandle = nil }
-        guard dragHandle != nil, let selectionView else { return }
-        selectionView.finalizeExternalResize()
+        guard let selectionView else {
+            dragAction = .none
+            return
+        }
+        let completedAction = dragAction
+        switch completedAction {
+        case .none:
+            break
+        case .move:
+            selectionView.finalizeExternalDrag()
+        case .resize:
+            selectionView.finalizeExternalResize()
+        }
+        dragAction = .none
+
+        switch completedAction {
+        case let .resize(handle):
+            SelectionView.setCursorForHandle(handle)
+        case .move:
+            NSCursor.openHand.set()
+        case .none:
+            break
+        }
     }
 
     override func mouseMoved(with event: NSEvent) {
-        guard isActiveAndVisible else { return }
+        guard let selectionView, selectionView.selectionInteractionEnabled else { return }
         let point = convert(event.locationInWindow, from: nil)
         if let handle = SelectionView.hitTestHandle(
             point: point,
@@ -5577,7 +4598,28 @@ final class SelectionChromeOverlay: NSView {
             hitSize: handleHitSize
         ) {
             SelectionView.setCursorForHandle(handle)
+        } else if Self.isBorderHit(
+            point: point,
+            rect: selectionRectInView,
+            hitSize: borderHitSize
+        ) {
+            NSCursor.openHand.set()
         }
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        if case .none = dragAction {
+            NSCursor.arrow.set()
+        }
+    }
+
+    static func isBorderHit(point: NSPoint, rect: NSRect, hitSize: CGFloat) -> Bool {
+        guard hitSize > 0, rect.width > 0, rect.height > 0 else { return false }
+        let outer = rect.insetBy(dx: -hitSize, dy: -hitSize)
+        guard outer.contains(point) else { return false }
+        guard rect.width > hitSize * 2, rect.height > hitSize * 2 else { return true }
+        return !rect.insetBy(dx: hitSize, dy: hitSize).contains(point)
     }
 
     override func updateTrackingAreas() {
@@ -5594,36 +4636,4 @@ final class SelectionChromeOverlay: NSView {
         addTrackingArea(area)
     }
 
-    override func draw(_ dirtyRect: NSRect) {
-        guard isActiveAndVisible,
-              selectionRectInView.width > 0,
-              selectionRectInView.height > 0,
-              let context = NSGraphicsContext.current?.cgContext
-        else { return }
-
-        let rect = selectionRectInView
-        context.saveGState()
-        defer { context.restoreGState() }
-
-        context.setStrokeColor(accentColor.cgColor)
-        context.setLineWidth(borderWidth)
-        context.setLineDash(phase: 0, lengths: dashPattern)
-        context.stroke(rect.insetBy(dx: -1, dy: -1))
-        context.setLineDash(phase: 0, lengths: [])
-
-        for pos in SelectionView.handlePositions(for: rect) {
-            let handleRect = NSRect(
-                x: pos.x - handleSize / 2,
-                y: pos.y - handleSize / 2,
-                width: handleSize,
-                height: handleSize
-            )
-            context.setFillColor(accentColor.cgColor)
-            context.fillEllipse(in: handleRect)
-        }
-
-        // The SelectionView draws its own size label underneath, but the
-        // beautify gradient frame covers it. Re-draw it here, above the frame.
-        SelectionView.drawSizeLabel(context: context, rect: rect)
-    }
 }

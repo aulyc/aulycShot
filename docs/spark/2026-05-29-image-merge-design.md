@@ -8,7 +8,7 @@ Project: aulycShot
 
 Add an Image Merge feature for combining multiple images into one PNG through a dedicated AppKit workbench. The workbench supports template-based layout, light manual adjustment, direct copy/save output, and a path into the existing annotation editor for further editing.
 
-The first version uses a separate `aulycShot/ImageMerge/` module instead of embedding this behavior inside the existing screenshot editor. The merge workbench owns multi-image layout and rendering; the editor continues to own annotation, beautify, pin, and final screenshot-style editing workflows.
+The first version uses a separate `aulycShot/ImageMerge/` module instead of embedding this behavior inside the existing screenshot editor. The merge workbench owns multi-image layout and rendering; the editor continues to own annotation, pin, and final screenshot-style editing workflows.
 
 ## Goals
 
@@ -41,7 +41,7 @@ The workbench has three output actions:
 
 - Copy: render the current merge, copy it to the clipboard, add it to History, and show the normal copied toast.
 - Save: render the current merge and write a PNG to a user-selected file path. This does not add a History entry.
-- Continue Editing: render the current merge and open it in the existing editor as an image-edit source. From there, annotation, beautify, pin, save, and confirm/copy all follow the existing editor behavior.
+- Continue Editing: render the current merge and open it in the existing editor as an image-edit source. From there, annotation, pin, save, and confirm/copy all follow the existing editor behavior.
 
 Closing the workbench discards unsaved merge state.
 
@@ -106,7 +106,7 @@ The preview may scale the rendered layout down to fit the workbench window, but 
 
 `StatusBarController` gets a new menu item for Image Merge. It should rebuild when language or hotkey state changes, matching the existing shortcut-display pattern.
 
-`AppDelegate` gets a merge trigger path alongside screenshot, record, selected-image edit, and clipboard-image edit. It must avoid opening the workbench while a capture overlay, recording, countdown, or another merge workbench is already active.
+`AppDelegate` gets a merge trigger path alongside screenshot, record, selected-image edit, and clipboard-image edit. It must avoid opening the workbench while a capture overlay, recording, or another merge workbench is already active.
 
 `FinderSelection` already has multi-image selection support through `currentImageFileURLs()`. The shortcut path should require at least two images before launching.
 

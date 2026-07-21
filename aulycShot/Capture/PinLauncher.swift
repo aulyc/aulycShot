@@ -168,9 +168,6 @@ enum PinLauncher {
             defer: false
         )
         window.level = .floating
-        if Defaults.pinAcrossSpaces {
-            window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        }
         window.isOpaque = false
         window.backgroundColor = .clear
         window.isMovableByWindowBackground = false
@@ -203,9 +200,6 @@ enum PinLauncher {
             defer: false
         )
         window.level = .floating
-        if Defaults.pinAcrossSpaces {
-            window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        }
         window.isOpaque = false
         window.backgroundColor = .clear
         window.isMovableByWindowBackground = false
@@ -1314,7 +1308,6 @@ final class PinContentView: NSView {
             prepareInteractivePreview(for: image)
             zoomScale = 1.0
             panOffset = .zero
-            resetOCRSelection()
             needsDisplay = true
             needsLayout = true
             updateImageInteractionGeometry()
@@ -1325,7 +1318,6 @@ final class PinContentView: NSView {
     private let baseImageSize: NSSize
     private let toolbar = PinToolbarView()
     private let navigator = PinNavigatorView()
-    private let ocrOverlay: OCRLineSelectionOverlayView
     private var zoomScale: CGFloat = 1.0 {
         didSet {
             toolbar.zoomScale = zoomScale
@@ -1359,14 +1351,12 @@ final class PinContentView: NSView {
     private var isZoomingInteractively = false {
         didSet {
             guard isZoomingInteractively != oldValue else { return }
-            refreshOCROverlayVisibility()
             needsDisplay = true
         }
     }
     private var isViewportAnimating = false {
         didSet {
             guard isViewportAnimating != oldValue else { return }
-            refreshOCROverlayVisibility()
             needsDisplay = true
         }
     }
@@ -1384,23 +1374,11 @@ final class PinContentView: NSView {
     private var navigatorNavigationBlockedUntil: Date?
     private var navigatorIdleTimer: Timer?
     private var navigatorEntryTimer: Timer?
-    private var isOCRSelectionEnabled = false {
-        didSet {
-            toolbar.isOCRActive = isOCRSelectionEnabled
-            refreshOCROverlayVisibility()
-        }
-    }
-    private var hasOCRResult = false
-    private var ocrRunID = UUID()
-    private var ocrRecognitionTask: Task<Void, Never>?
-
     override var acceptsFirstResponder: Bool { true }
 
     override init(frame: NSRect) {
         baseImageSize = frame.size
-        ocrOverlay = OCRLineSelectionOverlayView(imageSize: frame.size)
         super.init(frame: frame)
-        setupOCROverlay()
         setupToolbar()
     }
 
@@ -1413,25 +1391,6 @@ final class PinContentView: NSView {
         viewportAnimationTimer?.invalidate()
         navigatorIdleTimer?.invalidate()
         navigatorEntryTimer?.invalidate()
-        ocrRecognitionTask?.cancel()
-    }
-
-    private func setupOCROverlay() {
-        ocrOverlay.isHidden = true
-        ocrOverlay.showsLineBoxes = false
-        ocrOverlay.onSelectText = { text, lineIndices, isFinal in
-            guard isFinal else { return }
-            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { return }
-
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(trimmed, forType: .string)
-            ToastWindow.show(
-                message: lineIndices.count == 1 ? L10n.ocrLineCopied : L10n.ocrCopied,
-                duration: 0.9
-            )
-        }
-        addSubview(ocrOverlay)
     }
 
     private func setupToolbar() {
@@ -1442,9 +1401,6 @@ final class PinContentView: NSView {
 
         toolbar.onEdit = { [weak self] in
             self?.editPinnedImage()
-        }
-        toolbar.onOCR = { [weak self] in
-            self?.toggleOCRSelection()
         }
         toolbar.onMoveMouseDown = { [weak self] event in
             guard self?.usesLowResolutionPreview == false else { return }
@@ -1791,7 +1747,6 @@ final class PinContentView: NSView {
     override func layout() {
         super.layout()
         updateToolbarFrame()
-        updateOCROverlayFrame()
         updateNavigatorFrame()
         updateNavigatorViewport()
         updateImageTrackingArea()
@@ -1824,12 +1779,6 @@ final class PinContentView: NSView {
             width: toolbarWidth,
             height: toolbarHeight
         )
-    }
-
-    private func updateOCROverlayFrame() {
-        guard !usesLowResolutionPreview else { return }
-        ocrOverlay.frame = imageRect()
-        ocrOverlay.needsDisplay = true
     }
 
     private func updateNavigatorFrame() {
@@ -1881,9 +1830,6 @@ final class PinContentView: NSView {
     }
 
     override func keyDown(with event: NSEvent) {
-        if handleOCRKeyEquivalent(event) {
-            return
-        }
         switch event.keyCode {
         case 7: // X — close and clear the originating source.
             pinWindow?.dismissClearingSource()
@@ -1892,13 +1838,6 @@ final class PinContentView: NSView {
         default:
             super.keyDown(with: event)
         }
-    }
-
-    override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        if handleOCRKeyEquivalent(event) {
-            return true
-        }
-        return super.performKeyEquivalent(with: event)
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -2130,88 +2069,6 @@ final class PinContentView: NSView {
         let momentumEnded = event.momentumPhase.contains(.ended) ||
             event.momentumPhase.contains(.cancelled)
         return momentumEnded || event.phase.contains(.cancelled)
-    }
-
-    private func toggleOCRSelection() {
-        guard image != nil else { return }
-        if isOCRSelectionEnabled {
-            isOCRSelectionEnabled = false
-            return
-        }
-
-        if hasOCRResult, ocrOverlay.lines.isEmpty {
-            ToastWindow.show(message: L10n.ocrNoText, duration: 0.9)
-            return
-        }
-
-        window?.makeFirstResponder(self)
-        isOCRSelectionEnabled = true
-        startOCRRecognitionIfNeeded()
-    }
-
-    private func startOCRRecognitionIfNeeded() {
-        guard !hasOCRResult, ocrRecognitionTask == nil, let image else { return }
-
-        ToastWindow.show(message: L10n.ocrRecognizing, duration: 0.8)
-        let runID = UUID()
-        ocrRunID = runID
-        let imageForOCR = image.copy() as? NSImage ?? image
-
-        ocrRecognitionTask = Task { @MainActor [weak self] in
-            let lines = await OCRService.recognizeLines(image: imageForOCR)
-            guard let self, self.ocrRunID == runID else { return }
-            self.ocrRecognitionTask = nil
-            self.hasOCRResult = true
-            self.ocrOverlay.lines = lines
-            if lines.isEmpty {
-                if self.isOCRSelectionEnabled {
-                    self.isOCRSelectionEnabled = false
-                    ToastWindow.show(message: L10n.ocrNoText, duration: 0.9)
-                }
-            } else {
-                self.refreshOCROverlayVisibility()
-            }
-        }
-    }
-
-    private func resetOCRSelection() {
-        ocrRunID = UUID()
-        ocrRecognitionTask?.cancel()
-        ocrRecognitionTask = nil
-        hasOCRResult = false
-        isOCRSelectionEnabled = false
-        ocrOverlay.lines = []
-        refreshOCROverlayVisibility()
-    }
-
-    private func refreshOCROverlayVisibility() {
-        if usesLowResolutionPreview {
-            ocrOverlay.isHidden = true
-            return
-        }
-
-        updateOCROverlayFrame()
-        let showOverlay = isOCRSelectionEnabled && !ocrOverlay.lines.isEmpty
-        ocrOverlay.showsLineBoxes = showOverlay
-        ocrOverlay.isHidden = !showOverlay
-    }
-
-    private func handleOCRKeyEquivalent(_ event: NSEvent) -> Bool {
-        guard isOCRSelectionEnabled,
-              event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command else {
-            return false
-        }
-
-        switch event.charactersIgnoringModifiers {
-        case "a":
-            return ocrOverlay.selectAllText()
-        case "c":
-            guard ocrOverlay.copySelectedTextToClipboard() else { return false }
-            ToastWindow.show(message: L10n.ocrCopied, duration: 0.9)
-            return true
-        default:
-            return false
-        }
     }
 
     private func zoomAtEventLocation(_ proposedScale: CGFloat, event: NSEvent) {
@@ -2568,7 +2425,6 @@ final class PinContentView: NSView {
 
     private func updateImageInteractionGeometry() {
         updateToolbarFrame()
-        updateOCROverlayFrame()
         updateNavigatorFrame()
         updateNavigatorViewport()
         updateImageTrackingArea()
@@ -3124,16 +2980,11 @@ private final class PinToolbarView: NSView {
     static let preferredHeight: CGFloat = 34
 
     var onEdit: (() -> Void)?
-    var onOCR: (() -> Void)?
     var onMoveMouseDown: ((NSEvent) -> Void)?
     var onZoomOut: (() -> Void)?
     var onZoomIn: (() -> Void)?
     var onResetZoom: (() -> Void)?
     var onClose: (() -> Void)?
-    var isOCRActive = false {
-        didSet { ocrButton.isActive = isOCRActive }
-    }
-
     var zoomScale: CGFloat = 1.0 {
         didSet {
             zoomLabel.setPercentage(Int(round(zoomScale * 100)))
@@ -3141,7 +2992,6 @@ private final class PinToolbarView: NSView {
     }
 
     private let editButton = PinToolbarIconButton(symbolName: "pencil", accessibilityLabel: L10n.pinToolbarEdit)
-    private let ocrButton = PinToolbarIconButton(symbolName: "text.viewfinder", accessibilityLabel: L10n.tipOCR)
     private let moveButton = PinToolbarMoveButton(symbolName: "arrow.up.and.down.and.arrow.left.and.right",
                                                   accessibilityLabel: "Move pinned image")
     private let zoomOutButton = PinToolbarIconButton(symbolName: "minus.magnifyingglass", accessibilityLabel: "Zoom out")
@@ -3166,9 +3016,6 @@ private final class PinToolbarView: NSView {
         editButton.toolTip = L10n.pinToolbarEdit
         editButton.target = self
         editButton.action = #selector(editTapped)
-        ocrButton.toolTip = L10n.tipOCR
-        ocrButton.target = self
-        ocrButton.action = #selector(ocrTapped)
         moveButton.onMouseDown = { [weak self] event in
             self?.onMoveMouseDown?(event)
         }
@@ -3187,7 +3034,6 @@ private final class PinToolbarView: NSView {
 
         addSubview(moveButton)
         addSubview(editButton)
-        addSubview(ocrButton)
         addSubview(zoomOutButton)
         addSubview(zoomLabel)
         addSubview(zoomInButton)
@@ -3216,15 +3062,8 @@ private final class PinToolbarView: NSView {
             width: buttonSide,
             height: buttonSide
         )
-        ocrButton.frame = NSRect(
-            x: editButton.frame.minX - buttonGap - buttonSide,
-            y: buttonY,
-            width: buttonSide,
-            height: buttonSide
-        )
-
         let centerX = closeButton.frame.maxX + gap
-        let centerWidth = max(76, ocrButton.frame.minX - gap - centerX)
+        let centerWidth = max(76, editButton.frame.minX - gap - centerX)
         let stepWidth = min(24, max(20, centerWidth * 0.22))
         let labelWidth = max(36, centerWidth - stepWidth * 2)
 
@@ -3267,10 +3106,6 @@ private final class PinToolbarView: NSView {
 
     @objc private func editTapped() {
         onEdit?()
-    }
-
-    @objc private func ocrTapped() {
-        onOCR?()
     }
 
     @objc private func zoomOutTapped() {

@@ -2,7 +2,8 @@ import AppKit
 
 /// Stable identifier for every button that can appear in the editor's
 /// toolbars. Raw values are persisted in `UserDefaults`, so existing cases
-/// must never be renamed — only added or deprecated.
+/// must never be renamed. Removed values are tolerated by the persisted-layout
+/// loader and silently dropped during normalization.
 enum ToolbarItemID: String, Codable, CaseIterable {
     // Annotation tools (toggle an `EditTool`)
     case rectangle
@@ -20,13 +21,9 @@ enum ToolbarItemID: String, Codable, CaseIterable {
     case emoji
     case insertImage
     // Stateful actions
-    case colorPicker
     case undo
     case redo
-    case moveSelection
     case scrollCapture
-    case beautify
-    case ocr
     // Output actions
     case save
     case pin
@@ -41,23 +38,19 @@ extension ToolbarItemID {
     enum Kind {
         /// Annotation tool — selecting it toggles an `EditTool`.
         case toggleTool
-        /// Has an on/off state but is not an `EditTool` (scroll capture, beautify).
+        /// Has an on/off state but is not an `EditTool`.
         case toggleAction
         /// Fires once on click, no persistent state.
         case momentary
-        /// Press-and-drag handle (move selection) — not a tappable button.
-        case dragHandle
     }
 
     var kind: Kind {
         switch self {
         case .rectangle, .ellipse, .arrow, .line, .pen, .marker, .mosaic, .eraser, .magnifier, .numbered, .text, .emoji:
             return .toggleTool
-        case .scrollCapture, .beautify, .qrCode:
+        case .scrollCapture, .qrCode:
             return .toggleAction
-        case .moveSelection:
-            return .dragHandle
-        case .insertImage, .colorPicker, .undo, .redo, .ocr, .save, .pin, .record, .close, .confirm:
+        case .insertImage, .undo, .redo, .save, .pin, .record, .close, .confirm:
             return .momentary
         }
     }
@@ -89,27 +82,65 @@ extension ToolbarItemID {
         case .line:          return "line.diagonal"
         case .pen:           return "pencil.tip"
         case .marker:        return "highlighter"
-        case .mosaic:        return "square.grid.3x3"
+        case .mosaic:        return "squareshape.split.3x3"
         case .eraser:        return "eraser"
         case .magnifier:     return "plus.magnifyingglass"
         case .numbered:      return "1.circle"
-        case .text:          return "textformat"
+        case .text:          return "character"
         case .qrCode:        return "qrcode.viewfinder"
         case .emoji:         return "face.smiling"
         case .insertImage:   return "photo"
-        case .colorPicker:   return "eyedropper"
         case .undo:          return "arrow.uturn.backward"
         case .redo:          return "arrow.uturn.forward"
-        case .moveSelection: return "arrow.up.and.down.and.arrow.left.and.right"
         case .scrollCapture: return "arrow.up.and.down.text.horizontal"
-        case .beautify:      return "sparkles"
-        case .ocr:           return "text.viewfinder"
         case .save:          return "square.and.arrow.down"
         case .pin:           return "pin"
         case .record:        return "record.circle"
         case .close:         return "xmark"
         case .confirm:       return "checkmark"
         }
+    }
+
+    /// Literal glyphs used when an SF Symbol would be misleading after
+    /// localization. `textformat`, for example, renders as “格式” in Chinese.
+    var toolbarLetterGlyph: String? {
+        switch self {
+        case .text: return "T"
+        default:    return nil
+        }
+    }
+
+    func toolbarIconImage(pointSize: CGFloat, weight: NSFont.Weight = .medium) -> NSImage? {
+        if let glyph = toolbarLetterGlyph {
+            let font = NSFont.systemFont(ofSize: pointSize, weight: weight)
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: font,
+                .foregroundColor: NSColor.labelColor,
+            ]
+            let textSize = (glyph as NSString).size(withAttributes: attributes)
+            let imageSize = NSSize(
+                width: ceil(textSize.width) + 2,
+                height: ceil(textSize.height) + 2
+            )
+            let image = NSImage(size: imageSize, flipped: false) { rect in
+                let textRect = NSRect(
+                    x: (rect.width - textSize.width) / 2,
+                    y: (rect.height - textSize.height) / 2,
+                    width: textSize.width,
+                    height: textSize.height
+                )
+                glyph.draw(in: textRect, withAttributes: attributes)
+                return true
+            }
+            image.isTemplate = true
+            return image
+        }
+
+        guard let symbol = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) else {
+            return nil
+        }
+        let configuration = NSImage.SymbolConfiguration(pointSize: pointSize, weight: weight)
+        return symbol.withSymbolConfiguration(configuration)
     }
 
     /// Localized hover-tooltip text.
@@ -130,13 +161,9 @@ extension ToolbarItemID {
         case .qrCode:        title = L10n.tipQRCode
         case .emoji:         title = L10n.tipEmoji
         case .insertImage:   title = L10n.tipInsertImage
-        case .colorPicker:   title = L10n.tipColorPicker
         case .undo:          title = L10n.tipUndo
         case .redo:          title = L10n.tipRedo
-        case .moveSelection: title = L10n.tipMoveSelection
         case .scrollCapture: title = L10n.tipScrollCapture
-        case .beautify:      title = L10n.tipBeautify
-        case .ocr:           title = L10n.tipOCR
         case .save:          title = L10n.tipSave
         case .pin:           title = L10n.tipPin
         case .record:        title = L10n.tipRecord
@@ -184,7 +211,7 @@ extension ToolbarItemID {
         switch kind {
         case .toggleTool, .toggleAction:
             return accentGreen
-        case .momentary, .dragHandle:
+        case .momentary:
             return normalColor
         }
     }
@@ -206,7 +233,7 @@ struct ToolbarLayout: Equatable {
     /// recorded.
     static let canonicalOrder: [ToolbarItemID] = [
         .rectangle, .ellipse, .line, .arrow, .pen, .marker, .mosaic, .eraser, .numbered, .text, .emoji, .insertImage,
-        .colorPicker, .magnifier, .undo, .redo, .moveSelection, .scrollCapture, .beautify, .qrCode, .ocr,
+        .magnifier, .undo, .redo, .scrollCapture, .qrCode,
         .save, .pin, .record, .close, .confirm,
     ]
 
@@ -217,7 +244,7 @@ struct ToolbarLayout: Equatable {
         ToolbarLayout(
             primary: [
                 .rectangle, .ellipse, .line, .arrow, .pen, .marker, .mosaic, .eraser, .numbered, .text, .emoji, .insertImage,
-                .colorPicker, .magnifier, .beautify, .qrCode, .ocr, .undo, .redo, .moveSelection,
+                .magnifier, .qrCode, .undo, .redo,
             ],
             side: [.scrollCapture, .save, .pin, .record, .close, .confirm],
             hidden: []

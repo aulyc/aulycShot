@@ -8,30 +8,13 @@
 "accessibilityDescription" = "Needed to detect double-tap ⌘ Command key globally to trigger screenshots";
 "screenRecordingPermission" = "Screen Recording";
 "screenRecordingDescription" = "Needed to capture screen content for screenshots";
-"launchApp" = "Launch App";
 "launchAtLogin" = "Launch at Login";
 "demoMode" = "Demo Mode";
 "demoModeHint" = "Allow screen recorders to capture the selection overlay and editor";
-"pinAcrossSpaces" = "Show Pins Across Desktops";
-"pinAcrossSpacesHint" = "New pinned images appear on every desktop and full-screen Space";
-"historyCacheToggleLabel" = "Cache Screenshots";
-"historyCacheToggleHint" = "Store recent screenshots, picked colors, and upload links for quick reuse from the menu bar";
-"clipboardTextCacheToggleLabel" = "Cache Clipboard Text";
-"clipboardTextCacheToggleHint" = "Store copied text in history for quick reuse";
-"clipboardTextHistoryLimitLabel" = "Text History Limit";
-"historyCacheLabel" = "Image and Media History Limit";
-"historyPanelDisplayModeLabel" = "History Panel Display";
-"historyPanelDisplayModeHint" = "Choose Dialog or Notch for history";
-"historyPanelDialogMode" = "Dialog";
-"historyPanelDialogModeHint" = "Open a horizontal preview panel from the menu or shortcut";
-"historyPanelNotchMode" = "Notch";
-"historyPanelNotchModeHint" = "Hover near the top notch to expand, leave to hide";
-"countdownLabel" = "Countdown Seconds";
-"countdownHint" = "Hold ⌥ Option then double-tap ⌘ or press the screenshot shortcut to start a countdown before capture, Esc cancels";
-"countdownSecondsSuffix" = "s";
 "windowShadowLabel" = "Window Capture Shadow";
 "windowShadowHint" = "Round the corners of window captures and add a macOS-style drop shadow";
 "windowShadowLevelHint" = "Choose Small, Medium, or Large, with higher levels producing a softer, wider shadow";
+"windowShadowPreviewButton" = "Example";
 "windowShadowDisabled" = "Off";
 "windowShadowSmall" = "Small";
 "windowShadowMedium" = "Medium";
@@ -72,16 +55,8 @@
 "clipboardImageEditShortcutHeader" = "Edit Clipboard Image";
 "clipboardImageEditShortcutHint" = "Press it to edit the current image on the clipboard. Not set by default";
 "clipboardImageEditShortcutDefaultDisplay" = "Not set";
-"textRecognitionShortcutHeader" = "Text Recognition";
-"textRecognitionShortcutDefaultDisplay" = "Not set";
-"copyImageTextShortcutHeader" = "Copy Image Text";
-"copyImageTextShortcutDefaultDisplay" = "Not set";
 "recordShortcutHeader" = "Record";
 "recordShortcutDefaultDisplay" = "Not set";
-"fullScreenScreenshotShortcutHeader" = "Full Screen Screenshot";
-"fullScreenScreenshotShortcutDefaultDisplay" = "Not set";
-"colorPickerShortcutHeader" = "Color Picker";
-"colorPickerShortcutDefaultDisplay" = "Not set";
 
 /* Copy-to-clipboard shortcut (editor confirm) */
 "clipboardShortcutHeader" = "Copy to Clipboard";
@@ -91,75 +66,32 @@
 /* Save-to-file shortcut (editor save) */
 "fileSaveShortcutHeader" = "Save to File";
 "fileSaveShortcutHint" = "Pressed inside the editor to save the screenshot as a PNG in the configured screenshot folder. Defaults to ⌘S";
-"previousHistoryImageShortcutHeader" = "Previous History Screenshot";
-"nextHistoryImageShortcutHeader" = "Next History Screenshot";
-"historyPanelShortcutHeader" = "History Panel";
-"historyPanelShortcutDefaultDisplay" = "Not Set";
 
 /* Shortcut conflict */
 "shortcutConflictTitle" = "Shortcut Already in Use";
 "shortcutConflictScreenshot" = "This key combination is already used by the screenshot shortcut. Please choose a different one";
-"shortcutConflictCountdown" = "This key combination is already used by the countdown screenshot shortcut (screenshot shortcut + ⌥). Please choose a different one";
 "shortcutConflictSelectedImagePin" = "This key combination is already used by the Pin Selected Image shortcut. Please choose a different one";
 "shortcutConflictClipboardImagePin" = "This key combination is already used by the Pin Clipboard Image shortcut. Please choose a different one";
 "shortcutConflictClipboardTextPin" = "This key combination is already used by the Pin Clipboard Text shortcut. Please choose a different one";
 "shortcutConflictClipboard" = "This key combination is already used by the Copy to Clipboard shortcut. Please choose a different one";
 "shortcutConflictFileSave" = "This key combination is already used by the Save to File shortcut. Please choose a different one";
-"shortcutConflictPreviousHistoryImage" = "This key combination is already used by the Previous History Screenshot shortcut. Please choose a different one";
-"shortcutConflictNextHistoryImage" = "This key combination is already used by the Next History Screenshot shortcut. Please choose a different one";
-"shortcutConflictHistoryPanel" = "This key combination is already used by the History Panel shortcut. Please choose a different one";
 "shortcutConflictSelectedImageEdit" = "This key combination is already used by the Edit Selected Image shortcut. Please choose a different one";
 "shortcutConflictClipboardImageEdit" = "This key combination is already used by the Edit Clipboard Image shortcut. Please choose a different one";
-"shortcutConflictTextRecognition" = "This key combination is already used by the Text Recognition shortcut. Please choose a different one";
-"shortcutConflictCopyImageText" = "This key combination is already used by the Copy Image Text shortcut. Please choose a different one";
 "shortcutConflictRecord" = "This key combination is already used by the Record shortcut. Please choose a different one";
-"shortcutConflictFullScreenScreenshot" = "This key combination is already used by the Full Screen Screenshot shortcut. Please choose a different one";
-"shortcutConflictColorPicker" = "This key combination is already used by the Color Picker shortcut. Please choose a different one";
 
 /* Menu bar */
 "takeScreenshot" = "Take Screenshot";
-"takeFullScreenScreenshot" = "Capture Full Screen";
 "record" = "Record";
-"colorPicker" = "Color Picker";
 "settings" = "Settings";
 "quitApp" = "Quit aulycShot";
-"historyMenu" = "History";
-"historyEmpty" = "No history yet";
-"historyClear" = "Clear History";
-"historyCleared" = "History cleared";
-"historyShowInFinder" = "Show in Finder";
-"historyPanelMenu" = "History Panel";
-"historyPanelDeleteAll" = "Delete All History";
-"historyPanelDeleteSelectedOne" = "Delete %d Item";
-"historyPanelDeleteSelected" = "Delete %d Items";
-"historyPanelDeletedSelectedOne" = "Deleted %d Item";
-"historyPanelDeletedSelected" = "Deleted %d Items";
-"historyPanelFilterAll" = "All";
-"historyPanelFilterScreenshots" = "Screenshots";
-"historyPanelFilterGIF" = "GIF";
-"historyPanelFilterMP4" = "MP4";
-"historyPanelFilterColors" = "Colors";
-"historyPanelFilterText" = "Text";
-"historyPreviewCopyText" = "Copy Text";
-"historyPreviewConvertToQRCode" = "Convert to QR Code";
-"historyPreviewQRCodeTooLong" = "Text is too long to convert to a QR code";
-"historyPreviewOriginalText" = "Original Text";
-"historyPreviewQRCodeTitle" = "Text QR Code";
-"historyPanelCopyHint" = "Click to copy";
-"historyPanelCopyDragHint" = "Click to copy · drag into an app";
-"historyPanelCopyMarkdownLink" = "Copy MD link";
-"historyPanelCopyPlainLink" = "Copy plain link";
-"historyPanelEmpty" = "No history yet";
 
 /* Cursor chip */
-"dragToScreenshot" = "Click window or drag to screenshot";
-"dragToScreenshotAspectFree" = "Click window or drag to screenshot · Drag selection free ratio (R)";
-"dragToScreenshotAspect" = "Click window or drag to screenshot · Drag selection %@ (R)";
-"dragToTextRecognition" = "Click window or select area to recognize text";
-"dragToCopyImageText" = "Click window or select area to copy text";
-"dragToRecord" = "Click window or drag to record";
-"dragToRecordAspectFree" = "Click window or drag to record · Drag selection free ratio (R)";
-"dragToRecordAspect" = "Click window or drag to record · Drag selection %@ (R)";
+"dragToScreenshot" = "Click smart target or drag to screenshot · Tab switches level";
+"dragToScreenshotAspectFree" = "Click smart target or drag to screenshot · Free ratio (R) · Tab switches level";
+"dragToScreenshotAspect" = "Click smart target or drag to screenshot · %@ (R) · Tab switches level";
+"dragToRecord" = "Click smart target or drag to record · Tab switches level";
+"dragToRecordAspectFree" = "Click smart target or drag to record · Free ratio (R) · Tab switches level";
+"dragToRecordAspect" = "Click smart target or drag to record · %@ (R) · Tab switches level";
 
 /* Toast */
 "copiedToClipboard" = "Copied to clipboard";
@@ -171,10 +103,8 @@
 "finderEditExitHint" = "Editing from Finder. Press X to exit editing";
 "clipboardEditExitHint" = "Editing from clipboard. Press X to exit editing";
 "pinEditExitHint" = "Editing pinned image. Press X to exit editing";
-"fullScreenEditExitHint" = "Editing full-screen screenshot. Press X to exit editing";
 "editSuspendedToast" = "Edit suspended, trigger screenshot again to continue";
 "editSuspendedResumeToast" = "Continuing your suspended edit";
-"fullScreenScreenshotFailed" = "Full-screen screenshot failed";
 "openImageNoImage" = "Copy an image to the clipboard or choose an image file";
 "selectedImageEditNoImage" = "No single Finder image selected";
 "clipboardImageEditNoImage" = "No editable image on the clipboard";
@@ -195,7 +125,6 @@
 "recordingStop" = "Stop Recording";
 "recordingPause" = "Pause";
 "recordingResume" = "Resume";
-"colorCopied" = "Copied color %@";
 "qrCodeCopied" = "QR code content copied";
 "qrCodeNotFound" = "No QR code found";
 
@@ -212,18 +141,13 @@
 "tipMagnifier" = "Magnifier";
 "tipNumbered" = "Numbered";
 "tipText" = "Text";
-"tipQRCode" = "QR Code";
+"tipQRCode" = "Recognize QR Code";
 "tipEmoji" = "Emoji";
 "tipMoreEmoji" = "More Emoji";
 "tipInsertImage" = "Insert Image";
-"tipColorPicker" = "Color Picker";
-"tipPickedInkBottle" = "Use the color picker to fill the ink bottle";
 "tipUndo" = "Undo";
 "tipRedo" = "Redo";
-"tipMoveSelection" = "Move Selection";
 "tipScrollCapture" = "Scroll Capture";
-"tipBeautify" = "Beautify";
-"tipOCR" = "Text Recognition";
 "tipSave" = "Save to File";
 "tipPin" = "Pin to Screen";
 "tipRecord" = "Record";
@@ -232,18 +156,6 @@
 "tipScrollCropConfirm" = "Save and Edit";
 "copyQRCodeContent" = "Copy QR code content";
 
-/* Beautify */
-"beautify" = "Beautify";
-"beautifyPresetPeachBlue" = "Peach Blue";
-"beautifyPresetMintTeal" = "Mint Teal";
-"beautifyPresetPeachPink" = "Peach Pink";
-"beautifyPresetBluePurple" = "Blue Purple";
-"beautifyPresetWarmOrange" = "Warm Orange";
-"beautifyPresetTealPink" = "Teal Pink";
-"beautifyPresetDeepPurple" = "Deep Purple";
-"beautifyPresetNeutralGray" = "Neutral Gray";
-"beautifyPresetWallpaper" = "Wallpaper";
-"beautifyShadowEffect" = "Shadow Effect";
 "textStrokeEffect" = "Stroke";
 "textCalloutEffect" = "Callout";
 "shapeFillEffect" = "Fill";
@@ -269,7 +181,11 @@
 "settingsTabPermissions" = "Permissions";
 "settingsTabAbout" = "About";
 "settingsTabToolbar" = "Toolbar";
-"settingsQuit" = "Quit App";
+"settingsTabGeneralDescription" = "Configure language, startup, capture, and saving";
+"settingsTabShortcutsDescription" = "Configure global and editor shortcuts";
+"settingsTabToolbarDescription" = "Customize the editor toolbar layout";
+"settingsTabPermissionsDescription" = "Review permissions required for screen capture";
+"settingsTabAboutDescription" = "View version, updates, and diagnostics";
 
 "toolbarSettingsPrimaryTitle" = "Main toolbar";
 "toolbarSettingsPrimaryHint" = "Tools appear above or below the selection";
@@ -283,12 +199,12 @@
 "toolbarSettingsApply" = "Apply";
 
 /* About pane */
-"aboutTagline" = "Menu bar screenshot tool";
 "aboutLicense" = "License";
-"aboutSourceCode" = "Source code";
-"aboutStarOnGitHub" = "Star aulycShot on GitHub 🌟";
-"aboutFeatureRequest" = "Request a feature";
-"aboutBugReport" = "Report a bug";
+"aboutVersion" = "Version %@ · build %@";
+"aboutSourceCode" = "View code";
+"aboutStarOnGitHub" = "Add a star 🌟";
+"aboutFeatureRequest" = "Submit a request";
+"aboutBugReport" = "Submit a bug";
 "aboutUpdateTitle" = "Updates";
 "aboutErrorLog" = "Error Log";
 "aboutErrorLogNoCrash" = "No error logs";
@@ -342,50 +258,16 @@
 "updateLaterButton" = "Later";
 "updateOKButton" = "OK";
 
-/* Quit confirmation dialog */
-"quitConfirmTitle" = "Quit aulycShot";
-"quitConfirmMessage" = "Quitting removes the menu bar icon and disables the screenshot shortcut until you launch aulycShot again";
-"quitConfirmAction" = "Quit";
-"quitConfirmCancel" = "Cancel";
-
-
-"filenameRuleTitle" = "File name rules";
-"filenameRuleSubtitle" = "Controls image uploads, image save defaults, and recording save defaults. Extensions are added automatically";
-"filenameRulePresetLabel" = "Preset";
-"filenameRulePresetCustom" = "Custom";
-"filenameRulePresetShort" = "Short";
-"filenameRulePresetCompact" = "Tiny link";
-"filenameRulePresetUnique" = "Avoid duplicates";
-"filenameRulePresetCounter" = "Daily counter";
-"filenameRulePresetRestore" = "Restore default";
-"filenameRuleImageLabel" = "Image";
-"filenameRuleRecordingLabel" = "Recording";
-"filenameRuleVariablesLabel" = "Variables";
-"filenameRuleVariableDate" = "Date";
-"filenameRuleVariableTime" = "Time";
-"filenameRuleVariableDaily" = "Daily #";
-"filenameRuleVariableRandom" = "Random";
-"filenameRuleVariableSize" = "Size";
-"filenameRulePreview" = "%@";
-
-
-
 
 
 
 /* Permissions — status label */
 "permissionGranted" = "Granted";
 "permissionNotGranted" = "Not granted";
+"appStatusUnavailable" = "Unavailable";
+"appStatusPartiallyAvailable" = "Partially available";
+"appStatusNormallyAvailable" = "Fully available";
 
-"ocrTextHeader" = "Recognized Text";
-"ocrRecognizing" = "Recognizing";
-"ocrNoText" = "No text found";
-"ocrCopy" = "Copy";
-"ocrCopied" = "Copied";
-"ocrLineCopied" = "Line copied";
-"copyImageTextCopying" = "Copying";
-"copyImageTextCopied" = "Image text copied";
-"copyImageTextNoText" = "No text found";
 
 
 
@@ -428,10 +310,7 @@
 "imageMergeClipboardSourceName" = "Clipboard Image";
 
 /* Screenshot quality */
-"screenshotQualityTitle" = "Screenshot quality";
-"screenshotQualitySubtitle" = "Screenshots are processed before upload, save, or copy, original is the default";
-"screenshotQualitySaveLabel" = "Save to file";
-"screenshotQualityClipboardLabel" = "Copy to clipboard";
+"screenshotQualityLabel" = "Screenshot quality";
 "screenshotQualityOriginal" = "Original";
 "screenshotQualityOriginalHint" = "PNG at full size and lossless quality, largest file";
 "screenshotQualityCompressed" = "Compressed";
@@ -439,16 +318,18 @@
 "screenshotQualityCompressingSave" = "Compressing before save";
 "screenshotQualityCompressingClipboard" = "Compressing before copy";
 "screenshotCompressionFailed" = "Image compression failed";
+"screenshotOutputActionLabel" = "After screenshot";
+"screenshotOutputClipboardOnly" = "Copy to clipboard only";
+"screenshotOutputFileOnly" = "Save to directory only";
+"screenshotOutputClipboardAndFile" = "Copy and save";
+"screenshotOutputProcessing" = "Processing screenshot";
+"screenshotCopiedAndSaved" = "Copied to clipboard and saved to %@";
 
 /* Save paths */
-"savePathTitle" = "Save paths";
-"savePathSubtitle" = "Screenshots and recordings save here without asking for a destination";
-"autoRevealSavedFilesLabel" = "Show in Finder";
-"autoRevealSavedFilesHint" = "Select the saved screenshot or recording in Finder after a successful save";
 "recordingSavePathLabel" = "Recording save path";
 "recordingSaveFormatSettingLabel" = "Recording format";
 "screenshotSavePathLabel" = "Screenshot save path";
-"savePathChoose" = "Choose";
-"savePathReveal" = "Reveal";
+"savePathChoose" = "Choose Folder";
+"savePathReveal" = "Open Folder";
 "chooseRecordingSavePathTitle" = "Choose Recording Save Path";
 "chooseScreenshotSavePathTitle" = "Choose Screenshot Save Path";

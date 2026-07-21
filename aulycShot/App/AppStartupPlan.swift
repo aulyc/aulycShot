@@ -8,13 +8,13 @@ struct AppStartupPlan: Equatable {
         allRequiredPermissionsGranted: Bool,
         hasPendingOpenImages: Bool
     ) -> AppStartupPlan {
-        let shouldInitialize = hasPendingOpenImages
+        let shouldSkipStartupDialog = hasPendingOpenImages
             || (launchAtLoginEnabled && allRequiredPermissionsGranted)
 
         return AppStartupPlan(
             shouldCreateStatusBar: true,
-            shouldInitializeApp: shouldInitialize,
-            shouldShowStartupDialog: !shouldInitialize
+            shouldInitializeApp: true,
+            shouldShowStartupDialog: !shouldSkipStartupDialog
         )
     }
 }

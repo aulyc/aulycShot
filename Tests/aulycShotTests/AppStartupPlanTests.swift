@@ -2,7 +2,7 @@ import XCTest
 @testable import aulycShot
 
 final class AppStartupPlanTests: XCTestCase {
-    func testManualLaunchWithoutPermissionsStillCreatesStatusBar() {
+    func testManualLaunchWithoutPermissionsInitializesAndShowsPermissionStatus() {
         let plan = AppStartupPlan.make(
             launchAtLoginEnabled: false,
             allRequiredPermissionsGranted: false,
@@ -10,7 +10,7 @@ final class AppStartupPlanTests: XCTestCase {
         )
 
         XCTAssertTrue(plan.shouldCreateStatusBar)
-        XCTAssertFalse(plan.shouldInitializeApp)
+        XCTAssertTrue(plan.shouldInitializeApp)
         XCTAssertTrue(plan.shouldShowStartupDialog)
     }
 

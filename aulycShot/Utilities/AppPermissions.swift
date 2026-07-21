@@ -1,6 +1,33 @@
 import AppKit
 
+enum AppAvailabilityState: Equatable {
+    case unavailable
+    case partiallyAvailable
+    case normallyAvailable
+
+    static func make(
+        accessibilityGranted: Bool,
+        screenRecordingGranted: Bool
+    ) -> AppAvailabilityState {
+        switch (accessibilityGranted, screenRecordingGranted) {
+        case (false, false):
+            return .unavailable
+        case (true, true):
+            return .normallyAvailable
+        default:
+            return .partiallyAvailable
+        }
+    }
+}
+
 enum AppPermissions {
+    static var availabilityState: AppAvailabilityState {
+        AppAvailabilityState.make(
+            accessibilityGranted: accessibilityGranted,
+            screenRecordingGranted: screenRecordingGranted
+        )
+    }
+
     static var allRequiredGranted: Bool {
         accessibilityGranted && screenRecordingGranted
     }

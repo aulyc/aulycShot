@@ -8,7 +8,6 @@ struct EncodedImageOutput {
     let fileExtension: String
     let contentType: String
     let pasteboardType: NSPasteboard.PasteboardType
-    let pixelSize: CGSize
 }
 
 struct EncodedClipboardImageOutput {
@@ -90,8 +89,7 @@ enum ImageOutputEncoder {
             data: data,
             fileExtension: quality.fileExtension,
             contentType: quality.contentType,
-            pasteboardType: .png,
-            pixelSize: CGSize(width: source.cgImage.width, height: source.cgImage.height)
+            pasteboardType: .png
         )
     }
 

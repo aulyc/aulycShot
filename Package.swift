@@ -57,6 +57,11 @@ let package = Package(
             name: "aulycShotTests",
             dependencies: ["aulycShot"],
             path: "Tests/aulycShotTests"
+        ),
+        .testTarget(
+            name: "PermissionFlowTests",
+            dependencies: ["PermissionFlow"],
+            path: "Tests/PermissionFlowTests"
         )
     ]
 )

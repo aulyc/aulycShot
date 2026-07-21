@@ -4,6 +4,15 @@ import Combine
 import SystemSettingsKit
 import SwiftUI
 
+enum PermissionFlowPresentationPolicy {
+    static func shouldClosePanel(
+        wasSettingsFrontmost: Bool,
+        isSettingsFrontmost: Bool
+    ) -> Bool {
+        wasSettingsFrontmost && !isSettingsFrontmost
+    }
+}
+
 @available(macOS 13.0, *)
 @MainActor
 public final class PermissionFlowController: ObservableObject {
@@ -240,8 +249,17 @@ public final class PermissionFlowController: ObservableObject {
     }
 
     private func updateFrontmostAppState() {
-        isSettingsFrontmost =
+        let wasSettingsFrontmost = isSettingsFrontmost
+        let settingsIsFrontmost =
             NSWorkspace.shared.frontmostApplication?.bundleIdentifier == systemSettingsBundleIdentifier
+        isSettingsFrontmost = settingsIsFrontmost
+
+        if PermissionFlowPresentationPolicy.shouldClosePanel(
+            wasSettingsFrontmost: wasSettingsFrontmost,
+            isSettingsFrontmost: settingsIsFrontmost
+        ) {
+            closePanel()
+        }
     }
 }
 

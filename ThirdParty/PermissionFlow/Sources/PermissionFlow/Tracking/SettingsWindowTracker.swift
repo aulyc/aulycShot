@@ -3,6 +3,16 @@ import AppKit
 @preconcurrency import ApplicationServices
 import CoreGraphics
 
+enum SettingsWindowVisibilityPolicy {
+    static func shouldEndTracking(
+        hadVisibleFrame: Bool,
+        consecutiveMissingPolls: Int,
+        threshold: Int
+    ) -> Bool {
+        hadVisibleFrame && consecutiveMissingPolls >= threshold
+    }
+}
+
 @available(macOS 13.0, *)
 @MainActor
 final class SettingsWindowTracker {
@@ -14,6 +24,7 @@ final class SettingsWindowTracker {
     /// privacy panes. Requiring several misses avoids false "window closed"
     /// detection and keeps the floating panel stable.
     private let missingAppThreshold = 12
+    private let missingWindowThreshold = 12
 
     var onFrameChange: ((CGRect) -> Void)?
     var onTrackingEnded: (() -> Void)?
@@ -26,6 +37,7 @@ final class SettingsWindowTracker {
     private var pollTimer: Timer?
     private var hasActiveTrackingTarget = false
     private var missingAppPollCount = 0
+    private var missingWindowPollCount = 0
 
     /// Starts locating the System Settings window and emitting frame updates.
     /// It can optionally prompt for Accessibility access so AX-based tracking
@@ -73,6 +85,7 @@ final class SettingsWindowTracker {
         currentFrame = nil
         hasActiveTrackingTarget = false
         missingAppPollCount = 0
+        missingWindowPollCount = 0
     }
 
     /// Triggers the macOS Accessibility permission prompt when requested by
@@ -96,7 +109,10 @@ final class SettingsWindowTracker {
         hasActiveTrackingTarget = true
         missingAppPollCount = 0
 
-        updateFrameFromWindowServer(for: app.processIdentifier)
+        guard updateFrameFromWindowServer(for: app.processIdentifier) else {
+            finishTrackingIfNeededBecauseWindowIsHidden()
+            return
+        }
         guard AXIsProcessTrusted() else { return }
 
         let appElement = AXUIElementCreateApplication(app.processIdentifier)
@@ -128,11 +144,14 @@ final class SettingsWindowTracker {
     /// Updates the current frame using Core Graphics window-server data.
     /// This path does not need AX permission, so it acts as the initial or
     /// fallback geometry source while System Settings is opening.
-    private func updateFrameFromWindowServer(for pid: pid_t) {
-        guard let frame = windowServerFrame(for: pid) else { return }
-        guard currentFrame != frame else { return }
-        currentFrame = frame
-        onFrameChange?(frame)
+    private func updateFrameFromWindowServer(for pid: pid_t) -> Bool {
+        guard let frame = windowServerFrame(for: pid) else { return false }
+        missingWindowPollCount = 0
+        if currentFrame != frame {
+            currentFrame = frame
+            onFrameChange?(frame)
+        }
+        return true
     }
 
     /// Rebinds the AX observer to the currently tracked System Settings
@@ -359,6 +378,21 @@ final class SettingsWindowTracker {
         guard hasActiveTrackingTarget || currentFrame != nil else { return }
         missingAppPollCount += 1
         guard missingAppPollCount >= missingAppThreshold else { return }
+        stopTracking()
+        onTrackingEnded?()
+    }
+
+    /// A minimized or hidden System Settings window has no on-screen
+    /// window-server frame even though its process is still running. End the
+    /// guidance session after a short debounce, but never during initial launch
+    /// before a visible settings window has been observed.
+    private func finishTrackingIfNeededBecauseWindowIsHidden() {
+        missingWindowPollCount += 1
+        guard SettingsWindowVisibilityPolicy.shouldEndTracking(
+            hadVisibleFrame: currentFrame != nil,
+            consecutiveMissingPolls: missingWindowPollCount,
+            threshold: missingWindowThreshold
+        ) else { return }
         stopTracking()
         onTrackingEnded?()
     }

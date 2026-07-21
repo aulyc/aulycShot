@@ -1,5 +1,12 @@
 import AppKit
 
+enum SettingsWindowPresentationPolicy {
+    static let visibleActivationPolicy = NSApplication.ActivationPolicy.regular
+    static let hiddenActivationPolicy = NSApplication.ActivationPolicy.accessory
+    static let windowLevel = NSWindow.Level.normal
+    static let collectionBehavior = NSWindow.CollectionBehavior.managed
+}
+
 private final class SettingsWindow: NSWindow {
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let commandModifiers: NSEvent.ModifierFlags = [.command, .shift, .option, .control]
@@ -17,14 +24,12 @@ class SettingsWindowController: NSWindowController {
     static let shared = SettingsWindowController()
 
     var onMenuBarToggle: ((Bool) -> Void)?
-    var onLaunch: (() -> Void)?
 
     private var settingsView: SettingsView!
-    private var isStartup = true
 
     private init() {
         let window = SettingsWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 760, height: 560),
+            contentRect: NSRect(x: 0, y: 0, width: 920, height: 660),
             styleMask: [.titled, .closable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -33,10 +38,11 @@ class SettingsWindowController: NSWindowController {
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.appearance = NSAppearance(named: .darkAqua)
-        window.backgroundColor = NSColor(calibratedRed: 0.09, green: 0.12, blue: 0.16, alpha: 1.0)
+        window.backgroundColor = NSColor(calibratedWhite: 0.115, alpha: 1.0)
         window.center()
         window.isReleasedWhenClosed = false
-        window.level = .normal
+        window.level = SettingsWindowPresentationPolicy.windowLevel
+        window.collectionBehavior = SettingsWindowPresentationPolicy.collectionBehavior
 
         super.init(window: window)
 
@@ -44,16 +50,9 @@ class SettingsWindowController: NSWindowController {
             self?.window?.title = L10n.settingsTitle
         }
 
-        settingsView = SettingsView(frame: NSRect(x: 0, y: 0, width: 760, height: 560), isStartup: true)
+        settingsView = SettingsView(frame: NSRect(x: 0, y: 0, width: 920, height: 660))
         settingsView.onMenuBarToggle = { [weak self] visible in
             self?.onMenuBarToggle?(visible)
-        }
-        settingsView.onLaunch = { [weak self] in
-            self?.isStartup = false
-            self?.settingsView.setStartupMode(false)
-            self?.resizeWindow(height: 560)
-            self?.window?.close()
-            self?.onLaunch?()
         }
         window.contentView = settingsView
         window.initialFirstResponder = settingsView
@@ -65,36 +64,28 @@ class SettingsWindowController: NSWindowController {
     }
 
     func showAsStartupDialog() {
-        isStartup = true
-        settingsView.setStartupMode(true)
-        resizeWindow(height: 600)
+        settingsView.showPermissionsTab()
+        resizeWindow(height: 700)
         window?.center()
-        resetInitialFocus()
-        showWindow(nil)
-        resetInitialFocus()
-        NSApp.activate(ignoringOtherApps: true)
+        presentAsStandardWindow()
     }
 
     func showAsSettings(focusingPermissions: Bool? = nil) {
-        isStartup = false
-        settingsView.setStartupMode(false)
         let shouldFocusPermissions = focusingPermissions ?? !AppPermissions.allRequiredGranted
         if shouldFocusPermissions {
             settingsView.showPermissionsTab()
         }
-        resizeWindow(height: 560)
+        resizeWindow(height: 660)
+        presentAsStandardWindow()
+    }
+
+    private func presentAsStandardWindow() {
+        NSApp.setActivationPolicy(SettingsWindowPresentationPolicy.visibleActivationPolicy)
         resetInitialFocus()
         showWindow(nil)
         resetInitialFocus()
         NSApp.activate(ignoringOtherApps: true)
-    }
-
-    func dismissStartupDialogForExternalOpen() {
-        guard isStartup else { return }
-        isStartup = false
-        settingsView.setStartupMode(false)
-        resizeWindow(height: 560)
-        window?.close()
+        window?.makeKeyAndOrderFront(nil)
     }
 
     private func resetInitialFocus() {
@@ -122,6 +113,8 @@ extension SettingsWindowController: NSWindowDelegate {
         settingsView.cancelClipboardShortcutRecording()
         settingsView.cancelFileSaveShortcutRecording()
         settingsView.closePermissionFlowPanel()
+        settingsView.closeErrorLogWindow()
+        NSApp.setActivationPolicy(SettingsWindowPresentationPolicy.hiddenActivationPolicy)
         // The status item now exists before the permission gate. In startup
         // mode, closing this window keeps the menu bar entry alive so the user
         // can reopen permissions without relaunching the app.

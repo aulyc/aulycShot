@@ -29,6 +29,8 @@ final class ToolbarSettingsPane: NSView {
     private let hiddenHint = ToolbarSettingsPane.hintLabel()
     private let footnote = ToolbarSettingsPane.hintLabel()
     private let resetButton = NSButton()
+    private var pageScrollObserver: NSObjectProtocol?
+    private weak var observedPageClipView: NSClipView?
 
     init() {
         super.init(frame: .zero)
@@ -47,7 +49,34 @@ final class ToolbarSettingsPane: NSView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    deinit { NotificationCenter.default.removeObserver(self) }
+    deinit {
+        stopObservingPageScroll()
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        stopObservingPageScroll()
+        guard window != nil, let clipView = enclosingScrollView?.contentView else { return }
+        clipView.postsBoundsChangedNotifications = true
+        observedPageClipView = clipView
+        pageScrollObserver = NotificationCenter.default.addObserver(
+            forName: NSView.boundsDidChangeNotification,
+            object: clipView,
+            queue: .main
+        ) { _ in
+            ToolbarTooltipHoverGate.suppressForScroll()
+            ToolTipWindow.hide()
+        }
+    }
+
+    private func stopObservingPageScroll() {
+        if let pageScrollObserver {
+            NotificationCenter.default.removeObserver(pageScrollObserver)
+            self.pageScrollObserver = nil
+        }
+        observedPageClipView = nil
+    }
 
     // MARK: - Build
 

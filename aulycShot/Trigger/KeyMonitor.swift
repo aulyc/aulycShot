@@ -19,16 +19,12 @@ class KeyMonitor {
     private var eventTap: CFMachPort?
     private var eventTapSource: CFRunLoopSource?
     private var lastCommandPressTime: TimeInterval = 0
-    private var lastCommandPressOption: Bool = false
     private var commandIsDown = false
     private var otherKeyPressed = false
     private let onTrigger: () -> Void
-    private let onCountdownTrigger: () -> Void
 
-    init(onTrigger: @escaping () -> Void,
-         onCountdownTrigger: @escaping () -> Void) {
+    init(onTrigger: @escaping () -> Void) {
         self.onTrigger = onTrigger
-        self.onCountdownTrigger = onCountdownTrigger
         startMonitoring()
     }
 
@@ -83,9 +79,9 @@ class KeyMonitor {
     private func handleFlagsChanged(_ event: NSEvent) {
         handleFlagsChanged(
             commandIsDown: event.modifierFlags.contains(.command),
-            optionIsDown: event.modifierFlags.contains(.option),
             hasDisruptiveModifiers: event.modifierFlags.contains(.shift)
                 || event.modifierFlags.contains(.control)
+                || event.modifierFlags.contains(.option)
         )
     }
 
@@ -130,9 +126,9 @@ class KeyMonitor {
             let flags = event.flags
             handleFlagsChanged(
                 commandIsDown: flags.contains(.maskCommand),
-                optionIsDown: flags.contains(.maskAlternate),
                 hasDisruptiveModifiers: flags.contains(.maskShift)
                     || flags.contains(.maskControl)
+                    || flags.contains(.maskAlternate)
             )
         default:
             break
@@ -141,7 +137,6 @@ class KeyMonitor {
 
     private func handleFlagsChanged(
         commandIsDown cmd: Bool,
-        optionIsDown opt: Bool,
         hasDisruptiveModifiers hasDisruptive: Bool
     ) {
         guard isEnabled else { return }
@@ -155,22 +150,16 @@ class KeyMonitor {
         if cmd && !commandIsDown {
             let now = ProcessInfo.processInfo.systemUptime
             let withinWindow = (now - lastCommandPressTime) < Defaults.doubleTapInterval
-            // Both presses must share the same Option state — a sequence that
-            // mixes ⌘ then ⌥⌘ is treated as a fresh first press, not a double-tap.
             let isDoubleTap = !otherKeyPressed
                 && withinWindow
-                && lastCommandPressOption == opt
 
             if isDoubleTap {
-                if opt {
-                    MainRunLoopScheduler.perform { [weak self] in self?.onCountdownTrigger() }
-                } else if isRegularDoubleTapEnabled {
+                if isRegularDoubleTapEnabled {
                     MainRunLoopScheduler.perform { [weak self] in self?.onTrigger() }
                 }
                 lastCommandPressTime = 0
             } else {
                 lastCommandPressTime = now
-                lastCommandPressOption = opt
             }
             otherKeyPressed = false
         }

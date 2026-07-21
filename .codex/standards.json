@@ -176,7 +176,7 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "f16226c2137241a27182655ce54dc80416d2a2fb7236502be5f22bc3b951863e"
+      "sha256": "cb57718759399892d946f0f22694702e481208bc5064a8ffbf53d1ae79e1d462"
     },
     {
       "path": "docs/RELEASE.md",
@@ -188,7 +188,7 @@
     },
     {
       "path": "scripts/bundle.sh",
-      "sha256": "24f2264313fd38fbed68c2eb6d995983b88c762bf3d321ec5e628e0bec1ea80d"
+      "sha256": "60e16b9a8b8b837e9b720c0a006168a346eec667bd92f9bcba8c9950831ebf81"
     },
     {
       "path": "scripts/inject-build-metadata.sh",

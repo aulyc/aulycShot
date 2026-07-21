@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add smart selection for accessible controls, windows, and screens with `Tab` cycling
+- Add screenshot output modes for clipboard only, file only, or both, with a configurable save folder
+
+### Changed
+
+- Use one screenshot quality setting for both saved files and clipboard images
+- Use fixed collision-safe filenames for screenshots and recordings
+- Limit the packaged app interface to Simplified Chinese and English
+- Refresh the app and menu bar icon artwork
+- Start the menu bar app even while required permissions are still pending
+- Keep the selected settings tab background transparent
+- Move screenshot selections by dragging their border and remove the dedicated toolbar drag handle
+- Rename the QR code tool to Recognize QR Code
+- Replace the mosaic tool icon with a more recognizable pixel-tile symbol
+- Enlarge the settings sidebar version and availability status, and include the build number
+- Remove About-link hover backgrounds while retaining pointing-hand cursors
+
+### Removed
+- Remove screenshot, media, color, and clipboard text history caching, history panels, menu entries, navigation shortcuts, and supporting code
+- Remove the color picker, countdown capture, dedicated full-screen capture action, and custom filename templates
+- Remove the option and implementation for showing pinned images across desktops and full-screen Spaces
+- Remove text recognition, copy-image-text shortcuts, pinned-image OCR, and supporting code
+- Remove screenshot beautification, background presets, padding, shadow controls, and supporting code
+
+### Fixed
+- Center the error log window over Settings whenever it is opened
+- Keep settings action-button text colors stable across rest, hover, press, and dynamic-title states
+- Extend permission-row hover feedback across the full clickable card width
+- Open Accessibility and Screen Recording settings without blocking permission probes or launch/deep-link races
+- Close the permission guidance panel after System Settings loses focus or its tracked window is minimized
+
 ## [1.7.0] - 2026-07-19
 
 ### Changed

@@ -7,17 +7,24 @@ final class SettingsNavigator {
     private let bundleIdentifier = "com.apple.systempreferences"
     private let applicationURL = URL(fileURLWithPath: "/System/Applications/System Settings.app")
 
-    /// Opens System Settings with a generic deeplink URL.
+    /// Opens a settings deeplink in one workspace request so launching System
+    /// Settings and routing to the requested pane cannot race each other.
     @discardableResult
     func openSettings(at url: URL) -> Bool {
-        NSWorkspace.shared.openApplication(
-            at: applicationURL,
-            configuration: NSWorkspace.OpenConfiguration()
-        ) { _, _ in }
+        guard FileManager.default.fileExists(atPath: applicationURL.path) else {
+            return NSWorkspace.shared.open(url)
+        }
 
-        let didOpen = NSWorkspace.shared.open(url)
-        activateSettings()
-        return didOpen
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        NSWorkspace.shared.open(
+            [url],
+            withApplicationAt: applicationURL,
+            configuration: configuration
+        ) { application, _ in
+            application?.activate(options: [.activateIgnoringOtherApps])
+        }
+        return true
     }
 
     /// Re-activates the running System Settings process if it already exists.

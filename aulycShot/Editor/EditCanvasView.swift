@@ -55,18 +55,6 @@ class EditCanvasView: NSView {
     }
     private(set) var previewImage: NSImage?
 
-    /// When non-nil, `draw(_:)` clips its drawing to a rounded rect of this
-    /// radius. Used by the beautify flow so the canvas content shows with
-    /// rounded corners matching the container's frame.
-    var beautifyCornerRadius: CGFloat?
-
-    /// Fallback base image used during live drawing when `previewImage` is
-    /// nil. The beautify flow sets this to a snapshot of the current screen
-    /// area so the user sees the actual content under the gradient frame
-    /// (without it, normal screenshots show only gradient because the editor
-    /// overlay is transparent over the desktop passthrough).
-    var externalBaseImage: NSImage?
-
     // Current drawing properties (set by toolbar)
     var currentColor: NSColor = EditorStyleDefaults.primaryColor {
         didSet { activeTextField?.annotationColor = currentColor }
@@ -1447,23 +1435,7 @@ class EditCanvasView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         guard let context = NSGraphicsContext.current?.cgContext else { return }
 
-        let didClip: Bool
-        if let radius = beautifyCornerRadius {
-            context.saveGState()
-            let clipPath = CGPath(
-                roundedRect: bounds,
-                cornerWidth: radius,
-                cornerHeight: radius,
-                transform: nil
-            )
-            context.addPath(clipPath)
-            context.clip()
-            didClip = true
-        } else {
-            didClip = false
-        }
-
-        if let image = previewImage ?? externalBaseImage ?? overrideBaseImage ?? windowBaseImage {
+        if let image = previewImage ?? overrideBaseImage ?? windowBaseImage {
             image.draw(in: NSRect(origin: .zero, size: bounds.size))
         }
 
@@ -1633,9 +1605,6 @@ class EditCanvasView: NSView {
             context.restoreGState()
         }
 
-        if didClip {
-            context.restoreGState()
-        }
     }
 
     private func drawActiveTextCalloutBackground(in context: CGContext) {
@@ -1682,14 +1651,7 @@ class EditCanvasView: NSView {
 
     func compositeImage(
         fallbackBaseImage: NSImage?,
-        beautifyPreset: BeautifyPreset? = nil,
-        beautifyPadding: CGFloat? = nil,
-        beautifyShadowEnabled: Bool = true,
-        wallpaperImage: NSImage? = nil,
-        annotationClipMask: NSImage? = nil,
-        beautifyInnerClipRadius: CGFloat? = BeautifyRenderer.innerCornerRadius,
-        beautifyInnerShadowCornerRadius: CGFloat = BeautifyRenderer.innerCornerRadius,
-        beautifyInnerShadowInset: CGFloat = 0
+        annotationClipMask: NSImage? = nil
     ) -> NSImage? {
         guard let baseImage = previewImage ?? fallbackBaseImage else { return nil }
 
@@ -1738,20 +1700,6 @@ class EditCanvasView: NSView {
             innerImage = baseImage
         }
 
-        if let preset = beautifyPreset {
-            let pad = beautifyPadding ?? BeautifyRenderer.paddingSliderDefault
-            let rendered = BeautifyRenderer.render(
-                innerImage: innerImage,
-                preset: preset,
-                padding: pad,
-                wallpaperImage: wallpaperImage,
-                shadowEnabled: beautifyShadowEnabled,
-                innerClipRadius: beautifyInnerClipRadius,
-                innerShadowCornerRadius: beautifyInnerShadowCornerRadius,
-                innerShadowInset: beautifyInnerShadowInset
-            )
-            return rendered
-        }
         return innerImage
     }
 

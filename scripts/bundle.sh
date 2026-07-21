@@ -90,10 +90,14 @@ cp "ThirdParty/PermissionFlow/LICENSE" "$RESOURCES/PermissionFlow-LICENSE.txt"
 # app bundle on the next rebuild without touching Swift code.
 cp "design/menuBarIcon.svg" "$RESOURCES/MenuBarIcon.svg"
 
-# Copy localization bundles (.lproj). The app loads these directly for its
-# in-app language picker — see Localizer.swift.
-for lproj in Resources/*.lproj; do
-    [ -d "$lproj" ] || continue
+# Copy the two supported localization bundles. The app loads these directly
+# for its in-app language picker — see Localizer.swift.
+for language in en zh-Hans; do
+    lproj="Resources/$language.lproj"
+    if [ ! -d "$lproj" ]; then
+        echo "error: missing supported localization bundle: $lproj" >&2
+        exit 1
+    fi
     cp -R "$lproj" "$RESOURCES/"
 done
 
@@ -107,6 +111,17 @@ if [ ! -d "$PERMISSION_FLOW_BUNDLE" ]; then
     exit 1
 fi
 cp -R "$PERMISSION_FLOW_BUNDLE" "$RESOURCES/"
+
+# SwiftPM may retain removed resource files in an incremental build directory.
+# Prune the copied bundle so stale translations can never leak into the app.
+COPIED_PERMISSION_FLOW_BUNDLE="$RESOURCES/$(basename "$PERMISSION_FLOW_BUNDLE")"
+for lproj in "$COPIED_PERMISSION_FLOW_BUNDLE"/*.lproj; do
+    [ -d "$lproj" ] || continue
+    case "$(basename "$lproj" | tr '[:upper:]' '[:lower:]')" in
+        en.lproj|zh-hans.lproj) ;;
+        *) rm -rf "$lproj" ;;
+    esac
+done
 
 # Code signing
 # -----------------------------------------------------------------------------

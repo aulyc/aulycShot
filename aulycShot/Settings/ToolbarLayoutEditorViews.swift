@@ -1,19 +1,46 @@
 import AppKit
 
-/// Renders an SF Symbol flat-tinted to a single color.
-func tintedSymbol(_ name: String, pointSize: CGFloat, color: NSColor) -> NSImage? {
-    guard let base = NSImage(systemSymbolName: name, accessibilityDescription: nil) else {
-        return nil
-    }
-    let config = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .medium)
-    guard let symbol = base.withSymbolConfiguration(config) else { return nil }
-    let tinted = NSImage(size: symbol.size, flipped: false) { rect in
-        symbol.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1)
+/// Renders a toolbar icon flat-tinted to a single color.
+func tintedToolbarIcon(_ itemID: ToolbarItemID, pointSize: CGFloat, color: NSColor) -> NSImage? {
+    guard let icon = itemID.toolbarIconImage(pointSize: pointSize) else { return nil }
+    let tinted = NSImage(size: icon.size, flipped: false) { rect in
+        icon.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1)
         color.set()
         rect.fill(using: .sourceAtop)
         return true
     }
     return tinted
+}
+
+/// Prevents a toolbar tooltip from being recreated merely because scrolling
+/// moved a different tile underneath a stationary pointer.
+enum ToolbarTooltipHoverGate {
+    private static var pointerLocationAtScroll: NSPoint?
+    private static let movementThreshold: CGFloat = 1
+
+    static func suppressForScroll(at pointerLocation: NSPoint = NSEvent.mouseLocation) {
+        pointerLocationAtScroll = pointerLocation
+    }
+
+    static func permitsHover(at pointerLocation: NSPoint = NSEvent.mouseLocation) -> Bool {
+        guard let scrollLocation = pointerLocationAtScroll else { return true }
+        let distance = hypot(
+            pointerLocation.x - scrollLocation.x,
+            pointerLocation.y - scrollLocation.y
+        )
+        guard distance >= movementThreshold else { return false }
+        pointerLocationAtScroll = nil
+        return true
+    }
+
+    static func resumeAfterMouseMove(at pointerLocation: NSPoint = NSEvent.mouseLocation) -> Bool {
+        guard pointerLocationAtScroll != nil else { return false }
+        return permitsHover(at: pointerLocation)
+    }
+
+    static func reset() {
+        pointerLocationAtScroll = nil
+    }
 }
 
 // MARK: - Tool tile
@@ -59,7 +86,7 @@ final class ToolbarItemTile: NSView {
         }
         let area = NSTrackingArea(
             rect: bounds,
-            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
             owner: self,
             userInfo: nil
         )
@@ -69,10 +96,24 @@ final class ToolbarItemTile: NSView {
 
     override func mouseEntered(with event: NSEvent) {
         super.mouseEntered(with: event)
+        guard ToolbarTooltipHoverGate.permitsHover() else {
+            ToolTipWindow.hide()
+            return
+        }
+        showTooltip()
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        guard ToolbarTooltipHoverGate.resumeAfterMouseMove() else { return }
+        showTooltip()
+    }
+
+    private func showTooltip() {
         guard let tip = hoverTip, let window else { return }
         let frameInWindow = convert(bounds, to: nil)
         let frameOnScreen = window.convertToScreen(frameInWindow)
-        ToolTipWindow.show(text: tip, anchor: frameOnScreen)
+        ToolTipWindow.show(text: tip, anchor: frameOnScreen, relativeTo: window)
     }
 
     override func mouseExited(with event: NSEvent) {
@@ -87,7 +128,9 @@ final class ToolbarItemTile: NSView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if window == nil { ToolTipWindow.hide() }
+        if window == nil {
+            ToolTipWindow.hide()
+        }
     }
 
     private var iconColor: NSColor {
@@ -106,7 +149,7 @@ final class ToolbarItemTile: NSView {
         body.lineWidth = 1
         body.stroke()
 
-        if let icon = tintedSymbol(itemID.symbolName, pointSize: 15, color: iconColor) {
+        if let icon = tintedToolbarIcon(itemID, pointSize: 15, color: iconColor) {
             let size = icon.size
             icon.draw(in: NSRect(
                 x: bounds.midX - size.width / 2,
@@ -598,8 +641,8 @@ private final class ToolbarPreviewScrollView: NSScrollView {
         scrollerStyle = .overlay
         hasHorizontalScroller = orientation.isHorizontal
         hasVerticalScroller = orientation.isVertical
-        horizontalScrollElasticity = orientation.isHorizontal ? .allowed : .none
-        verticalScrollElasticity = orientation.isVertical ? .allowed : .none
+        horizontalScrollElasticity = .none
+        verticalScrollElasticity = .none
         usesPredominantAxisScrolling = false
         wantsLayer = true
         layer?.cornerRadius = 7
@@ -673,7 +716,7 @@ private final class ToolbarPreviewStripView: NSView {
             case .confirm: color = accentGreen
             default:       color = .white
             }
-            if let icon = tintedSymbol(id.symbolName, pointSize: 9, color: color) {
+            if let icon = tintedToolbarIcon(id, pointSize: 9, color: color) {
                 let size = icon.size
                 icon.draw(in: NSRect(
                     x: slot.midX - size.width / 2,
