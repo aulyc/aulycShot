@@ -27,6 +27,7 @@ SEMVER = re.compile(
     r"(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$"
 )
 EXPECTED_ARCHITECTURES = {"arm64"}
+PERMISSION_FLOW_RESOURCE_BUNDLE = "aulycShot_PermissionFlow.bundle"
 
 
 class ReleaseError(Exception):
@@ -161,6 +162,20 @@ def codesign_has_runtime(output: str) -> bool:
     return re.search(r"^CodeDirectory .*\bflags=.*\(runtime\)", output, re.M) is not None
 
 
+def verify_runtime_resources(app: Path) -> None:
+    bundle = app / "Contents" / "Resources" / PERMISSION_FLOW_RESOURCE_BUNDLE
+    required = (
+        bundle / "Info.plist",
+        bundle / "en.lproj" / "Localizable.strings",
+        bundle / "zh-hans.lproj" / "Localizable.strings",
+    )
+    if not bundle.is_dir():
+        raise ReleaseError(f"runtime resource bundle is missing: {bundle}")
+    for path in required:
+        if not path.is_file():
+            raise ReleaseError(f"runtime resource is missing: {path}")
+
+
 def parse_codesign(app: Path) -> tuple[str, str, bool]:
     output = run(["codesign", "-dv", "--verbose=4", str(app)], combine=True)
     team_match = re.search(r"^TeamIdentifier=(.+)$", output, re.M)
@@ -182,6 +197,7 @@ def app_identity(app: Path) -> dict:
     for required in (executable, extension, extension_executable):
         if not required.exists():
             raise ReleaseError(f"required bundle item is missing: {required}")
+    verify_runtime_resources(app)
     run(["codesign", "--verify", "--deep", "--strict", "--verbose=2", str(app)], combine=True)
     run(["codesign", "--verify", "--strict", "--verbose=2", str(extension)], combine=True)
     architectures = set(run(["lipo", "-archs", str(executable)]).split())
@@ -354,6 +370,11 @@ def command_verify_app(args: argparse.Namespace) -> None:
     print(f"app identity valid: {args.app} {identity['version']} build {identity['build']}")
 
 
+def command_verify_runtime_resources(args: argparse.Namespace) -> None:
+    verify_runtime_resources(args.app.resolve())
+    print(f"runtime resources valid: {args.app}")
+
+
 def command_release_notes(args: argparse.Namespace) -> None:
     text = CHANGELOG.read_text(encoding="utf-8")
     start_match = re.search(rf"^## \[{re.escape(args.version)}\] - \d{{4}}-\d{{2}}-\d{{2}}\n", text, re.M)
@@ -411,6 +432,10 @@ def make_parser() -> argparse.ArgumentParser:
     verify_app.add_argument("--provenance", required=True, type=Path)
     verify_app.add_argument("--app", required=True, type=Path)
     verify_app.set_defaults(func=command_verify_app)
+
+    verify_resources = subparsers.add_parser("verify-runtime-resources")
+    verify_resources.add_argument("--app", required=True, type=Path)
+    verify_resources.set_defaults(func=command_verify_runtime_resources)
 
     release_notes = subparsers.add_parser("release-notes")
     release_notes.add_argument("--version", required=True)

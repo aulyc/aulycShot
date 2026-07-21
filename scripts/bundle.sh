@@ -101,9 +101,9 @@ for language in en zh-Hans; do
     cp -R "$lproj" "$RESOURCES/"
 done
 
-# Copy SwiftPM resource bundles. PermissionFlow uses Bundle.module for its
-# floating authorization panel strings; if this bundle is absent, the App can
-# crash with a Swift assertion the first time the panel is shown.
+# Copy SwiftPM resource bundles into the sealed macOS Resources directory.
+# PermissionFlowLocalizer resolves this packaged location before falling back
+# to Bundle.module for direct SwiftPM builds and tests.
 BUILD_DIR="$(dirname "$BUILD_BIN")"
 PERMISSION_FLOW_BUNDLE="$BUILD_DIR/aulycShot_PermissionFlow.bundle"
 if [ ! -d "$PERMISSION_FLOW_BUNDLE" ]; then
@@ -122,6 +122,8 @@ for lproj in "$COPIED_PERMISSION_FLOW_BUNDLE"/*.lproj; do
         *) rm -rf "$lproj" ;;
     esac
 done
+
+python3 scripts/release_tool.py verify-runtime-resources --app "$APP_DIR"
 
 # Code signing
 # -----------------------------------------------------------------------------

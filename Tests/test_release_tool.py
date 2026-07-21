@@ -88,6 +88,29 @@ class ReleaseToolTests(unittest.TestCase):
         self.assertTrue(release_tool.codesign_has_runtime(signed))
         self.assertFalse(release_tool.codesign_has_runtime(unsigned))
 
+    def test_runtime_resources_accept_permission_flow_bundle_in_contents_resources(self):
+        app = self.root / "aulycShot.app"
+        bundle = app / "Contents" / "Resources" / "aulycShot_PermissionFlow.bundle"
+        (bundle / "en.lproj").mkdir(parents=True)
+        (bundle / "zh-hans.lproj").mkdir()
+        (bundle / "Info.plist").write_bytes(b"plist")
+        (bundle / "en.lproj" / "Localizable.strings").write_text("", encoding="utf-8")
+        (bundle / "zh-hans.lproj" / "Localizable.strings").write_text("", encoding="utf-8")
+
+        release_tool.verify_runtime_resources(app)
+
+    def test_runtime_resources_reject_bundle_only_at_app_root(self):
+        app = self.root / "aulycShot.app"
+        misplaced = app / "aulycShot_PermissionFlow.bundle"
+        (misplaced / "en.lproj").mkdir(parents=True)
+        (misplaced / "zh-hans.lproj").mkdir()
+        (misplaced / "Info.plist").write_bytes(b"plist")
+        (misplaced / "en.lproj" / "Localizable.strings").write_text("", encoding="utf-8")
+        (misplaced / "zh-hans.lproj" / "Localizable.strings").write_text("", encoding="utf-8")
+
+        with self.assertRaisesRegex(release_tool.ReleaseError, "runtime resource bundle is missing"):
+            release_tool.verify_runtime_resources(app)
+
     def valid_provenance(self, dmg):
         return {
             "releaseProfile": "macos-arm64-app",

@@ -176,11 +176,11 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "cb57718759399892d946f0f22694702e481208bc5064a8ffbf53d1ae79e1d462"
+      "sha256": "7931939aad1b0d10197fa99448126a31626ceec3c18f8bc3a6051da51e82c817"
     },
     {
       "path": "docs/RELEASE.md",
-      "sha256": "dfbc33414f5308d0ff7ef67d2a1ab0ec2cadc4f23a305a3b386af142fa275e03"
+      "sha256": "f2aacfb71d3a5415e5edf8683ecf5837ab47ecd1a6246782a3c4a6d51ede395f"
     },
     {
       "path": "Makefile",
@@ -188,7 +188,7 @@
     },
     {
       "path": "scripts/bundle.sh",
-      "sha256": "60e16b9a8b8b837e9b720c0a006168a346eec667bd92f9bcba8c9950831ebf81"
+      "sha256": "d8b4900883c807b9cc960fc5bfc68a88904b4d7ebae4de924315d95c363dba2b"
     },
     {
       "path": "scripts/inject-build-metadata.sh",
@@ -196,7 +196,7 @@
     },
     {
       "path": "scripts/release_tool.py",
-      "sha256": "57e408f74a4c400b26b21221b1623801a253a9692306daf8d475bc129eb07f9b"
+      "sha256": "49996142a9db90657208e8f4e0c312283ef92aa6e365e2e8e21326dec32870e5"
     },
     {
       "path": "scripts/prepare-formal-release.sh",
@@ -232,7 +232,7 @@
     },
     {
       "path": "Tests/test_release_tool.py",
-      "sha256": "0e15825d154d4265f220719f2afa7bb4c3566f3940fe0909f4d67609c5c2c105"
+      "sha256": "348a46a241b7edb5b3ffb4d2280849075e18dd15b8470639e09283eede41c9f3"
     }
   ]
 }

@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Prevent the permissions panel from crashing when its SwiftPM localization bundle is loaded from a packaged app
+
 ## [1.7.2] - 2026-07-21
 
 ### Fixed

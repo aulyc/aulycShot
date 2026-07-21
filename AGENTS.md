@@ -43,17 +43,18 @@ This script builds the app bundle, kills any running instance, launches the new 
 ## Packaging Lessons
 
 - SwiftPM target resources are not automatically present in the hand-assembled
-  `.app` bundle. If any package target declares `resources:` in `Package.swift`
-  or code uses `Bundle.module`, update both `scripts/bundle.sh` and the release
-  workflow to copy the generated `<package>_<target>.bundle` into
-  `aulycShot.app/Contents/Resources/`.
+  `.app` bundle. `scripts/bundle.sh` must copy
+  `aulycShot_PermissionFlow.bundle` into `Contents/Resources/`, and
+  `PermissionFlowLocalizer` must resolve that packaged location before using
+  `Bundle.module` as the direct SwiftPM build/test fallback. Do not place files
+  beside `Contents`; Developer ID signing rejects unsealed App-root content.
 - Treat a missing SwiftPM resource bundle as a release-blocking error, not a
   runtime fallback. The failure may only surface when a UI path first touches
   `Bundle.module`, such as the PermissionFlow authorization panel.
 - After packaging changes, verify the final `.app` contents directly with
-  `find .cache/build/aulycShot.app/Contents/Resources -maxdepth 2 -name '*.bundle'` and,
-  for release builds, confirm both the App and share extension contain only the
-  `arm64` slice.
+  `python3 scripts/release_tool.py verify-runtime-resources --app .cache/build/aulycShot.app`
+  and, for release builds, confirm both the App and share extension contain only
+  the `arm64` slice.
 
 ## Versioning and Release Profile
 
