@@ -3,6 +3,7 @@ import XCTest
 @testable import aulycShot
 
 final class ToolTipWindowTests: XCTestCase {
+    @MainActor
     func testTooltipBelongsToOwnerFollowsAnchorAndDetachesWhenAppDeactivates() throws {
         _ = NSApplication.shared
 
