@@ -1,35 +1,34 @@
 import AppKit
 
-enum AppAvailabilityState: Equatable {
-    case unavailable
-    case partiallyAvailable
-    case normallyAvailable
+struct PermissionFeatureAvailability: Equatable {
+    let accessibilityGranted: Bool
+    let screenRecordingGranted: Bool
+
+    var isAvailable: Bool {
+        accessibilityGranted && screenRecordingGranted
+    }
 
     static func make(
         accessibilityGranted: Bool,
         screenRecordingGranted: Bool
-    ) -> AppAvailabilityState {
-        switch (accessibilityGranted, screenRecordingGranted) {
-        case (false, false):
-            return .unavailable
-        case (true, true):
-            return .normallyAvailable
-        default:
-            return .partiallyAvailable
-        }
+    ) -> PermissionFeatureAvailability {
+        PermissionFeatureAvailability(
+            accessibilityGranted: accessibilityGranted,
+            screenRecordingGranted: screenRecordingGranted
+        )
     }
 }
 
 enum AppPermissions {
-    static var availabilityState: AppAvailabilityState {
-        AppAvailabilityState.make(
+    static var featureAvailability: PermissionFeatureAvailability {
+        PermissionFeatureAvailability.make(
             accessibilityGranted: accessibilityGranted,
             screenRecordingGranted: screenRecordingGranted
         )
     }
 
     static var allRequiredGranted: Bool {
-        accessibilityGranted && screenRecordingGranted
+        featureAvailability.isAvailable
     }
 
     static var accessibilityGranted: Bool {

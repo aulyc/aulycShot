@@ -3,11 +3,15 @@
 /* Settings */
 "settingsTitle" = "aulycShot Settings";
 "showMenuBarIcon" = "Show Menu Bar Icon";
-"permissionsHeader" = "Required Permissions";
-"accessibilityPermission" = "Accessibility";
-"accessibilityDescription" = "Needed to detect double-tap ⌘ Command key globally to trigger screenshots";
-"screenRecordingPermission" = "Screen Recording";
-"screenRecordingDescription" = "Needed to capture screen content for screenshots";
+"featurePermissionStatus" = "Feature Status";
+"permissionAvailable" = "Available";
+"permissionUnavailable" = "Unavailable";
+"featurePermissionHelpTooltip" = "View feature permission steps";
+"featurePermissionHelpTitle" = "Feature Permission Setup";
+"featurePermissionHelpBody" = "Both permissions are required to use screenshots and recording\n\nAccessibility: %@\nScreen & System Audio Recording: %@";
+"permissionHelpOpenAccessibility" = "Open Accessibility";
+"permissionHelpOpenScreenRecording" = "Open Screen Recording";
+"permissionHelpDone" = "Done";
 "launchAtLogin" = "Launch at Login";
 "demoMode" = "Demo Mode";
 "demoModeHint" = "Allow screen recorders to capture the selection overlay and editor";
@@ -178,13 +182,11 @@
 /* Settings sidebar tabs */
 "settingsTabGeneral" = "General";
 "settingsTabShortcuts" = "Shortcuts";
-"settingsTabPermissions" = "Permissions";
 "settingsTabAbout" = "About";
 "settingsTabToolbar" = "Toolbar";
 "settingsTabGeneralDescription" = "Configure language, startup, capture, and saving";
 "settingsTabShortcutsDescription" = "Configure global and editor shortcuts";
 "settingsTabToolbarDescription" = "Customize the editor toolbar layout";
-"settingsTabPermissionsDescription" = "Review permissions required for screen capture";
 "settingsTabAboutDescription" = "View version, updates, and diagnostics";
 
 "toolbarSettingsPrimaryTitle" = "Main toolbar";
@@ -199,6 +201,25 @@
 "toolbarSettingsApply" = "Apply";
 
 /* About pane */
+"aboutTitle" = "About aulycShot";
+"aboutVersionTitle" = "Version";
+"aboutVersionValue" = "%@ · build %@";
+"aboutCompatibilityTitle" = "Compatibility";
+"aboutCompatibilityValue" = "Apple Silicon";
+"aboutSystemRequirementTitle" = "System requirement";
+"aboutSystemRequirementValue" = "macOS 14+";
+"aboutIntroductionTitle" = "About the app";
+"aboutIntroductionFirst" = "1. aulycShot is a native macOS menu bar screenshot and recording tool with smart selection, window capture, region capture, and screen recording";
+"aboutIntroductionSecond" = "2. It provides arrows, shapes, text, numbered markers, mosaic, scrolling capture, pinned images, image editing, and image merging";
+"aboutIntroductionThird" = "3. Screenshots, recordings, and editing stay on this Mac, with no accounts, cloud sync, or telemetry";
+"aboutWebsiteTitle" = "Official website";
+"aboutWebsiteURL" = "https://www.aulyc.com";
+"aboutRelatedLinksTitle" = "Related links";
+"aboutAcknowledgementsTitle" = "Acknowledgements";
+"aboutAcknowledgementFirst" = "1. Thanks to the Linux.do community for testing, feedback, and discussion";
+"aboutAcknowledgementSecond" = "2. Thanks to everyone who submits requests, issues, and improvement ideas";
+"aboutAcknowledgementThird" = "3. Thanks to the open-source community and developer tools for inspiration and help";
+"aboutCopyright" = "Copyright © 2026 aulyc. All rights reserved";
 "aboutLicense" = "License";
 "aboutVersion" = "Version %@ · build %@";
 "aboutSourceCode" = "View code";
@@ -257,17 +278,6 @@
 "updateSkipButton" = "Skip This Version";
 "updateLaterButton" = "Later";
 "updateOKButton" = "OK";
-
-
-
-
-/* Permissions — status label */
-"permissionGranted" = "Granted";
-"permissionNotGranted" = "Not granted";
-"appStatusUnavailable" = "Unavailable";
-"appStatusPartiallyAvailable" = "Partially available";
-"appStatusNormallyAvailable" = "Fully available";
-
 
 
 

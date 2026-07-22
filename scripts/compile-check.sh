@@ -3,7 +3,8 @@
 # Quick compile-check for aulycShot.
 #
 # Looks at Swift files changed since HEAD (including untracked new files),
-# runs `swift build -c debug`, and surfaces only compilation errors.
+# runs `swift build -c debug`, and surfaces only compilation errors. Pass
+# `--sandboxed` in Codex workspace-write or a similarly restricted executor.
 #
 # Exits 0 when the current tree compiles cleanly (or has nothing to check),
 # and 1 when the compiler or linker reports errors.
@@ -12,6 +13,16 @@ set -e
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT_ROOT"
+
+SANDBOXED=0
+if [ "${1:-}" = "--sandboxed" ]; then
+  SANDBOXED=1
+  shift
+fi
+if [ $# -ne 0 ]; then
+  echo "error: unsupported compile-check argument: $1" >&2
+  exit 64
+fi
 
 # Modified tracked files (excluding deletions) + untracked files, deduped.
 # Source archives may not contain .git metadata; in that case, compile the
@@ -57,14 +68,22 @@ fi
 echo "Changed Swift sources:"
 printf '  %s\n' "${relevant[@]}"
 echo ""
-echo "Running: swift build -c debug"
+if [ "$SANDBOXED" -eq 1 ]; then
+  build_command=(scripts/swiftpm-sandbox.sh build -c debug)
+else
+  build_command=(swift build -c debug)
+fi
+
+printf 'Running:'
+printf ' %q' "${build_command[@]}"
+printf '\n'
 echo ""
 
 # Run swift build and capture combined output. SwiftPM emits compiler
 # diagnostics in the form "<path>:<line>:<col>: error: <message>" and linker
 # diagnostics prefixed with "ld:" / "Undefined symbols".
 set +e
-build_output=$(swift build -c debug 2>&1)
+build_output=$("${build_command[@]}" 2>&1)
 exit_code=$?
 set -e
 

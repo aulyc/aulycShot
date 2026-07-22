@@ -1,41 +1,40 @@
 import XCTest
 @testable import aulycShot
 
-final class AppAvailabilityStateTests: XCTestCase {
-    func testNoPermissionsIsUnavailable() {
-        XCTAssertEqual(
-            AppAvailabilityState.make(
-                accessibilityGranted: false,
-                screenRecordingGranted: false
-            ),
-            .unavailable
+final class PermissionFeatureAvailabilityTests: XCTestCase {
+    func testNoPermissionsMakeFeatureUnavailable() {
+        let availability = PermissionFeatureAvailability.make(
+            accessibilityGranted: false,
+            screenRecordingGranted: false
         )
+
+        XCTAssertFalse(availability.isAvailable)
     }
 
-    func testOnePermissionIsPartiallyAvailable() {
-        XCTAssertEqual(
-            AppAvailabilityState.make(
-                accessibilityGranted: true,
-                screenRecordingGranted: false
-            ),
-            .partiallyAvailable
+    func testScreenRecordingAloneKeepsFeatureUnavailable() {
+        let availability = PermissionFeatureAvailability.make(
+            accessibilityGranted: false,
+            screenRecordingGranted: true
         )
-        XCTAssertEqual(
-            AppAvailabilityState.make(
-                accessibilityGranted: false,
-                screenRecordingGranted: true
-            ),
-            .partiallyAvailable
-        )
+
+        XCTAssertFalse(availability.isAvailable)
     }
 
-    func testAllPermissionsIsNormallyAvailable() {
-        XCTAssertEqual(
-            AppAvailabilityState.make(
-                accessibilityGranted: true,
-                screenRecordingGranted: true
-            ),
-            .normallyAvailable
+    func testAccessibilityAloneKeepsFeatureUnavailable() {
+        let availability = PermissionFeatureAvailability.make(
+            accessibilityGranted: true,
+            screenRecordingGranted: false
         )
+
+        XCTAssertFalse(availability.isAvailable)
+    }
+
+    func testAllPermissionsEnableFeature() {
+        let availability = PermissionFeatureAvailability.make(
+            accessibilityGranted: true,
+            screenRecordingGranted: true
+        )
+
+        XCTAssertTrue(availability.isAvailable)
     }
 }

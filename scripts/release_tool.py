@@ -27,7 +27,14 @@ SEMVER = re.compile(
     r"(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$"
 )
 EXPECTED_ARCHITECTURES = {"arm64"}
-PERMISSION_FLOW_RESOURCE_BUNDLE = "aulycShot_PermissionFlow.bundle"
+RUNTIME_ICON_RESOURCES = (
+    (Path("Resources/AppIcon.icns"), Path("Contents/Resources/AppIcon.icns")),
+    (Path("design/menuBarIcon.svg"), Path("Contents/Resources/MenuBarIcon.svg")),
+    (
+        Path("Resources/AppIcon.icns"),
+        Path("Contents/PlugIns/AulycShotShareExtension.appex/Contents/Resources/AppIcon.icns"),
+    ),
+)
 
 
 class ReleaseError(Exception):
@@ -163,17 +170,17 @@ def codesign_has_runtime(output: str) -> bool:
 
 
 def verify_runtime_resources(app: Path) -> None:
-    bundle = app / "Contents" / "Resources" / PERMISSION_FLOW_RESOURCE_BUNDLE
-    required = (
-        bundle / "Info.plist",
-        bundle / "en.lproj" / "Localizable.strings",
-        bundle / "zh-hans.lproj" / "Localizable.strings",
-    )
-    if not bundle.is_dir():
-        raise ReleaseError(f"runtime resource bundle is missing: {bundle}")
-    for path in required:
-        if not path.is_file():
-            raise ReleaseError(f"runtime resource is missing: {path}")
+    for source_relative, bundled_relative in RUNTIME_ICON_RESOURCES:
+        source = ROOT / source_relative
+        bundled = app / bundled_relative
+        if not source.is_file():
+            raise ReleaseError(f"generated icon source is missing: {source}")
+        if not bundled.is_file():
+            raise ReleaseError(f"runtime icon resource is missing: {bundled}")
+        if sha256(source) != sha256(bundled):
+            raise ReleaseError(
+                f"runtime icon resource does not match generated source: {bundled}"
+            )
 
 
 def parse_codesign(app: Path) -> tuple[str, str, bool]:

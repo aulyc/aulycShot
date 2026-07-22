@@ -3,16 +3,20 @@ set -e
 
 # Build configuration
 # - CONFIG=debug|release  (default: debug)
+# - --sandboxed uses the project-local SwiftPM wrapper for Codex workspace-write
+#   and similarly restricted executors
 #
 # aulycShot is Apple Silicon only. Every assembled App and share extension is
 # built explicitly for arm64 so host architecture or stale build products
 # cannot change the distributed architecture.
 CONFIG="${CONFIG:-debug}"
+SANDBOXED=0
 
 for arg in "$@"; do
     case "$arg" in
         --release)   CONFIG="release" ;;
         --debug)     CONFIG="debug" ;;
+        --sandboxed) SANDBOXED=1 ;;
         *)
             echo "error: unsupported bundle argument: $arg" >&2
             exit 64
@@ -35,10 +39,20 @@ EXTENSION_CONTENTS="$EXTENSION_DIR/Contents"
 EXTENSION_MACOS="$EXTENSION_CONTENTS/MacOS"
 EXTENSION_RESOURCES="$EXTENSION_CONTENTS/Resources"
 
+# Generated menu bar and application icons must match the canonical geometry
+# and manifest before a build starts. Verification is read-only so exact-tag
+# release worktrees remain clean.
+bash scripts/generate-icon.sh --check
+
 # Build binaries
 echo "Building aulycShot ($CONFIG, arm64)..."
-swift build -c "$CONFIG" --arch arm64
-BUILD_BIN_DIR="$(swift build -c "$CONFIG" --arch arm64 --show-bin-path)"
+if [ "$SANDBOXED" -eq 1 ]; then
+    swift_build=(scripts/swiftpm-sandbox.sh build)
+else
+    swift_build=(swift build)
+fi
+"${swift_build[@]}" -c "$CONFIG" --arch arm64
+BUILD_BIN_DIR="$("${swift_build[@]}" -c "$CONFIG" --arch arm64 --show-bin-path)"
 BUILD_BIN="$BUILD_BIN_DIR/aulycShot"
 EXTENSION_BUILD_BIN="$BUILD_BIN_DIR/$EXTENSION_PRODUCT_NAME"
 
@@ -84,10 +98,9 @@ cp "Resources/AppIcon.icns" "$RESOURCES/AppIcon.icns"
 # MIT-licensed and the original copyright notice must remain with copies.
 cp "LICENSE" "$RESOURCES/LICENSE.txt"
 cp "THIRD_PARTY_NOTICES.md" "$RESOURCES/THIRD_PARTY_NOTICES.md"
-cp "ThirdParty/PermissionFlow/LICENSE" "$RESOURCES/PermissionFlow-LICENSE.txt"
 
-# Copy menu bar icon source. The SVG lives in design/ so tweaking it updates the
-# app bundle on the next rebuild without touching Swift code.
+# Copy the generated menu bar icon. Its geometry shares design/iconMark.svg
+# with AppIcon.icns; scripts/generate-icon.sh is the only update path.
 cp "design/menuBarIcon.svg" "$RESOURCES/MenuBarIcon.svg"
 
 # Copy the two supported localization bundles. The app loads these directly
@@ -99,28 +112,6 @@ for language in en zh-Hans; do
         exit 1
     fi
     cp -R "$lproj" "$RESOURCES/"
-done
-
-# Copy SwiftPM resource bundles into the sealed macOS Resources directory.
-# PermissionFlowLocalizer resolves this packaged location before falling back
-# to Bundle.module for direct SwiftPM builds and tests.
-BUILD_DIR="$(dirname "$BUILD_BIN")"
-PERMISSION_FLOW_BUNDLE="$BUILD_DIR/aulycShot_PermissionFlow.bundle"
-if [ ! -d "$PERMISSION_FLOW_BUNDLE" ]; then
-    echo "error: missing SwiftPM resource bundle: $PERMISSION_FLOW_BUNDLE" >&2
-    exit 1
-fi
-cp -R "$PERMISSION_FLOW_BUNDLE" "$RESOURCES/"
-
-# SwiftPM may retain removed resource files in an incremental build directory.
-# Prune the copied bundle so stale translations can never leak into the app.
-COPIED_PERMISSION_FLOW_BUNDLE="$RESOURCES/$(basename "$PERMISSION_FLOW_BUNDLE")"
-for lproj in "$COPIED_PERMISSION_FLOW_BUNDLE"/*.lproj; do
-    [ -d "$lproj" ] || continue
-    case "$(basename "$lproj" | tr '[:upper:]' '[:lower:]')" in
-        en.lproj|zh-hans.lproj) ;;
-        *) rm -rf "$lproj" ;;
-    esac
 done
 
 python3 scripts/release_tool.py verify-runtime-resources --app "$APP_DIR"

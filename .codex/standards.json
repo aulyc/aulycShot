@@ -15,17 +15,27 @@
   "releaseSignals": {
     "ciPaths": [
       ".github/workflows/ci.yml",
+      "Tests/test_icon_assets.py",
       "Tests/test_release_tool.py"
     ],
     "releaseFiles": [
       ".gitignore",
       "AGENTS.md",
       "CHANGELOG.md",
+      "docs/ICON_ASSETS.md",
       "docs/RELEASE.md",
+      "design/icon-assets.generated.json",
+      "design/iconMark.svg",
+      "design/appIcon.svg",
+      "design/menuBarIcon.svg",
       "Makefile",
+      "Resources/AppIcon.icns",
       "aulycShot/App/Info.plist",
       "scripts/bundle.sh",
+      "scripts/generate-icon.sh",
+      "scripts/icon_assets.py",
       "scripts/inject-build-metadata.sh",
+      "scripts/render-svg.swift",
       "scripts/release_tool.py",
       "scripts/prepare-formal-release.sh",
       "scripts/release-check.sh",
@@ -35,6 +45,7 @@
       "scripts/install-release.sh",
       "scripts/verify-installed.sh",
       "scripts/publish-release.sh",
+      "Tests/test_icon_assets.py",
       "Tests/test_release_tool.py"
     ],
     "versionSources": [
@@ -176,27 +187,63 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "7931939aad1b0d10197fa99448126a31626ceec3c18f8bc3a6051da51e82c817"
+      "sha256": "d59772029021f430a227a0fef9a2713c92bc242218175ac27d76407b49958749"
+    },
+    {
+      "path": "docs/ICON_ASSETS.md",
+      "sha256": "6d8efc1249236ea4e47ee65986385a55e5e7a555187df38f07bd85996d3c4c5d"
     },
     {
       "path": "docs/RELEASE.md",
-      "sha256": "f2aacfb71d3a5415e5edf8683ecf5837ab47ecd1a6246782a3c4a6d51ede395f"
+      "sha256": "056da21eca67aed9d62c67f24c5d9680c3bb11ef48cd9ec513f1ca76a4bc87a5"
+    },
+    {
+      "path": "design/icon-assets.generated.json",
+      "sha256": "156695245a1f5420ae74302270b4b8638be04a710cac6a43459e979ef3cdaf68"
+    },
+    {
+      "path": "design/iconMark.svg",
+      "sha256": "e6f9bdb2d68aa56b7cbb8712889d9a3e555e6b47005d63c46d16b7023333dfe8"
+    },
+    {
+      "path": "design/appIcon.svg",
+      "sha256": "c22341ac7b94dc8521335924b365cf317e7eeff883166a730cb78d98e3d4473b"
+    },
+    {
+      "path": "design/menuBarIcon.svg",
+      "sha256": "a0b24586c6797418de3c8ed206c3b1e8a52a7c903a633de4b65b94bcd63dcaf3"
     },
     {
       "path": "Makefile",
-      "sha256": "c90a53977af69a6c55b7e25d7ca2bb242b490e6df5d8310609c9cb5a31f31939"
+      "sha256": "80c7209424970bb605a516b6b59839d00b23159126cfd0c589cbcd21e7fe6dc1"
+    },
+    {
+      "path": "Resources/AppIcon.icns",
+      "sha256": "0760e08e586d171436b4ace3e25401c1a16c556f06d691149ff2fea3a1bad79a"
     },
     {
       "path": "scripts/bundle.sh",
-      "sha256": "d8b4900883c807b9cc960fc5bfc68a88904b4d7ebae4de924315d95c363dba2b"
+      "sha256": "8e6aa5a1c6e836769a50747bf241c3c7a4a54678cf3ce89c03dea81263edc97f"
+    },
+    {
+      "path": "scripts/generate-icon.sh",
+      "sha256": "f7dcf8bf8b262a0e5815ed2fb97647a85e9157534341d334825a5e324ed3d055"
+    },
+    {
+      "path": "scripts/icon_assets.py",
+      "sha256": "25d4760edcae4cd9e868f5d0fed60a64f787b42858aef11ae71fc1a30d07f49a"
     },
     {
       "path": "scripts/inject-build-metadata.sh",
       "sha256": "acc060c9fa9cfcf1c3f3e486a7f3c5ad121c565c7d56cb9fdcc9d67c0e32f138"
     },
     {
+      "path": "scripts/render-svg.swift",
+      "sha256": "73c6b23b466ce3e73338365b3ade908d22671160922f78aba6f04b551acdb3ef"
+    },
+    {
       "path": "scripts/release_tool.py",
-      "sha256": "49996142a9db90657208e8f4e0c312283ef92aa6e365e2e8e21326dec32870e5"
+      "sha256": "ff64e9ce0c424a62068e1907849cd17e9595faae7298a20917ccec7b551dc4bc"
     },
     {
       "path": "scripts/prepare-formal-release.sh",
@@ -231,8 +278,12 @@
       "sha256": "97cc158d1ceb0b5ad260fb9fe8f1bd08074a7b83520ce2fc22518bca702149ba"
     },
     {
+      "path": "Tests/test_icon_assets.py",
+      "sha256": "2f005e5204d9c31287aba617287e677aae0a7873d74b0bdbf4c56b99f46a6c66"
+    },
+    {
       "path": "Tests/test_release_tool.py",
-      "sha256": "348a46a241b7edb5b3ffb4d2280849075e18dd15b8470639e09283eede41c9f3"
+      "sha256": "a03f9304cec15be81342b552dc535afda79aa36c88e7c23f1b7f8b6e8d61d733"
     }
   ]
 }

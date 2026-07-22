@@ -234,6 +234,12 @@ enum AgentCapturer {
     }
 
     static func capturePayload(for target: AgentCaptureTarget) throws -> AgentCapturePayload {
+        guard AppPermissions.allRequiredGranted else {
+            throw AgentCLIError.failure(
+                "Capture unavailable; grant Accessibility and Screen Recording permissions to aulycShot"
+            )
+        }
+
         switch target {
         case .screen(let screenIndex, let displayID):
             let screen = try AgentScreenCatalog.screen(index: screenIndex, displayID: displayID)

@@ -1,6 +1,5 @@
 import AppKit
 import Carbon
-import PermissionFlow
 
 // MARK: - Tab model
 
@@ -8,7 +7,6 @@ enum SettingsTab: CaseIterable {
     case general
     case shortcuts
     case toolbar
-    case permissions
     case about
 
     var title: String {
@@ -16,7 +14,6 @@ enum SettingsTab: CaseIterable {
         case .general: return L10n.settingsTabGeneral
         case .shortcuts: return L10n.settingsTabShortcuts
         case .toolbar: return L10n.settingsTabToolbar
-        case .permissions: return L10n.settingsTabPermissions
         case .about: return L10n.settingsTabAbout
         }
     }
@@ -26,7 +23,6 @@ enum SettingsTab: CaseIterable {
         case .general: return "gearshape.fill"
         case .shortcuts: return "keyboard"
         case .toolbar: return "slider.horizontal.3"
-        case .permissions: return "lock.shield.fill"
         case .about: return "info.circle.fill"
         }
     }
@@ -36,7 +32,6 @@ enum SettingsTab: CaseIterable {
         case .general: return NSColor(calibratedRed: 0.62, green: 0.66, blue: 0.72, alpha: 1.0)
         case .shortcuts: return NSColor(calibratedRed: 0.36, green: 0.66, blue: 0.98, alpha: 1.0)
         case .toolbar: return NSColor(calibratedRed: 0.95, green: 0.54, blue: 0.62, alpha: 1.0)
-        case .permissions: return NSColor(calibratedRed: 0.36, green: 0.78, blue: 0.50, alpha: 1.0)
         case .about: return NSColor(calibratedRed: 0.70, green: 0.56, blue: 0.96, alpha: 1.0)
         }
     }
@@ -46,20 +41,7 @@ enum SettingsTab: CaseIterable {
         case .general: return L10n.settingsTabGeneralDescription
         case .shortcuts: return L10n.settingsTabShortcutsDescription
         case .toolbar: return L10n.settingsTabToolbarDescription
-        case .permissions: return L10n.settingsTabPermissionsDescription
         case .about: return L10n.settingsTabAboutDescription
-        }
-    }
-}
-
-enum RequiredPermission: Equatable {
-    case accessibility
-    case screenRecording
-
-    var flowPane: PermissionFlowPane {
-        switch self {
-        case .accessibility: return .accessibility
-        case .screenRecording: return .screenRecording
         }
     }
 }
@@ -67,7 +49,7 @@ enum RequiredPermission: Equatable {
 class SettingsView: NSView {
 
     var onMenuBarToggle: ((Bool) -> Void)?
-    var onPermissionSettingsRequest: ((RequiredPermission, NSView) -> Void)?
+    var onPermissionHelpRequest: (() -> Void)?
 
     // Switches
     private var menuBarSwitch: NSSwitch!
@@ -158,13 +140,9 @@ class SettingsView: NSView {
 
     private var shortcutResetButton: NSButton?
 
-    // Permission badges
-    private var accessibilityBadge: StatusBadge!
-    private var screenRecordingBadge: StatusBadge!
-
-    // Sidebar availability status
-    private var availabilityDotView: NSView?
-    private var availabilityStatusLabel: NSTextField?
+    // Sidebar permission status
+    private var featurePermissionHelpButton: NSButton?
+    private var featurePermissionStatus: PermissionStatusIndicator?
 
     // Labels (kept for language switching)
     private var menuBarTitleLabel: NSTextField!
@@ -172,11 +150,6 @@ class SettingsView: NSView {
     private var demoModeTitleLabel: NSTextField!
     private var demoModeSubtitleLabel: NSTextField!
     private var langTitleLabel: NSTextField!
-    private var permHeaderSubtitleLabel: NSTextField?
-    private var accessibilityNameLabel: NSTextField!
-    private var accessibilityDescLabel: NSTextField!
-    private var screenRecordingNameLabel: NSTextField!
-    private var screenRecordingDescLabel: NSTextField!
     private var aboutVersionLabel: NSTextField?
     private var aboutLicenseTitleLabel: NSTextField?
     private var aboutSourceTitleLabel: NSTextField?
@@ -200,7 +173,11 @@ class SettingsView: NSView {
     private var detailHeaderDivider: NSView!
     private var detailScrollWithHeaderConstraint: NSLayoutConstraint!
     private var detailScrollWithoutHeaderConstraint: NSLayoutConstraint!
+    private var detailScrollToBottomConstraint: NSLayoutConstraint!
+    private var detailScrollAboveAboutFooterConstraint: NSLayoutConstraint!
     private var detailScrollView: NSScrollView!
+    private var aboutFooterView: NSView!
+    private var aboutCopyrightLabel: NSTextField?
     private var paneContainer: NSView!
     private var paneViews: [SettingsTab: NSView] = [:]
     private var screenshotOutputActionTitleLabel: NSTextField!
@@ -220,15 +197,10 @@ class SettingsView: NSView {
     private var screenshotSavePathRevealButton: NSButton!
     private var screenshotSavePathRow: NSView?
     private var generalPopupWidthConstraints: [NSLayoutConstraint] = []
+    private var generalControlGroupWidthConstraints: [NSLayoutConstraint] = []
+    private var permissionAlertOutsideClickMonitor: Any?
 
     private var refreshTimer: Timer?
-    private lazy var permissionFlowController = PermissionFlow.makeController(
-        configuration: PermissionFlowConfiguration(
-            requiredAppURLs: [Bundle.main.bundleURL],
-            localeIdentifier: Defaults.language.lprojName
-        )
-    )
-
     override init(frame: NSRect) {
         super.init(frame: frame)
         appearance = NSAppearance(named: .darkAqua)
@@ -256,6 +228,7 @@ class SettingsView: NSView {
 
     deinit {
         refreshTimer?.invalidate()
+        removePermissionAlertOutsideClickMonitor()
         cancelShortcutRecording()
         cancelSelectedImagePinShortcutRecording()
         cancelClipboardImagePinShortcutRecording()
@@ -302,7 +275,6 @@ class SettingsView: NSView {
         paneViews[.general] = buildGeneralPane()
         paneViews[.shortcuts] = buildShortcutsPane()
         paneViews[.toolbar] = buildToolbarPane()
-        paneViews[.permissions] = buildPermissionsPane()
         paneViews[.about] = buildAboutPane()
 
         // Default selection
@@ -352,33 +324,39 @@ class SettingsView: NSView {
         }
 
         let version = NSTextField(labelWithString: aboutVersionString())
-        version.font = NSFont.systemFont(ofSize: 14, weight: .medium)
+        version.font = NSFont.systemFont(ofSize: 12, weight: .medium)
         version.textColor = SettingsPalette.secondaryText
-        version.alignment = .center
+        version.alignment = .left
+        version.identifier = NSUserInterfaceItemIdentifier("sidebar-version")
         version.translatesAutoresizingMaskIntoConstraints = false
         sidebarVersionLabel = version
 
-        let statusDot = NSView()
-        statusDot.wantsLayer = true
-        statusDot.layer?.cornerRadius = 4
-        statusDot.translatesAutoresizingMaskIntoConstraints = false
-        availabilityDotView = statusDot
+        let featureHelpButton = HoverButton()
+        featureHelpButton.image = NSImage(
+            systemSymbolName: "questionmark.circle",
+            accessibilityDescription: nil
+        ) ?? NSImage()
+        featureHelpButton.target = self
+        featureHelpButton.action = #selector(featurePermissionHelpClicked)
+        featureHelpButton.showsHoverBackground = false
+        configurePermissionHelpButton(
+            featureHelpButton,
+            tooltip: L10n.featurePermissionHelpTooltip
+        )
+        featurePermissionHelpButton = featureHelpButton
 
-        let statusLabel = NSTextField(labelWithString: "")
-        statusLabel.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
-        statusLabel.alignment = .center
-        statusLabel.translatesAutoresizingMaskIntoConstraints = false
-        availabilityStatusLabel = statusLabel
+        let featureStatus = PermissionStatusIndicator(title: L10n.featurePermissionStatus)
+        featurePermissionStatus = featureStatus
 
-        let statusRow = NSStackView(views: [statusDot, statusLabel])
-        statusRow.orientation = .horizontal
-        statusRow.alignment = .centerY
-        statusRow.spacing = 6
+        let featureRow = permissionStatusRow(
+            status: featureStatus,
+            helpButton: featureHelpButton
+        )
 
-        let footerStack = NSStackView(views: [version, statusRow])
+        let footerStack = NSStackView(views: [featureRow, version])
         footerStack.orientation = .vertical
-        footerStack.alignment = .centerX
-        footerStack.spacing = 7
+        footerStack.alignment = .leading
+        footerStack.spacing = 6
         footerStack.translatesAutoresizingMaskIntoConstraints = false
         panel.addSubview(footerStack)
 
@@ -392,11 +370,7 @@ class SettingsView: NSView {
             stack.trailingAnchor.constraint(equalTo: panel.trailingAnchor, constant: -12),
             stack.bottomAnchor.constraint(lessThanOrEqualTo: footerStack.topAnchor, constant: -16),
 
-            statusDot.widthAnchor.constraint(equalToConstant: 8),
-            statusDot.heightAnchor.constraint(equalToConstant: 8),
-
-            footerStack.centerXAnchor.constraint(equalTo: panel.centerXAnchor),
-            footerStack.leadingAnchor.constraint(greaterThanOrEqualTo: panel.leadingAnchor, constant: 16),
+            footerStack.leadingAnchor.constraint(equalTo: title.leadingAnchor),
             footerStack.trailingAnchor.constraint(lessThanOrEqualTo: panel.trailingAnchor, constant: -16),
             footerStack.bottomAnchor.constraint(equalTo: panel.bottomAnchor, constant: -18),
         ])
@@ -404,11 +378,43 @@ class SettingsView: NSView {
         return panel
     }
 
+    private func configurePermissionHelpButton(_ button: NSButton, tooltip: String) {
+        button.isBordered = false
+        button.imagePosition = .imageOnly
+        button.contentTintColor = SettingsPalette.secondaryText
+        button.toolTip = tooltip
+        button.setAccessibilityLabel(tooltip)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            button.widthAnchor.constraint(equalToConstant: 18),
+            button.heightAnchor.constraint(equalToConstant: 18),
+        ])
+    }
+
+    private func permissionStatusRow(
+        status: PermissionStatusIndicator,
+        helpButton: NSButton
+    ) -> NSStackView {
+        let row = NSStackView(views: [status, helpButton])
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 6
+        row.translatesAutoresizingMaskIntoConstraints = false
+        return row
+    }
+
     private func aboutVersionString() -> String {
         let info = Bundle.main.infoDictionary
         let short = info?["CFBundleShortVersionString"] as? String ?? "—"
         let build = info?["CFBundleVersion"] as? String ?? "—"
         return L10n.aboutVersion(short, build: build)
+    }
+
+    private func aboutVersionValueString() -> String {
+        let info = Bundle.main.infoDictionary
+        let short = info?["CFBundleShortVersionString"] as? String ?? "—"
+        let build = info?["CFBundleVersion"] as? String ?? "—"
+        return L10n.aboutVersionValue(short, build: build)
     }
 
     @objc private func tabClicked(_ sender: TabButton) {
@@ -420,14 +426,18 @@ class SettingsView: NSView {
         for btn in tabButtons {
             btn.isSelected = (btn.tab == tab)
         }
-        detailTitleLabel?.stringValue = tab.description
-        let hidesDetailHeader = tab == .about
-        detailTitleLabel?.isHidden = hidesDetailHeader
-        detailHeaderDivider?.isHidden = hidesDetailHeader
+        refreshDetailHeader(for: tab)
+        let showsAboutFooter = tab == .about
+        aboutFooterView?.isHidden = !showsAboutFooter
         if let withHeader = detailScrollWithHeaderConstraint,
            let withoutHeader = detailScrollWithoutHeaderConstraint {
             NSLayoutConstraint.deactivate([withHeader, withoutHeader])
-            (hidesDetailHeader ? withoutHeader : withHeader).isActive = true
+            withHeader.isActive = true
+        }
+        if let toBottom = detailScrollToBottomConstraint,
+           let aboveFooter = detailScrollAboveAboutFooterConstraint {
+            NSLayoutConstraint.deactivate([toBottom, aboveFooter])
+            (showsAboutFooter ? aboveFooter : toBottom).isActive = true
         }
         shortcutResetButton?.isHidden = tab != .shortcuts
 
@@ -442,6 +452,28 @@ class SettingsView: NSView {
             pane.trailingAnchor.constraint(equalTo: paneContainer.trailingAnchor),
             pane.bottomAnchor.constraint(equalTo: paneContainer.bottomAnchor),
         ])
+    }
+
+    private func refreshDetailHeader(for tab: SettingsTab) {
+        let isAbout = tab == .about
+        detailTitleLabel?.stringValue = isAbout ? L10n.aboutTitle : tab.description
+        detailTitleLabel?.font = NSFont.systemFont(
+            ofSize: isAbout ? 21 : 14,
+            weight: isAbout ? .bold : .medium
+        )
+        detailTitleLabel?.textColor = isAbout
+            ? SettingsPalette.primaryText
+            : SettingsPalette.secondaryText
+        detailTitleLabel?.isHidden = false
+        detailHeaderDivider?.isHidden = isAbout
+    }
+
+    func showGeneralTab() {
+        selectTab(.general)
+    }
+
+    func showAboutTab() {
+        selectTab(.about)
     }
 
     // MARK: - Detail panel
@@ -475,6 +507,7 @@ class SettingsView: NSView {
         detailHeaderDivider = headerDivider
 
         let scroll = NSScrollView()
+        scroll.identifier = NSUserInterfaceItemIdentifier("settings-detail-scroll")
         scroll.translatesAutoresizingMaskIntoConstraints = false
         scroll.drawsBackground = false
         scroll.hasVerticalScroller = true
@@ -490,14 +523,41 @@ class SettingsView: NSView {
         scroll.documentView = container
         paneContainer = container
 
+        let aboutFooter = NSView()
+        aboutFooter.identifier = NSUserInterfaceItemIdentifier("about-footer")
+        aboutFooter.translatesAutoresizingMaskIntoConstraints = false
+        aboutFooter.isHidden = true
+        panel.addSubview(aboutFooter)
+        aboutFooterView = aboutFooter
+
+        let footerDivider = NSView()
+        footerDivider.wantsLayer = true
+        footerDivider.layer?.backgroundColor = SettingsPalette.separator.cgColor
+        footerDivider.translatesAutoresizingMaskIntoConstraints = false
+        aboutFooter.addSubview(footerDivider)
+
+        let copyrightLabel = NSTextField(labelWithString: L10n.aboutCopyright)
+        copyrightLabel.identifier = NSUserInterfaceItemIdentifier("about-copyright")
+        copyrightLabel.font = NSFont.systemFont(ofSize: 11, weight: .regular)
+        copyrightLabel.textColor = SettingsPalette.tertiaryText
+        copyrightLabel.translatesAutoresizingMaskIntoConstraints = false
+        aboutFooter.addSubview(copyrightLabel)
+        aboutCopyrightLabel = copyrightLabel
+
         let scrollWithHeader = scroll.topAnchor.constraint(equalTo: headerDivider.bottomAnchor)
         let scrollWithoutHeader = scroll.topAnchor.constraint(equalTo: panel.topAnchor)
         detailScrollWithHeaderConstraint = scrollWithHeader
         detailScrollWithoutHeaderConstraint = scrollWithoutHeader
         scrollWithHeader.isActive = true
 
+        let scrollToBottom = scroll.bottomAnchor.constraint(equalTo: panel.bottomAnchor)
+        let scrollAboveFooter = scroll.bottomAnchor.constraint(equalTo: aboutFooter.topAnchor)
+        detailScrollToBottomConstraint = scrollToBottom
+        detailScrollAboveAboutFooterConstraint = scrollAboveFooter
+        scrollToBottom.isActive = true
+
         NSLayoutConstraint.activate([
-            title.topAnchor.constraint(equalTo: panel.topAnchor, constant: 22),
+            title.topAnchor.constraint(equalTo: panel.topAnchor, constant: 20),
             title.leadingAnchor.constraint(equalTo: panel.leadingAnchor, constant: 28),
             title.trailingAnchor.constraint(lessThanOrEqualTo: resetButton.leadingAnchor, constant: -16),
 
@@ -511,7 +571,20 @@ class SettingsView: NSView {
 
             scroll.leadingAnchor.constraint(equalTo: panel.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: panel.trailingAnchor),
-            scroll.bottomAnchor.constraint(equalTo: panel.bottomAnchor),
+
+            aboutFooter.leadingAnchor.constraint(equalTo: panel.leadingAnchor),
+            aboutFooter.trailingAnchor.constraint(equalTo: panel.trailingAnchor),
+            aboutFooter.bottomAnchor.constraint(equalTo: panel.bottomAnchor),
+            aboutFooter.heightAnchor.constraint(equalToConstant: 46),
+
+            footerDivider.topAnchor.constraint(equalTo: aboutFooter.topAnchor),
+            footerDivider.leadingAnchor.constraint(equalTo: aboutFooter.leadingAnchor, constant: 28),
+            footerDivider.trailingAnchor.constraint(equalTo: aboutFooter.trailingAnchor, constant: -28),
+            footerDivider.heightAnchor.constraint(equalToConstant: 1),
+
+            copyrightLabel.leadingAnchor.constraint(equalTo: aboutFooter.leadingAnchor, constant: 28),
+            copyrightLabel.trailingAnchor.constraint(lessThanOrEqualTo: aboutFooter.trailingAnchor, constant: -28),
+            copyrightLabel.centerYAnchor.constraint(equalTo: aboutFooter.centerYAnchor, constant: 2),
 
             container.topAnchor.constraint(equalTo: scroll.contentView.topAnchor),
             container.leadingAnchor.constraint(equalTo: scroll.contentView.leadingAnchor),
@@ -654,12 +727,12 @@ class SettingsView: NSView {
         labelStack.widthAnchor.constraint(greaterThanOrEqualToConstant: 300).isActive = true
         optionRow.addArrangedSubview(flexSpacer())
 
-        windowShadowPreviewButton = SettingsActionButton(
-            title: L10n.windowShadowPreviewButton,
+        windowShadowPreviewButton = makeGeneralIconButton(
+            symbolName: "eye",
+            tooltip: L10n.windowShadowPreviewButton,
             target: self,
             action: #selector(windowShadowPreviewClicked(_:))
         )
-        configureGeneralActionButton(windowShadowPreviewButton)
         optionRow.addArrangedSubview(windowShadowPreviewButton)
 
         windowShadowPicker = SettingsPopUpButton(frame: .zero, pullsDown: false)
@@ -942,6 +1015,7 @@ class SettingsView: NSView {
 
         let screenshotPath = makeSavePathRow(
             title: L10n.screenshotSavePathLabel,
+            identifierPrefix: "screenshot",
             chooseAction: #selector(chooseScreenshotSavePathClicked),
             revealAction: #selector(revealScreenshotSavePathClicked)
         )
@@ -1037,6 +1111,7 @@ class SettingsView: NSView {
 
         let recordingPath = makeSavePathRow(
             title: L10n.recordingSavePathLabel,
+            identifierPrefix: "recording",
             chooseAction: #selector(chooseRecordingSavePathClicked),
             revealAction: #selector(revealRecordingSavePathClicked)
         )
@@ -1080,6 +1155,7 @@ class SettingsView: NSView {
 
     private func makeSavePathRow(
         title: String,
+        identifierPrefix: String,
         chooseAction: Selector,
         revealAction: Selector
     ) -> (row: NSView, title: NSTextField, value: NSTextField, chooseButton: NSButton, revealButton: NSButton) {
@@ -1106,21 +1182,35 @@ class SettingsView: NSView {
         labelStack.widthAnchor.constraint(greaterThanOrEqualToConstant: 260).isActive = true
         row.addArrangedSubview(flexSpacer())
 
-        let chooseButton = SettingsActionButton(
+        let chooseButton = SettingsOutlinedButton(
             title: L10n.savePathChoose,
             target: self,
             action: chooseAction
         )
-        configureGeneralActionButton(chooseButton)
-        row.addArrangedSubview(chooseButton)
+        chooseButton.identifier = NSUserInterfaceItemIdentifier("\(identifierPrefix)-save-path-choose")
+        configureGeneralOutlinedButton(chooseButton)
+        chooseButton.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
-        let revealButton = SettingsActionButton(
-            title: L10n.savePathReveal,
+        let revealButton = makeGeneralIconButton(
+            symbolName: "folder",
+            tooltip: L10n.savePathReveal,
             target: self,
             action: revealAction
         )
-        configureGeneralActionButton(revealButton)
-        row.addArrangedSubview(revealButton)
+        revealButton.identifier = NSUserInterfaceItemIdentifier("\(identifierPrefix)-save-path-reveal")
+
+        let controlGroup = NSStackView(views: [chooseButton, revealButton])
+        controlGroup.orientation = .horizontal
+        controlGroup.alignment = .centerY
+        controlGroup.spacing = 6
+        controlGroup.identifier = NSUserInterfaceItemIdentifier("\(identifierPrefix)-save-path-controls")
+        controlGroup.translatesAutoresizingMaskIntoConstraints = false
+        constrainGeneralControlGroupWidth(controlGroup)
+        chooseButton.widthAnchor.constraint(
+            equalTo: controlGroup.widthAnchor,
+            constant: -(34 + controlGroup.spacing)
+        ).isActive = true
+        row.addArrangedSubview(controlGroup)
         constrainSettingsRowHeight(row)
 
         return (row, titleLabel, valueLabel, chooseButton, revealButton)
@@ -1137,6 +1227,9 @@ class SettingsView: NSView {
         let width = preferredGeneralPopupWidth()
         for constraint in generalPopupWidthConstraints {
             constraint.constant = width
+        }
+        for constraint in generalControlGroupWidthConstraints {
+            constraint.constant = preferredGeneralControlGroupWidth()
         }
     }
 
@@ -1163,6 +1256,52 @@ class SettingsView: NSView {
         (button as? SettingsActionButton)?.enableHoverFeedback()
     }
 
+    private func constrainGeneralControlGroupWidth(_ view: NSView) {
+        let constraint = view.widthAnchor.constraint(equalToConstant: preferredGeneralControlGroupWidth())
+        constraint.isActive = true
+        generalControlGroupWidthConstraints.append(constraint)
+    }
+
+    private func preferredGeneralControlGroupWidth() -> CGFloat {
+        let popup = SettingsPopUpButton(frame: .zero, pullsDown: false)
+        popup.controlSize = .small
+        let alignmentRect = NSRect(
+            x: 0,
+            y: 0,
+            width: preferredGeneralPopupWidth(),
+            height: 34
+        )
+        return popup.frame(forAlignmentRect: alignmentRect).width
+    }
+
+    private func configureGeneralOutlinedButton(_ button: SettingsOutlinedButton) {
+        button.controlSize = .large
+        button.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.setContentHuggingPriority(.required, for: .horizontal)
+        button.heightAnchor.constraint(equalToConstant: 34).isActive = true
+    }
+
+    private func makeGeneralIconButton(
+        symbolName: String,
+        tooltip: String,
+        target: AnyObject?,
+        action: Selector
+    ) -> SettingsOutlinedButton {
+        let button = SettingsOutlinedButton(title: "", target: target, action: action)
+        button.image = NSImage(
+            systemSymbolName: symbolName,
+            accessibilityDescription: tooltip
+        )?.withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 14, weight: .medium))
+        button.imagePosition = .imageOnly
+        button.imageScaling = .scaleProportionallyDown
+        button.toolTip = tooltip
+        button.setAccessibilityLabel(tooltip)
+        configureGeneralOutlinedButton(button)
+        button.widthAnchor.constraint(equalToConstant: 34).isActive = true
+        return button
+    }
+
     private func buildToolbarPane() -> NSView {
         let host = NSView()
         host.translatesAutoresizingMaskIntoConstraints = false
@@ -1177,152 +1316,162 @@ class SettingsView: NSView {
         return host
     }
 
-    private func buildPermissionsPane() -> NSView {
-        let stack = paneStack(spacing: 0)
-
-        let permCard = generalCard()
-        let permInner = verticalInnerStack()
-        permCard.addSubview(permInner)
-        pin(
-            permInner,
-            to: permCard,
-            insets: NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
-        )
-
-        let acc = makePermissionRow(
-            name: L10n.accessibilityPermission,
-            description: L10n.accessibilityDescription,
-            action: #selector(openAccessibilitySettings(_:))
-        )
-        accessibilityNameLabel = acc.name
-        accessibilityDescLabel = acc.desc
-        accessibilityBadge = acc.badge
-        permInner.addArrangedSubview(acc.row)
-        acc.row.widthAnchor.constraint(equalTo: permInner.widthAnchor).isActive = true
-        permInner.addArrangedSubview(rowDivider())
-
-        let sc = makePermissionRow(
-            name: L10n.screenRecordingPermission,
-            description: L10n.screenRecordingDescription,
-            action: #selector(openScreenRecordingSettings(_:))
-        )
-        screenRecordingNameLabel = sc.name
-        screenRecordingDescLabel = sc.desc
-        screenRecordingBadge = sc.badge
-        permInner.addArrangedSubview(sc.row)
-        sc.row.widthAnchor.constraint(equalTo: permInner.widthAnchor).isActive = true
-
-        stack.addArrangedSubview(permCard)
-        permCard.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
-
-        return wrapPane(stack, topInset: 0)
-    }
-
     private func buildAboutPane() -> NSView {
         let stack = paneStack(spacing: 0)
-        stack.alignment = .centerX
+        stack.alignment = .leading
+        stack.identifier = NSUserInterfaceItemIdentifier("about-content")
 
-        let iconView = NSImageView()
-        iconView.image = NSApp.applicationIconImage
-        iconView.imageScaling = .scaleProportionallyUpOrDown
-        iconView.translatesAutoresizingMaskIntoConstraints = false
-        iconView.wantsLayer = true
-        iconView.layer?.cornerRadius = 22
-        iconView.layer?.cornerCurve = .continuous
-        iconView.layer?.masksToBounds = true
-        NSLayoutConstraint.activate([
-            iconView.widthAnchor.constraint(equalToConstant: 96),
-            iconView.heightAnchor.constraint(equalToConstant: 96),
-        ])
+        let version = makeAboutMetadataRow(
+            title: L10n.aboutVersionTitle,
+            value: aboutVersionValueString()
+        )
+        aboutVersionLabel = version.value
+        stack.addArrangedSubview(version.row)
+        stack.addArrangedSubview(makeAboutMetadataRow(
+            title: L10n.aboutCompatibilityTitle,
+            value: L10n.aboutCompatibilityValue
+        ).row)
+        stack.addArrangedSubview(makeAboutMetadataRow(
+            title: L10n.aboutSystemRequirementTitle,
+            value: L10n.aboutSystemRequirementValue
+        ).row)
 
-        let nameLabel = NSTextField(labelWithString: "aulycShot")
-        nameLabel.font = NSFont.systemFont(ofSize: 24, weight: .bold)
-        nameLabel.textColor = SettingsPalette.primaryText
-        nameLabel.alignment = .center
+        stack.addArrangedSubview(aboutSpacer(height: 22))
+        stack.addArrangedSubview(aboutSectionTitle(L10n.aboutIntroductionTitle))
+        stack.addArrangedSubview(aboutSpacer(height: 8))
+        for paragraph in [
+            L10n.aboutIntroductionFirst,
+            L10n.aboutIntroductionSecond,
+            L10n.aboutIntroductionThird,
+        ] {
+            let label = aboutBodyLabel(paragraph)
+            stack.addArrangedSubview(label)
+            label.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+            stack.addArrangedSubview(aboutSpacer(height: 7))
+        }
 
-        let versionLabel = NSTextField(labelWithString: aboutVersionString())
-        versionLabel.font = NSFont.systemFont(ofSize: 14, weight: .medium)
-        versionLabel.textColor = SettingsPalette.secondaryText
-        versionLabel.alignment = .center
-        aboutVersionLabel = versionLabel
+        stack.addArrangedSubview(aboutSpacer(height: 11))
+        stack.addArrangedSubview(aboutSectionTitle(L10n.aboutWebsiteTitle))
+        stack.addArrangedSubview(aboutSpacer(height: 6))
+        let website = makeAboutActionRow(
+            title: L10n.aboutWebsiteURL,
+            action: #selector(openWebsite)
+        )
+        stack.addArrangedSubview(website.row)
 
-        let identityStack = NSStackView(views: [iconView, nameLabel, versionLabel])
-        identityStack.orientation = .vertical
-        identityStack.alignment = .centerX
-        identityStack.spacing = 8
-        identityStack.translatesAutoresizingMaskIntoConstraints = false
-        stack.addArrangedSubview(identityStack)
-
-        let identityGap = NSView()
-        identityGap.translatesAutoresizingMaskIntoConstraints = false
-        identityGap.heightAnchor.constraint(equalToConstant: 24).isActive = true
-        stack.addArrangedSubview(identityGap)
-
-        let links = verticalInnerStack()
-        links.spacing = 8
-        links.translatesAutoresizingMaskIntoConstraints = false
-        links.widthAnchor.constraint(equalToConstant: Self.aboutListWidth).isActive = true
-        stack.addArrangedSubview(links)
+        stack.addArrangedSubview(aboutSpacer(height: 20))
+        stack.addArrangedSubview(aboutSectionTitle(L10n.aboutRelatedLinksTitle))
+        stack.addArrangedSubview(aboutSpacer(height: 6))
 
         let updateRow = makeUpdateRow()
-        links.addArrangedSubview(updateRow)
-        updateRow.widthAnchor.constraint(equalTo: links.widthAnchor).isActive = true
+        stack.addArrangedSubview(updateRow)
 
         let license = makeAboutActionRow(
             title: L10n.aboutLicense,
-            symbolName: "doc.text",
             action: #selector(openLicense)
         )
         aboutLicenseTitleLabel = license.title
-        links.addArrangedSubview(license.row)
-        license.row.widthAnchor.constraint(equalTo: links.widthAnchor).isActive = true
+        stack.addArrangedSubview(license.row)
 
         let repo = makeAboutActionRow(
             title: L10n.aboutSourceCode,
-            symbolName: "chevron.left.forwardslash.chevron.right",
             action: #selector(openSourceRepo)
         )
         aboutSourceTitleLabel = repo.title
-        links.addArrangedSubview(repo.row)
-        repo.row.widthAnchor.constraint(equalTo: links.widthAnchor).isActive = true
+        stack.addArrangedSubview(repo.row)
 
         let star = makeAboutActionRow(
             title: L10n.aboutStarOnGitHub,
-            symbolName: "star",
             action: #selector(openStarOnGitHub)
         )
         aboutStarTitleLabel = star.title
-        links.addArrangedSubview(star.row)
-        star.row.widthAnchor.constraint(equalTo: links.widthAnchor).isActive = true
+        stack.addArrangedSubview(star.row)
 
         let featureRequest = makeAboutActionRow(
             title: L10n.aboutFeatureRequest,
-            symbolName: "lightbulb",
             action: #selector(openFeatureRequest)
         )
         aboutFeatureRequestTitleLabel = featureRequest.title
-        links.addArrangedSubview(featureRequest.row)
-        featureRequest.row.widthAnchor.constraint(equalTo: links.widthAnchor).isActive = true
+        stack.addArrangedSubview(featureRequest.row)
 
         let bugReport = makeAboutActionRow(
             title: L10n.aboutBugReport,
-            symbolName: "ladybug",
             action: #selector(openBugReport)
         )
         aboutBugReportTitleLabel = bugReport.title
-        links.addArrangedSubview(bugReport.row)
-        bugReport.row.widthAnchor.constraint(equalTo: links.widthAnchor).isActive = true
+        stack.addArrangedSubview(bugReport.row)
 
         let errorLog = makeAboutActionRow(
             title: L10n.aboutErrorLog,
-            symbolName: "doc.text.magnifyingglass",
             action: #selector(showErrorLogWindow)
         )
         errorLogTitleLabel = errorLog.title
-        links.addArrangedSubview(errorLog.row)
-        errorLog.row.widthAnchor.constraint(equalTo: links.widthAnchor).isActive = true
+        stack.addArrangedSubview(errorLog.row)
 
-        return wrapAboutPane(stack)
+        stack.addArrangedSubview(aboutSpacer(height: 20))
+        stack.addArrangedSubview(aboutSectionTitle(L10n.aboutAcknowledgementsTitle))
+        stack.addArrangedSubview(aboutSpacer(height: 8))
+        for acknowledgement in [
+            L10n.aboutAcknowledgementFirst,
+            L10n.aboutAcknowledgementSecond,
+            L10n.aboutAcknowledgementThird,
+        ] {
+            let label = aboutBodyLabel(acknowledgement)
+            stack.addArrangedSubview(label)
+            label.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+            stack.addArrangedSubview(aboutSpacer(height: 7))
+        }
+
+        return wrapPane(stack, topInset: 18)
+    }
+
+    private struct AboutMetadataRowBuild {
+        let row: NSView
+        let value: NSTextField
+    }
+
+    private func makeAboutMetadataRow(title: String, value: String) -> AboutMetadataRowBuild {
+        let titleLabel = NSTextField(labelWithString: title)
+        titleLabel.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        titleLabel.textColor = SettingsPalette.primaryText
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.widthAnchor.constraint(equalToConstant: 92).isActive = true
+
+        let valueLabel = NSTextField(labelWithString: value)
+        valueLabel.font = NSFont.systemFont(ofSize: 13, weight: .regular)
+        valueLabel.textColor = SettingsPalette.secondaryText
+
+        let row = NSStackView(views: [titleLabel, valueLabel])
+        row.orientation = .horizontal
+        row.alignment = .firstBaseline
+        row.spacing = 12
+        row.translatesAutoresizingMaskIntoConstraints = false
+        row.heightAnchor.constraint(greaterThanOrEqualToConstant: 25).isActive = true
+        return AboutMetadataRowBuild(row: row, value: valueLabel)
+    }
+
+    private func aboutSectionTitle(_ title: String) -> NSTextField {
+        let label = NSTextField(labelWithString: title)
+        label.font = NSFont.systemFont(ofSize: 15, weight: .semibold)
+        label.textColor = SettingsPalette.primaryText
+        return label
+    }
+
+    private func aboutBodyLabel(_ text: String) -> NSTextField {
+        let label = NSTextField(wrappingLabelWithString: text)
+        label.font = NSFont.systemFont(ofSize: 13, weight: .regular)
+        label.textColor = SettingsPalette.secondaryText
+        label.lineBreakMode = .byWordWrapping
+        label.maximumNumberOfLines = 0
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        return label
+    }
+
+    private func aboutSpacer(height: CGFloat) -> NSView {
+        let spacer = NSView()
+        spacer.translatesAutoresizingMaskIntoConstraints = false
+        spacer.heightAnchor.constraint(equalToConstant: height).isActive = true
+        return spacer
     }
 
     @objc private func showErrorLogWindow() {
@@ -1343,10 +1492,9 @@ class SettingsView: NSView {
         let button: NSButton?
     }
 
-    /// Compact icon-and-label link matching the centered aulycMail About page.
+    /// Plain text link used by the document-style About page.
     private func makeAboutActionRow(
         title: String,
-        symbolName: String,
         detail: String = "",
         action: Selector? = nil
     ) -> AboutActionRowBuild {
@@ -1358,56 +1506,41 @@ class SettingsView: NSView {
             link.action = action
             link.title = ""
             link.isBordered = false
-            link.cornerRadius = 6
+            link.cornerRadius = 0
             link.showsHoverBackground = false
             link.setAccessibilityLabel(title)
             row = link
             button = link
         } else {
-            let staticRow = NSView()
-            staticRow.translatesAutoresizingMaskIntoConstraints = false
-            row = staticRow
+            row = NSView()
             button = nil
         }
         row.translatesAutoresizingMaskIntoConstraints = false
 
-        let icon = NSImageView()
-        icon.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)
-            ?? NSImage(systemSymbolName: "circle", accessibilityDescription: nil)
-        icon.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 18, weight: .regular)
-        icon.contentTintColor = SettingsPalette.accent
-        icon.imageScaling = .scaleProportionallyDown
-        icon.setAccessibilityElement(false)
-        icon.setAccessibilityHidden(true)
-        icon.translatesAutoresizingMaskIntoConstraints = false
-
         let titleLabel = NSTextField(labelWithString: title)
-        titleLabel.font = NSFont.systemFont(ofSize: 14, weight: .medium)
-        titleLabel.textColor = SettingsPalette.accent
+        titleLabel.font = NSFont.systemFont(ofSize: 13, weight: .regular)
+        titleLabel.textColor = NSColor.systemBlue
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
 
         let detailLabel = NSTextField(labelWithString: detail)
-        detailLabel.font = NSFont.systemFont(ofSize: 11, weight: .regular)
+        detailLabel.font = NSFont.systemFont(ofSize: 12, weight: .regular)
         detailLabel.textColor = SettingsPalette.secondaryText
         detailLabel.lineBreakMode = .byTruncatingTail
         detailLabel.translatesAutoresizingMaskIntoConstraints = false
         detailLabel.isHidden = detail.isEmpty
 
-        let contentStack = NSStackView(views: [icon, titleLabel, detailLabel])
+        let contentStack = NSStackView(views: [titleLabel, detailLabel])
         contentStack.orientation = .horizontal
-        contentStack.alignment = .centerY
-        contentStack.spacing = 10
+        contentStack.alignment = .firstBaseline
+        contentStack.spacing = 8
         contentStack.translatesAutoresizingMaskIntoConstraints = false
         row.addSubview(contentStack)
         button?.interactiveContentView = contentStack
         NSLayoutConstraint.activate([
-            row.heightAnchor.constraint(equalToConstant: Self.aboutLinkRowHeight),
-            contentStack.centerXAnchor.constraint(equalTo: row.centerXAnchor),
+            row.heightAnchor.constraint(greaterThanOrEqualToConstant: Self.aboutLinkRowHeight),
+            contentStack.leadingAnchor.constraint(equalTo: row.leadingAnchor),
+            contentStack.trailingAnchor.constraint(equalTo: row.trailingAnchor),
             contentStack.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-            contentStack.leadingAnchor.constraint(greaterThanOrEqualTo: row.leadingAnchor, constant: 10),
-            contentStack.trailingAnchor.constraint(lessThanOrEqualTo: row.trailingAnchor, constant: -10),
-            icon.widthAnchor.constraint(equalToConstant: 20),
-            icon.heightAnchor.constraint(equalToConstant: 20),
         ])
 
         return AboutActionRowBuild(
@@ -1420,6 +1553,12 @@ class SettingsView: NSView {
 
     @objc private func openSourceRepo() {
         if let url = URL(string: "https://github.com/aulyc/aulycShot") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    @objc private func openWebsite() {
+        if let url = URL(string: "https://www.aulyc.com") {
             NSWorkspace.shared.open(url)
         }
     }
@@ -1452,7 +1591,6 @@ class SettingsView: NSView {
     private func makeUpdateRow() -> NSView {
         let update = makeAboutActionRow(
             title: L10n.aboutUpdateTitle,
-            symbolName: "arrow.triangle.2.circlepath",
             action: #selector(aboutUpdateButtonClicked)
         )
         aboutUpdateTitleLabel = update.title
@@ -1548,24 +1686,9 @@ class SettingsView: NSView {
         return host
     }
 
-    private func wrapAboutPane(_ stack: NSStackView) -> NSView {
-        let host = NSView()
-        host.translatesAutoresizingMaskIntoConstraints = false
-        host.addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: host.topAnchor, constant: 36),
-            stack.centerXAnchor.constraint(equalTo: host.centerXAnchor),
-            stack.leadingAnchor.constraint(greaterThanOrEqualTo: host.leadingAnchor, constant: 28),
-            stack.trailingAnchor.constraint(lessThanOrEqualTo: host.trailingAnchor, constant: -28),
-            stack.bottomAnchor.constraint(equalTo: host.bottomAnchor, constant: -28),
-        ])
-        return host
-    }
-
     // MARK: - Builders
 
     private static let settingsRowMinimumHeight: CGFloat = 52
-    private static let aboutListWidth: CGFloat = 440
     private static let aboutLinkRowHeight: CGFloat = 28
 
     private func generalCard() -> CardView {
@@ -1837,75 +1960,6 @@ class SettingsView: NSView {
         return RadioRowBuild(row: row, title: titleLabel, subtitle: subtitleLabel, button: button)
     }
 
-    private struct PermissionRowBuild {
-        let row: NSView
-        let name: NSTextField
-        let desc: NSTextField
-        let badge: StatusBadge
-    }
-
-    private func makePermissionRow(
-        name: String,
-        description: String,
-        action: Selector
-    ) -> PermissionRowBuild {
-        let button = HoverButton()
-        button.translatesAutoresizingMaskIntoConstraints = false
-        button.target = self
-        button.action = action
-        button.title = ""
-        button.isBordered = false
-        button.cornerRadius = 10
-
-        let nameLbl = primaryLabel(name)
-        nameLbl.translatesAutoresizingMaskIntoConstraints = false
-
-        let badge = StatusBadge()
-        badge.translatesAutoresizingMaskIntoConstraints = false
-
-        let topLine = NSStackView(views: [nameLbl, badge])
-        topLine.orientation = .horizontal
-        topLine.alignment = .centerY
-        topLine.spacing = 8
-        topLine.translatesAutoresizingMaskIntoConstraints = false
-
-        let descLbl = secondaryLabel(description, wrapping: true)
-        descLbl.translatesAutoresizingMaskIntoConstraints = false
-
-        let textStack = NSStackView()
-        textStack.orientation = .vertical
-        textStack.alignment = .leading
-        textStack.spacing = 2
-        textStack.translatesAutoresizingMaskIntoConstraints = false
-        textStack.addArrangedSubview(topLine)
-        textStack.addArrangedSubview(descLbl)
-
-        let chevron = NSTextField(labelWithString: "\u{203A}")
-        chevron.font = NSFont.systemFont(ofSize: 18, weight: .regular)
-        chevron.textColor = NSColor.white.withAlphaComponent(0.32)
-        chevron.translatesAutoresizingMaskIntoConstraints = false
-        chevron.setContentHuggingPriority(.required, for: .horizontal)
-
-        button.addSubview(textStack)
-        button.addSubview(chevron)
-        NSLayoutConstraint.activate([
-            textStack.topAnchor.constraint(equalTo: button.topAnchor, constant: 10),
-            textStack.bottomAnchor.constraint(equalTo: button.bottomAnchor, constant: -10),
-            textStack.leadingAnchor.constraint(equalTo: button.leadingAnchor, constant: 14),
-            textStack.trailingAnchor.constraint(lessThanOrEqualTo: chevron.leadingAnchor, constant: -10),
-
-            chevron.centerYAnchor.constraint(equalTo: button.centerYAnchor),
-            chevron.trailingAnchor.constraint(equalTo: button.trailingAnchor, constant: -14),
-        ])
-        constrainSettingsRowHeight(button)
-
-        return PermissionRowBuild(row: button, name: nameLbl, desc: descLbl, badge: badge)
-    }
-
-    func showPermissionsTab() {
-        selectTab(.permissions)
-    }
-
     // MARK: - Permission polling
 
     private func startRefreshTimer() {
@@ -1915,32 +1969,8 @@ class SettingsView: NSView {
     }
 
     func refreshPermissionStatus() {
-        let accessibilityGranted = AppPermissions.accessibilityGranted
-        let screenRecordingGranted = AppPermissions.screenRecordingGranted
-
-        accessibilityBadge?.configure(granted: accessibilityGranted)
-        screenRecordingBadge?.configure(granted: screenRecordingGranted)
-        refreshAvailabilityStatus()
-    }
-
-    private func refreshAvailabilityStatus() {
-        let color: NSColor
-        let title: String
-        switch AppPermissions.availabilityState {
-        case .unavailable:
-            color = .systemRed
-            title = L10n.appStatusUnavailable
-        case .partiallyAvailable:
-            color = .systemYellow
-            title = L10n.appStatusPartiallyAvailable
-        case .normallyAvailable:
-            color = .systemGreen
-            title = L10n.appStatusNormallyAvailable
-        }
-
-        availabilityDotView?.layer?.backgroundColor = color.cgColor
-        availabilityStatusLabel?.stringValue = title
-        availabilityStatusLabel?.textColor = color
+        let availability = AppPermissions.featureAvailability
+        featurePermissionStatus?.configure(isAvailable: availability.isAvailable)
     }
 
     // MARK: - Actions
@@ -2128,36 +2158,96 @@ class SettingsView: NSView {
         onMenuBarToggle?(visible)
     }
 
-    @objc private func openAccessibilitySettings(_ sender: NSButton) {
-        startPermissionFlow(.accessibility, from: sender)
+    @objc private func featurePermissionHelpClicked() {
+        presentPermissionHelp()
     }
 
-    @objc private func openScreenRecordingSettings(_ sender: NSButton) {
-        startPermissionFlow(.screenRecording, from: sender)
-    }
-
-    private func startPermissionFlow(_ permission: RequiredPermission, from sourceView: NSView) {
-        if let onPermissionSettingsRequest {
-            onPermissionSettingsRequest(permission, sourceView)
+    func presentPermissionHelp() {
+        if let onPermissionHelpRequest {
+            onPermissionHelpRequest()
             return
         }
 
-        permissionFlowController.setLocaleIdentifier(Defaults.language.lprojName)
-        permissionFlowController.authorize(
-            pane: permission.flowPane,
-            suggestedAppURLs: [Bundle.main.bundleURL],
-            sourceFrameInScreen: sourceFrameInScreen(for: sourceView)
+        guard window?.attachedSheet == nil else { return }
+        let alert = makePermissionHelpAlert()
+
+        let completion: (NSApplication.ModalResponse) -> Void = { response in
+            switch response {
+            case .alertFirstButtonReturn:
+                NSWorkspace.shared.open(PermissionSettingsDestination.accessibility)
+            case .alertSecondButtonReturn:
+                NSWorkspace.shared.open(PermissionSettingsDestination.screenRecording)
+            default:
+                return
+            }
+        }
+
+        if let window {
+            alert.beginSheetModal(for: window) { [weak self] response in
+                self?.removePermissionAlertOutsideClickMonitor()
+                completion(response)
+            }
+            installPermissionAlertOutsideClickMonitor(for: alert.window)
+        } else {
+            completion(alert.runModal())
+        }
+    }
+
+    private func installPermissionAlertOutsideClickMonitor(for sheetWindow: NSWindow) {
+        removePermissionAlertOutsideClickMonitor()
+        permissionAlertOutsideClickMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: .leftMouseDown
+        ) { [weak self, weak sheetWindow] event in
+            guard let self,
+                  let sheetWindow,
+                  sheetWindow.sheetParent != nil
+            else {
+                return event
+            }
+
+            guard PermissionAlertDismissalPolicy.shouldDismiss(
+                sheetFrame: sheetWindow.frame,
+                clickScreenPoint: NSEvent.mouseLocation
+            ) else {
+                return event
+            }
+
+            removePermissionAlertOutsideClickMonitor()
+            DispatchQueue.main.async { [weak sheetWindow] in
+                guard let sheetWindow, let parentWindow = sheetWindow.sheetParent else { return }
+                parentWindow.endSheet(sheetWindow, returnCode: .cancel)
+            }
+            return nil
+        }
+    }
+
+    private func removePermissionAlertOutsideClickMonitor() {
+        guard let permissionAlertOutsideClickMonitor else { return }
+        NSEvent.removeMonitor(permissionAlertOutsideClickMonitor)
+        self.permissionAlertOutsideClickMonitor = nil
+    }
+
+    func makePermissionHelpAlert(
+        availability: PermissionFeatureAvailability = AppPermissions.featureAvailability
+    ) -> NSAlert {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = L10n.featurePermissionHelpTitle
+        alert.informativeText = L10n.featurePermissionHelpBody(
+            accessibilityStatus: availability.accessibilityGranted
+                ? L10n.permissionAvailable
+                : L10n.permissionUnavailable,
+            screenRecordingStatus: availability.screenRecordingGranted
+                ? L10n.permissionAvailable
+                : L10n.permissionUnavailable
         )
-    }
+        alert.addButton(withTitle: L10n.permissionHelpOpenAccessibility)
+        alert.addButton(withTitle: L10n.permissionHelpOpenScreenRecording)
 
-    private func sourceFrameInScreen(for view: NSView) -> CGRect? {
-        guard let window = view.window else { return nil }
-        let frameInWindow = view.convert(view.bounds, to: nil)
-        return window.convertToScreen(frameInWindow)
-    }
-
-    func closePermissionFlowPanel() {
-        permissionFlowController.closePanel()
+        let doneButton = alert.addButton(withTitle: L10n.permissionHelpDone)
+        doneButton.keyEquivalent = "\u{1b}"
+        doneButton.keyEquivalentModifierMask = []
+        return alert
     }
 
     // MARK: - Shortcut recording
@@ -3135,13 +3225,13 @@ class SettingsView: NSView {
     }
 
     @objc private func updateLocalization() {
-        permissionFlowController.setLocaleIdentifier(Defaults.language.lprojName)
         menuBarTitleLabel?.stringValue = L10n.showMenuBarIcon
         launchAtLoginTitleLabel?.stringValue = L10n.launchAtLogin
         demoModeTitleLabel?.stringValue = L10n.demoMode
         demoModeSubtitleLabel?.stringValue = L10n.demoModeHint
         langTitleLabel?.stringValue = L10n.languageHeader
-        windowShadowPreviewButton?.title = L10n.windowShadowPreviewButton
+        windowShadowPreviewButton?.toolTip = L10n.windowShadowPreviewButton
+        windowShadowPreviewButton?.setAccessibilityLabel(L10n.windowShadowPreviewButton)
         screenshotOutputActionTitleLabel?.stringValue = L10n.screenshotOutputActionLabel
         refreshScreenshotOutputControls()
         screenshotQualityTitleLabel?.stringValue = L10n.screenshotQualityLabel
@@ -3150,14 +3240,12 @@ class SettingsView: NSView {
         recordingSaveFormatTitleLabel?.stringValue = L10n.recordingSaveFormatSettingLabel
         screenshotSavePathTitleLabel?.stringValue = L10n.screenshotSavePathLabel
         recordingSavePathChooseButton?.title = L10n.savePathChoose
-        recordingSavePathRevealButton?.title = L10n.savePathReveal
+        recordingSavePathRevealButton?.toolTip = L10n.savePathReveal
+        recordingSavePathRevealButton?.setAccessibilityLabel(L10n.savePathReveal)
         screenshotSavePathChooseButton?.title = L10n.savePathChoose
-        screenshotSavePathRevealButton?.title = L10n.savePathReveal
+        screenshotSavePathRevealButton?.toolTip = L10n.savePathReveal
+        screenshotSavePathRevealButton?.setAccessibilityLabel(L10n.savePathReveal)
         refreshSavePathControls()
-        accessibilityNameLabel?.stringValue = L10n.accessibilityPermission
-        accessibilityDescLabel?.stringValue = L10n.accessibilityDescription
-        screenRecordingNameLabel?.stringValue = L10n.screenRecordingPermission
-        screenRecordingDescLabel?.stringValue = L10n.screenRecordingDescription
         windowShadowTitleLabel?.stringValue = L10n.windowShadowLabel
         windowShadowSubtitleLabel?.stringValue = L10n.windowShadowHint
         windowShadowLevelHintLabel?.stringValue = L10n.windowShadowLevelHint
@@ -3184,7 +3272,7 @@ class SettingsView: NSView {
         fileSaveShortcutTitleLabel?.stringValue = L10n.fileSaveShortcutHeader
         fileSaveShortcutRestoreButton?.toolTip = L10n.shortcutRestore
         shortcutResetButton?.title = L10n.toolbarSettingsReset
-        aboutVersionLabel?.stringValue = aboutVersionString()
+        aboutVersionLabel?.stringValue = aboutVersionValueString()
         aboutLicenseTitleLabel?.stringValue = L10n.aboutLicense
         aboutSourceTitleLabel?.stringValue = L10n.aboutSourceCode
         aboutStarTitleLabel?.stringValue = L10n.aboutStarOnGitHub
@@ -3204,14 +3292,38 @@ class SettingsView: NSView {
         refreshImageMergeShortcutDisplay()
         refreshClipboardShortcutDisplay()
         refreshFileSaveShortcutDisplay()
-        refreshAvailabilityStatus()
-        accessibilityBadge?.refreshTitle()
-        screenRecordingBadge?.refreshTitle()
+        featurePermissionHelpButton?.toolTip = L10n.featurePermissionHelpTooltip
+        featurePermissionHelpButton?.setAccessibilityLabel(L10n.featurePermissionHelpTooltip)
+        featurePermissionStatus?.setTitle(L10n.featurePermissionStatus)
+        refreshPermissionStatus()
         for btn in tabButtons { btn.refreshTitle() }
         sidebarTitleLabel?.stringValue = L10n.settings
         sidebarVersionLabel?.stringValue = aboutVersionString()
-        detailTitleLabel?.stringValue = selectedTab.description
+        aboutCopyrightLabel?.stringValue = L10n.aboutCopyright
+        let refreshedAboutPane = buildAboutPane()
+        paneViews[.about] = refreshedAboutPane
+        if selectedTab == .about {
+            selectTab(.about)
+        }
+        refreshDetailHeader(for: selectedTab)
         window?.title = L10n.settingsTitle
+    }
+}
+
+private enum PermissionSettingsDestination {
+    static let accessibility = makeURL(anchor: "Privacy_Accessibility")
+    static let screenRecording = makeURL(anchor: "Privacy_ScreenCapture")
+
+    private static func makeURL(anchor: String) -> URL {
+        URL(
+            string: "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?\(anchor)"
+        )!
+    }
+}
+
+enum PermissionAlertDismissalPolicy {
+    static func shouldDismiss(sheetFrame: NSRect, clickScreenPoint: NSPoint) -> Bool {
+        !sheetFrame.contains(clickScreenPoint)
     }
 }
 
@@ -3221,6 +3333,7 @@ enum SettingsPalette {
     static let contentBackground = NSColor(calibratedWhite: 0.115, alpha: 1.0)
     static let primaryText = NSColor.white.withAlphaComponent(0.94)
     static let secondaryText = NSColor.white.withAlphaComponent(0.62)
+    static let tertiaryText = NSColor.white.withAlphaComponent(0.38)
     static let separator = NSColor.white.withAlphaComponent(0.10)
 }
 
@@ -3539,52 +3652,250 @@ private final class CardView: NSView {
     }
 }
 
-// MARK: - Status badge
+// MARK: - Sidebar permission status
 
-final class StatusBadge: NSView {
-    private let label = NSTextField(labelWithString: "")
-    private var granted: Bool = false
+final class PermissionStatusIndicator: NSView {
+    static let availableColor = NSColor(calibratedRed: 0.10, green: 0.52, blue: 0.24, alpha: 1.0)
+    static let unavailableColor = NSColor.systemRed
+
+    private(set) var titleLabel = NSTextField(labelWithString: "")
+    private(set) var dotView = NSView()
+    private(set) var stateLabel = NSTextField(labelWithString: "")
+    private(set) var isAvailable = false
+    private(set) var title: String
+
+    init(title: String) {
+        self.title = title
+        super.init(frame: .zero)
+        commonInit()
+        refreshAppearance()
+    }
+
+    required init?(coder: NSCoder) {
+        title = ""
+        super.init(coder: coder)
+        commonInit()
+        refreshAppearance()
+    }
+
+    private func commonInit() {
+        translatesAutoresizingMaskIntoConstraints = false
+        wantsLayer = true
+        dotView.wantsLayer = true
+        dotView.layer?.cornerRadius = 4
+        dotView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(dotView)
+
+        titleLabel.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        titleLabel.textColor = SettingsPalette.secondaryText
+        titleLabel.alignment = .left
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleLabel.setContentHuggingPriority(.required, for: .horizontal)
+        titleLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+        addSubview(titleLabel)
+
+        stateLabel.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
+        stateLabel.alignment = .left
+        stateLabel.translatesAutoresizingMaskIntoConstraints = false
+        stateLabel.setContentHuggingPriority(.required, for: .horizontal)
+        stateLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+        addSubview(stateLabel)
+
+        NSLayoutConstraint.activate([
+            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor),
+            titleLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+
+            dotView.leadingAnchor.constraint(equalTo: titleLabel.trailingAnchor, constant: 6),
+            dotView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            dotView.widthAnchor.constraint(equalToConstant: 8),
+            dotView.heightAnchor.constraint(equalToConstant: 8),
+
+            stateLabel.leadingAnchor.constraint(equalTo: dotView.trailingAnchor, constant: 6),
+            stateLabel.trailingAnchor.constraint(equalTo: trailingAnchor),
+            stateLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+            heightAnchor.constraint(equalToConstant: 18),
+        ])
+        setContentHuggingPriority(.required, for: .horizontal)
+        setContentCompressionResistancePriority(.required, for: .horizontal)
+        setAccessibilityElement(true)
+    }
+
+    func setTitle(_ title: String) {
+        self.title = title
+        refreshAppearance()
+    }
+
+    func configure(isAvailable: Bool) {
+        self.isAvailable = isAvailable
+        refreshAppearance()
+    }
+
+    private func refreshAppearance() {
+        let stateTitle = isAvailable ? L10n.permissionAvailable : L10n.permissionUnavailable
+        let color = isAvailable ? Self.availableColor : Self.unavailableColor
+        titleLabel.stringValue = title
+        titleLabel.textColor = SettingsPalette.secondaryText
+        stateLabel.stringValue = stateTitle
+        stateLabel.textColor = color
+        dotView.layer?.backgroundColor = color.cgColor
+        setAccessibilityLabel("\(title) \(stateTitle)")
+    }
+}
+
+// MARK: - Pointing-hand action button
+
+final class SettingsOutlinedButton: NSButton {
+    static let cornerRadius: CGFloat = 7
+    static let restingBackgroundColor = NSColor.white.withAlphaComponent(0.055)
+    static let hoveredBackgroundColor = NSColor.white.withAlphaComponent(0.085)
+    static let pressedBackgroundColor = NSColor.white.withAlphaComponent(0.12)
+    static let disabledBackgroundColor = NSColor.white.withAlphaComponent(0.025)
+    static let restingBorderColor = NSColor.white.withAlphaComponent(0.16)
+    static let focusedBorderColor = SettingsPalette.accent.withAlphaComponent(0.72)
+    static let enabledContentColor = SettingsPalette.primaryText
+    static let disabledContentColor = SettingsPalette.primaryText.withAlphaComponent(0.38)
+
+    private var trackingArea: NSTrackingArea?
+    private(set) var isHovered = false
+    private var isPressed = false
+
+    override var alignmentRectInsets: NSEdgeInsets {
+        NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+    }
+
+    override var title: String {
+        didSet { applyContentAppearance() }
+    }
+
+    override var isEnabled: Bool {
+        didSet {
+            if !isEnabled {
+                isHovered = false
+                isPressed = false
+            }
+            applyAppearance()
+            window?.invalidateCursorRects(for: self)
+        }
+    }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         commonInit()
     }
+
+    convenience init(title: String, target: AnyObject?, action: Selector?) {
+        self.init(frame: .zero)
+        self.title = title
+        self.target = target
+        self.action = action
+        applyAppearance()
+    }
+
     required init?(coder: NSCoder) {
         super.init(coder: coder)
         commonInit()
     }
 
     private func commonInit() {
+        isBordered = false
+        focusRingType = .none
         wantsLayer = true
-        layer?.cornerRadius = 4
+        layer?.cornerRadius = Self.cornerRadius
         layer?.cornerCurve = .continuous
-        label.font = NSFont.systemFont(ofSize: 10, weight: .semibold)
-        label.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(label)
-        NSLayoutConstraint.activate([
-            label.topAnchor.constraint(equalTo: topAnchor, constant: 2),
-            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -2),
-            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
-            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
-        ])
-        setContentHuggingPriority(.required, for: .horizontal)
-        setContentCompressionResistancePriority(.required, for: .horizontal)
+        layer?.borderWidth = 1
+        (cell as? NSButtonCell)?.highlightsBy = []
+        applyAppearance()
     }
 
-    func configure(granted: Bool) {
-        self.granted = granted
-        refreshTitle()
+    func setHovered(_ hovered: Bool) {
+        isHovered = hovered && isEnabled
+        applyAppearance()
     }
 
-    func refreshTitle() {
-        let color: NSColor = granted ? .systemGreen : .systemOrange
-        label.stringValue = granted ? L10n.permissionGranted : L10n.permissionNotGranted
-        label.textColor = color
-        layer?.backgroundColor = color.withAlphaComponent(0.18).cgColor
+    private func applyAppearance() {
+        let backgroundColor: NSColor
+        if !isEnabled {
+            backgroundColor = Self.disabledBackgroundColor
+        } else if isPressed {
+            backgroundColor = Self.pressedBackgroundColor
+        } else if isHovered {
+            backgroundColor = Self.hoveredBackgroundColor
+        } else {
+            backgroundColor = Self.restingBackgroundColor
+        }
+
+        layer?.backgroundColor = backgroundColor.cgColor
+        layer?.borderColor = (
+            window?.firstResponder === self
+                ? Self.focusedBorderColor
+                : Self.restingBorderColor
+        ).cgColor
+        contentTintColor = isEnabled ? Self.enabledContentColor : Self.disabledContentColor
+        applyContentAppearance()
+        needsDisplay = true
+    }
+
+    private func applyContentAppearance() {
+        guard imagePosition != .imageOnly, !title.isEmpty else { return }
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font ?? NSFont.systemFont(ofSize: 12, weight: .medium),
+            .foregroundColor: isEnabled ? Self.enabledContentColor : Self.disabledContentColor,
+        ]
+        let stableTitle = NSAttributedString(string: title, attributes: attributes)
+        attributedTitle = stableTitle
+        attributedAlternateTitle = stableTitle
+    }
+
+    override func becomeFirstResponder() -> Bool {
+        let accepted = super.becomeFirstResponder()
+        applyAppearance()
+        return accepted
+    }
+
+    override func resignFirstResponder() -> Bool {
+        let resigned = super.resignFirstResponder()
+        applyAppearance()
+        return resigned
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+        let area = NSTrackingArea(
+            rect: .zero,
+            options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        trackingArea = area
+        addTrackingArea(area)
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        setHovered(true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        setHovered(false)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard isEnabled else { return }
+        isPressed = true
+        applyAppearance()
+        super.mouseDown(with: event)
+        isPressed = false
+        applyAppearance()
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        guard isEnabled else { return }
+        addCursorRect(bounds, cursor: .pointingHand)
     }
 }
-
-// MARK: - Pointing-hand action button
 
 final class SettingsActionButton: NSButton {
     static let restingBezelColor = NSColor.white.withAlphaComponent(0.09)
@@ -3787,7 +4098,8 @@ final class HoverButton: NSButton {
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        guard isEnabled, interactiveBounds.contains(point) else { return nil }
+        let localPoint = superview.map { convert(point, from: $0) } ?? point
+        guard isEnabled, interactiveBounds.contains(localPoint) else { return nil }
         return self
     }
 

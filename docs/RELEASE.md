@@ -49,10 +49,13 @@ make release-tag
 `release-check` 要求 `main`、干净工作区、精确发布提交和 dated Changelog，然后
 执行中央 strict scan、编译、Swift 测试和与最终路径一致的 arm64 Release 候选
 构建。候选必须是 Developer ID 签名，App 与 share extension 都只包含 `arm64`
-并启用 Hardened Runtime。候选还必须通过 `verify-runtime-resources`，确认
-`aulycShot_PermissionFlow.bundle` 位于签名封装内的 `Contents/Resources`，包含英语
-和简体中文字符串，并由 `PermissionFlowLocalizer` 在 packaged App 中优先解析；
-缺失、错位或只能依赖构建机 `.build` 回退都会阻断发布。
+并启用 Hardened Runtime。
+
+打包前还会执行 `make icon-check` 的等价只读检查，确认菜单栏 SVG、Dock/About
+使用的 ICNS、分享扩展 ICNS 和 Asset Catalog PNG 全部来自
+`design/iconMark.svg`，且生成器和资产哈希与 `design/icon-assets.generated.json`
+一致。`verify-runtime-resources` 会继续核对 App 内实际封装的图标，详情见
+`docs/ICON_ASSETS.md`。
 
 GitHub hosted macOS runner 无法为 SwiftPM AppKit 窗口测试提供稳定的交互式
 WindowServer 会话，因此 CI 以 `AULYC_SKIP_WINDOW_SERVER_TESTS=1` 只跳过

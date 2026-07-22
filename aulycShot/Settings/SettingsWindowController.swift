@@ -64,19 +64,22 @@ class SettingsWindowController: NSWindowController {
     }
 
     func showAsStartupDialog() {
-        settingsView.showPermissionsTab()
+        settingsView.showGeneralTab()
         resizeWindow(height: 700)
         window?.center()
         presentAsStandardWindow()
     }
 
-    func showAsSettings(focusingPermissions: Bool? = nil) {
-        let shouldFocusPermissions = focusingPermissions ?? !AppPermissions.allRequiredGranted
-        if shouldFocusPermissions {
-            settingsView.showPermissionsTab()
-        }
+    func showAsSettings() {
         resizeWindow(height: 660)
         presentAsStandardWindow()
+    }
+
+    func showPermissionHelp() {
+        showAsSettings()
+        DispatchQueue.main.async { [weak self] in
+            self?.settingsView.presentPermissionHelp()
+        }
     }
 
     private func presentAsStandardWindow() {
@@ -112,11 +115,10 @@ extension SettingsWindowController: NSWindowDelegate {
         settingsView.cancelClipboardImageEditShortcutRecording()
         settingsView.cancelClipboardShortcutRecording()
         settingsView.cancelFileSaveShortcutRecording()
-        settingsView.closePermissionFlowPanel()
         settingsView.closeErrorLogWindow()
         NSApp.setActivationPolicy(SettingsWindowPresentationPolicy.hiddenActivationPolicy)
         // The status item now exists before the permission gate. In startup
         // mode, closing this window keeps the menu bar entry alive so the user
-        // can reopen permissions without relaunching the app.
+        // can reopen the permission status without relaunching the app.
     }
 }

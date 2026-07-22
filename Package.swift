@@ -12,23 +12,8 @@ let package = Package(
         .executable(name: "AulycShotShareExtension", targets: ["AulycShotShareExtension"])
     ],
     targets: [
-        .target(
-            name: "SystemSettingsKit",
-            path: "ThirdParty/PermissionFlow/Sources/SystemSettingsKit"
-        ),
-        .target(
-            name: "PermissionFlow",
-            dependencies: ["SystemSettingsKit"],
-            path: "ThirdParty/PermissionFlow/Sources/PermissionFlow",
-            resources: [
-                .process("Resources")
-            ]
-        ),
         .executableTarget(
             name: "aulycShot",
-            dependencies: [
-                "PermissionFlow"
-            ],
             path: "aulycShot",
             exclude: ["App/Info.plist"],
             linkerSettings: [
@@ -57,11 +42,6 @@ let package = Package(
             name: "aulycShotTests",
             dependencies: ["aulycShot"],
             path: "Tests/aulycShotTests"
-        ),
-        .testTarget(
-            name: "PermissionFlowTests",
-            dependencies: ["PermissionFlow"],
-            path: "Tests/PermissionFlowTests"
         )
     ]
 )

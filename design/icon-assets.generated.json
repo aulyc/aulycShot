@@ -1,0 +1,79 @@
+{
+  "generatedOutputs": [
+    {
+      "file": "design/menuBarIcon.svg",
+      "sha256": "a0b24586c6797418de3c8ed206c3b1e8a52a7c903a633de4b65b94bcd63dcaf3"
+    },
+    {
+      "file": "design/appIcon.svg",
+      "sha256": "c22341ac7b94dc8521335924b365cf317e7eeff883166a730cb78d98e3d4473b"
+    },
+    {
+      "file": "Resources/AppIcon.icns",
+      "sha256": "0760e08e586d171436b4ace3e25401c1a16c556f06d691149ff2fea3a1bad79a"
+    },
+    {
+      "file": "Resources/Assets.xcassets/AppIcon.appiconset/Contents.json",
+      "sha256": "9736bfbe8b32bd228e09cd28a273161d1452c1739dcf920626f537c527a67535"
+    },
+    {
+      "file": "Resources/Assets.xcassets/AppIcon.appiconset/icon_16.png",
+      "sha256": "052c482ffa51056350e3f0d54e11ff0348ca7d7285a29b417137d7e188f2b40f"
+    },
+    {
+      "file": "Resources/Assets.xcassets/AppIcon.appiconset/icon_16@2x.png",
+      "sha256": "4f2f49ea50fa4cd4188be199a396a1495ecb933e75b0f6c2e250f357492346a9"
+    },
+    {
+      "file": "Resources/Assets.xcassets/AppIcon.appiconset/icon_32.png",
+      "sha256": "4f2f49ea50fa4cd4188be199a396a1495ecb933e75b0f6c2e250f357492346a9"
+    },
+    {
+      "file": "Resources/Assets.xcassets/AppIcon.appiconset/icon_32@2x.png",
+      "sha256": "c030af22f8df52f183113823a299e1bd6d64b8a0f8fd7c561f8026d7104747ba"
+    },
+    {
+      "file": "Resources/Assets.xcassets/AppIcon.appiconset/icon_128.png",
+      "sha256": "ff32d2e8f673282867ed66ca53a6df4c4f22fa0ef3c1fb92a27d7b1da29c7f01"
+    },
+    {
+      "file": "Resources/Assets.xcassets/AppIcon.appiconset/icon_128@2x.png",
+      "sha256": "4c162e5ee99b45db1c2f2da59bde90332bd43986e77fb81b131175b975624362"
+    },
+    {
+      "file": "Resources/Assets.xcassets/AppIcon.appiconset/icon_256.png",
+      "sha256": "4c162e5ee99b45db1c2f2da59bde90332bd43986e77fb81b131175b975624362"
+    },
+    {
+      "file": "Resources/Assets.xcassets/AppIcon.appiconset/icon_256@2x.png",
+      "sha256": "c75ca8564a86764955a91e5531961b39b2e112206d6bc210b1cffad0dabd36f7"
+    },
+    {
+      "file": "Resources/Assets.xcassets/AppIcon.appiconset/icon_512.png",
+      "sha256": "c75ca8564a86764955a91e5531961b39b2e112206d6bc210b1cffad0dabd36f7"
+    },
+    {
+      "file": "Resources/Assets.xcassets/AppIcon.appiconset/icon_512@2x.png",
+      "sha256": "df8e739fc536c97d7af6f7b0c9f9851b7417fb39f21c97e4f046bc9c1569146e"
+    }
+  ],
+  "generatorInputs": [
+    {
+      "file": "scripts/icon_assets.py",
+      "sha256": "25d4760edcae4cd9e868f5d0fed60a64f787b42858aef11ae71fc1a30d07f49a"
+    },
+    {
+      "file": "scripts/generate-icon.sh",
+      "sha256": "f7dcf8bf8b262a0e5815ed2fb97647a85e9157534341d334825a5e324ed3d055"
+    },
+    {
+      "file": "scripts/render-svg.swift",
+      "sha256": "73c6b23b466ce3e73338365b3ade908d22671160922f78aba6f04b551acdb3ef"
+    }
+  ],
+  "geometrySource": {
+    "file": "design/iconMark.svg",
+    "sha256": "e6f9bdb2d68aa56b7cbb8712889d9a3e555e6b47005d63c46d16b7023333dfe8"
+  },
+  "schemaVersion": 1
+}

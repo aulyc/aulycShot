@@ -148,6 +148,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         action(self)
     }
 
+    private func requireFeaturePermissions() -> Bool {
+        guard AppPermissions.allRequiredGranted else {
+            configuredSettingsController().showPermissionHelp()
+            return false
+        }
+        return true
+    }
+
     private func applyHotkeyState() {
         if HotkeyManager.shared.isRecording {
             HotkeyManager.shared.unregister()
@@ -347,6 +355,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         guard overlayController == nil, recordingEngine == nil else { return }
+        guard requireFeaturePermissions() else { return }
         if resumeSuspendedEditIfAvailable() {
             return
         }
@@ -358,6 +367,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func handleRecordingTrigger() {
         guard overlayController == nil, recordingEngine == nil else { return }
+        guard requireFeaturePermissions() else { return }
         let focusRestorer = SourceAppFocusRestorer.captureFrontmostApplication()
         overlayController = OverlayWindowController(
             postCaptureAction: .record,

@@ -2,12 +2,14 @@ import argparse
 import importlib.util
 import json
 import plistlib
+import re
 import tempfile
 import unittest
 from pathlib import Path
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "release_tool.py"
+PROJECT_ROOT = SCRIPT.parent.parent
 SPEC = importlib.util.spec_from_file_location("aulycshot_release_tool", SCRIPT)
 release_tool = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
@@ -56,6 +58,20 @@ class ReleaseToolTests(unittest.TestCase):
         with path.open("wb") as handle:
             plistlib.dump(value, handle)
 
+    def write_runtime_icons(self, app):
+        values = {
+            Path("Resources/AppIcon.icns"): b"generated application icon",
+            Path("design/menuBarIcon.svg"): b"generated menu bar icon",
+        }
+        for relative, value in values.items():
+            source = self.root / relative
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_bytes(value)
+        for source_relative, bundled_relative in release_tool.RUNTIME_ICON_RESOURCES:
+            bundled = app / bundled_relative
+            bundled.parent.mkdir(parents=True, exist_ok=True)
+            bundled.write_bytes(values[source_relative])
+
     def test_version_identity_accepts_authoritative_version_and_build(self):
         self.assertEqual(release_tool.version_identity(), ("1.6.12", 494))
 
@@ -88,27 +104,18 @@ class ReleaseToolTests(unittest.TestCase):
         self.assertTrue(release_tool.codesign_has_runtime(signed))
         self.assertFalse(release_tool.codesign_has_runtime(unsigned))
 
-    def test_runtime_resources_accept_permission_flow_bundle_in_contents_resources(self):
+    def test_runtime_resources_accept_packaged_icons(self):
         app = self.root / "aulycShot.app"
-        bundle = app / "Contents" / "Resources" / "aulycShot_PermissionFlow.bundle"
-        (bundle / "en.lproj").mkdir(parents=True)
-        (bundle / "zh-hans.lproj").mkdir()
-        (bundle / "Info.plist").write_bytes(b"plist")
-        (bundle / "en.lproj" / "Localizable.strings").write_text("", encoding="utf-8")
-        (bundle / "zh-hans.lproj" / "Localizable.strings").write_text("", encoding="utf-8")
+        self.write_runtime_icons(app)
 
         release_tool.verify_runtime_resources(app)
 
-    def test_runtime_resources_reject_bundle_only_at_app_root(self):
+    def test_runtime_resources_reject_stale_packaged_icon(self):
         app = self.root / "aulycShot.app"
-        misplaced = app / "aulycShot_PermissionFlow.bundle"
-        (misplaced / "en.lproj").mkdir(parents=True)
-        (misplaced / "zh-hans.lproj").mkdir()
-        (misplaced / "Info.plist").write_bytes(b"plist")
-        (misplaced / "en.lproj" / "Localizable.strings").write_text("", encoding="utf-8")
-        (misplaced / "zh-hans.lproj" / "Localizable.strings").write_text("", encoding="utf-8")
+        self.write_runtime_icons(app)
+        (app / "Contents" / "Resources" / "AppIcon.icns").write_bytes(b"stale")
 
-        with self.assertRaisesRegex(release_tool.ReleaseError, "runtime resource bundle is missing"):
+        with self.assertRaisesRegex(release_tool.ReleaseError, "does not match generated source"):
             release_tool.verify_runtime_resources(app)
 
     def valid_provenance(self, dmg):

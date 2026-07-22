@@ -1,19 +1,26 @@
 #!/usr/bin/env bash
-# Render a source SVG into AppIcon.icns + PNGs for the asset catalog.
-# Usage: scripts/generate-icon.sh [path/to/source.svg]
+# Regenerate every icon asset from design/iconMark.svg.
+# Usage: scripts/generate-icon.sh [--check]
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SRC="${1:-$ROOT/design/appIcon.svg}"
+cd "$ROOT"
 
-if [[ ! -f "$SRC" ]]; then
-    echo "error: source SVG not found: $SRC" >&2
-    exit 1
+if [[ "${1:-}" == "--check" ]]; then
+    [[ $# -eq 1 ]] || { echo "error: --check takes no additional arguments" >&2; exit 64; }
+    exec python3 scripts/icon_assets.py check
+elif [[ $# -ne 0 ]]; then
+    echo "error: unsupported icon generation argument: $1" >&2
+    exit 64
 fi
+
+python3 scripts/icon_assets.py generate-svgs
+SRC="$ROOT/design/appIcon.svg"
 
 ICNS_OUT="$ROOT/Resources/AppIcon.icns"
 APPICONSET="$ROOT/Resources/Assets.xcassets/AppIcon.appiconset"
 WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
 ICONSET="$WORK/AppIcon.iconset"
 mkdir -p "$ICONSET"
 
@@ -96,7 +103,7 @@ cat > "$APPICONSET/Contents.json" <<'JSON'
 }
 JSON
 
-rm -rf "$WORK"
+python3 scripts/icon_assets.py write-manifest
 echo "==> done."
 echo "    icns:    $ICNS_OUT"
 echo "    catalog: $APPICONSET"

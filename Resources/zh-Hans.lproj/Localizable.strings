@@ -3,11 +3,15 @@
 /* Settings */
 "settingsTitle" = "aulycShot 设置";
 "showMenuBarIcon" = "显示菜单栏图标";
-"permissionsHeader" = "所需权限";
-"accessibilityPermission" = "辅助功能";
-"accessibilityDescription" = "用于检测双击 ⌘ Command 键来触发截图";
-"screenRecordingPermission" = "屏幕录制";
-"screenRecordingDescription" = "用于捕获屏幕内容进行截图";
+"featurePermissionStatus" = "功能状态";
+"permissionAvailable" = "可用";
+"permissionUnavailable" = "不可用";
+"featurePermissionHelpTooltip" = "查看功能授权步骤";
+"featurePermissionHelpTitle" = "功能权限设置";
+"featurePermissionHelpBody" = "aulycShot 需要同时开启以下权限才能使用截图和录屏\n\n辅助功能：%@\n屏幕与系统音频录制：%@";
+"permissionHelpOpenAccessibility" = "打开辅助功能";
+"permissionHelpOpenScreenRecording" = "打开屏幕与系统音频录制";
+"permissionHelpDone" = "知道了";
 "launchAtLogin" = "开机自动启动";
 "demoMode" = "演示模式";
 "demoModeHint" = "录屏软件可以录到选区遮罩与编辑器，仅影响外部录制";
@@ -178,13 +182,11 @@
 /* Settings sidebar tabs */
 "settingsTabGeneral" = "通用";
 "settingsTabShortcuts" = "快捷键";
-"settingsTabPermissions" = "权限";
 "settingsTabAbout" = "关于";
 "settingsTabToolbar" = "工具栏";
 "settingsTabGeneralDescription" = "设置语言、启动、截图与保存行为";
 "settingsTabShortcutsDescription" = "设置全局快捷键与编辑器快捷键";
 "settingsTabToolbarDescription" = "自定义编辑器工具栏布局";
-"settingsTabPermissionsDescription" = "检查截图所需的系统权限";
 "settingsTabAboutDescription" = "查看版本、更新与诊断信息";
 
 "toolbarSettingsPrimaryTitle" = "主工具栏";
@@ -199,6 +201,25 @@
 "toolbarSettingsApply" = "应用";
 
 /* About pane */
+"aboutTitle" = "关于 aulycShot";
+"aboutVersionTitle" = "版本";
+"aboutVersionValue" = "%@ · build %@";
+"aboutCompatibilityTitle" = "适配";
+"aboutCompatibilityValue" = "Apple Silicon";
+"aboutSystemRequirementTitle" = "系统要求";
+"aboutSystemRequirementValue" = "macOS 14+";
+"aboutIntroductionTitle" = "应用介绍";
+"aboutIntroductionFirst" = "1. aulycShot 是一款原生 macOS 菜单栏截图与录屏工具，支持智能选区、窗口截图、区域截图和屏幕录制";
+"aboutIntroductionSecond" = "2. 提供箭头、形状、文字、序号、马赛克等标注工具，并支持长截图、钉图、图片编辑与拼接";
+"aboutIntroductionThird" = "3. 截图、录屏和编辑均在本机完成，不包含账号系统、云端同步或遥测";
+"aboutWebsiteTitle" = "官方网站";
+"aboutWebsiteURL" = "https://www.aulyc.com";
+"aboutRelatedLinksTitle" = "相关链接";
+"aboutAcknowledgementsTitle" = "致谢";
+"aboutAcknowledgementFirst" = "1. 感谢 Linux.do 社区在测试、反馈和讨论中的支持";
+"aboutAcknowledgementSecond" = "2. 感谢所有提交需求、问题和改进建议的用户";
+"aboutAcknowledgementThird" = "3. 感谢开源社区与开发工具提供的灵感和帮助";
+"aboutCopyright" = "Copyright © 2026 aulyc. All rights reserved";
 "aboutLicense" = "开源协议";
 "aboutVersion" = "版本 %@ · build %@";
 "aboutSourceCode" = "查看代码";
@@ -257,17 +278,6 @@
 "updateSkipButton" = "跳过此版本";
 "updateLaterButton" = "稍后";
 "updateOKButton" = "好";
-
-
-
-
-/* Permissions — status label */
-"permissionGranted" = "已授权";
-"permissionNotGranted" = "未授权";
-"appStatusUnavailable" = "不可用";
-"appStatusPartiallyAvailable" = "部分可用";
-"appStatusNormallyAvailable" = "正常可用";
-
 
 
 

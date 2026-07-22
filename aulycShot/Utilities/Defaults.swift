@@ -89,11 +89,24 @@ enum L10n {
     // Settings
     static var settingsTitle: String { s("settingsTitle") }
     static var showMenuBarIcon: String { s("showMenuBarIcon") }
-    static var permissionsHeader: String { s("permissionsHeader") }
-    static var accessibilityPermission: String { s("accessibilityPermission") }
-    static var accessibilityDescription: String { s("accessibilityDescription") }
-    static var screenRecordingPermission: String { s("screenRecordingPermission") }
-    static var screenRecordingDescription: String { s("screenRecordingDescription") }
+    static var featurePermissionStatus: String { s("featurePermissionStatus") }
+    static var permissionAvailable: String { s("permissionAvailable") }
+    static var permissionUnavailable: String { s("permissionUnavailable") }
+    static var featurePermissionHelpTooltip: String { s("featurePermissionHelpTooltip") }
+    static var featurePermissionHelpTitle: String { s("featurePermissionHelpTitle") }
+    static func featurePermissionHelpBody(
+        accessibilityStatus: String,
+        screenRecordingStatus: String
+    ) -> String {
+        String(
+            format: s("featurePermissionHelpBody"),
+            accessibilityStatus,
+            screenRecordingStatus
+        )
+    }
+    static var permissionHelpOpenAccessibility: String { s("permissionHelpOpenAccessibility") }
+    static var permissionHelpOpenScreenRecording: String { s("permissionHelpOpenScreenRecording") }
+    static var permissionHelpDone: String { s("permissionHelpDone") }
     static var launchAtLogin: String { s("launchAtLogin") }
     static var demoMode: String { s("demoMode") }
     static var demoModeHint: String { s("demoModeHint") }
@@ -315,13 +328,11 @@ enum L10n {
     // Settings sidebar tabs
     static var settingsTabGeneral: String { s("settingsTabGeneral") }
     static var settingsTabShortcuts: String { s("settingsTabShortcuts") }
-    static var settingsTabPermissions: String { s("settingsTabPermissions") }
     static var settingsTabAbout: String { s("settingsTabAbout") }
     static var settingsTabToolbar: String { s("settingsTabToolbar") }
     static var settingsTabGeneralDescription: String { s("settingsTabGeneralDescription") }
     static var settingsTabShortcutsDescription: String { s("settingsTabShortcutsDescription") }
     static var settingsTabToolbarDescription: String { s("settingsTabToolbarDescription") }
-    static var settingsTabPermissionsDescription: String { s("settingsTabPermissionsDescription") }
     static var settingsTabAboutDescription: String { s("settingsTabAboutDescription") }
 
     // Toolbar settings
@@ -341,6 +352,27 @@ enum L10n {
     static func aboutVersion(_ version: String, build: String) -> String {
         String(format: s("aboutVersion"), version, build)
     }
+    static var aboutTitle: String { s("aboutTitle") }
+    static var aboutVersionTitle: String { s("aboutVersionTitle") }
+    static func aboutVersionValue(_ version: String, build: String) -> String {
+        String(format: s("aboutVersionValue"), version, build)
+    }
+    static var aboutCompatibilityTitle: String { s("aboutCompatibilityTitle") }
+    static var aboutCompatibilityValue: String { s("aboutCompatibilityValue") }
+    static var aboutSystemRequirementTitle: String { s("aboutSystemRequirementTitle") }
+    static var aboutSystemRequirementValue: String { s("aboutSystemRequirementValue") }
+    static var aboutIntroductionTitle: String { s("aboutIntroductionTitle") }
+    static var aboutIntroductionFirst: String { s("aboutIntroductionFirst") }
+    static var aboutIntroductionSecond: String { s("aboutIntroductionSecond") }
+    static var aboutIntroductionThird: String { s("aboutIntroductionThird") }
+    static var aboutWebsiteTitle: String { s("aboutWebsiteTitle") }
+    static var aboutWebsiteURL: String { s("aboutWebsiteURL") }
+    static var aboutRelatedLinksTitle: String { s("aboutRelatedLinksTitle") }
+    static var aboutAcknowledgementsTitle: String { s("aboutAcknowledgementsTitle") }
+    static var aboutAcknowledgementFirst: String { s("aboutAcknowledgementFirst") }
+    static var aboutAcknowledgementSecond: String { s("aboutAcknowledgementSecond") }
+    static var aboutAcknowledgementThird: String { s("aboutAcknowledgementThird") }
+    static var aboutCopyright: String { s("aboutCopyright") }
     static var aboutSourceCode: String { s("aboutSourceCode") }
     static var aboutStarOnGitHub: String { s("aboutStarOnGitHub") }
     static var aboutFeatureRequest: String { s("aboutFeatureRequest") }
@@ -415,13 +447,6 @@ enum L10n {
     static var updateSkipButton: String { s("updateSkipButton") }
     static var updateLaterButton: String { s("updateLaterButton") }
     static var updateOKButton: String { s("updateOKButton") }
-
-    // Permissions — status label
-    static var permissionGranted: String { s("permissionGranted") }
-    static var permissionNotGranted: String { s("permissionNotGranted") }
-    static var appStatusUnavailable: String { s("appStatusUnavailable") }
-    static var appStatusPartiallyAvailable: String { s("appStatusPartiallyAvailable") }
-    static var appStatusNormallyAvailable: String { s("appStatusNormallyAvailable") }
 
     // Image Merge workbench
     static var imageMergeWindowTitle: String { s("imageMergeWindowTitle") }

@@ -91,7 +91,7 @@
 - Screen Recording permission, used by ScreenCaptureKit and screenshot capture
 - Automation permission for Finder, requested on first use of the "edit selected image" shortcut
 
-On first launch, aulycShot opens a setup window that shows both permission states. The app can launch once both required permissions are granted.
+On first launch, aulycShot opens a setup window with one unified Feature Status. It becomes available only when both Accessibility and Screen & System Audio Recording access are enabled; otherwise screenshot and recording actions stop and show the combined permission guide.
 
 ## macOS Verification Warning
 
@@ -168,7 +168,7 @@ Open Settings from the menu bar to configure:
 - Launch at login
 - Demo Mode, which allows external screen recorders to capture aulycShot's overlay and editor
 - Screenshot shortcut: keep double-tap `⌘`, record a custom shortcut, or restore the default
-- Accessibility and Screen Recording permission shortcuts
+- Unified Feature Status with Accessibility and Screen Recording permission shortcuts
 
 ## Project Structure
 

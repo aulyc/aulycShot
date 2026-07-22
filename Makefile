@@ -3,7 +3,7 @@ SHELL := /bin/bash
 STANDARDS_ROOT ?= /Users/crp/Projects/Codex 开发规范
 RELEASE_PROVENANCE ?=
 
-.PHONY: check test verify version-check version-test standards-check release-check prepare-formal-release release-tag release-formal verify-artifact install-release verify-installed publish-release refresh-standards
+.PHONY: check test verify sandbox-check sandbox-test sandbox-build icons icon-check version-check version-test standards-check release-check prepare-formal-release release-tag release-formal verify-artifact install-release verify-installed publish-release refresh-standards
 
 check:
 	bash scripts/compile-check.sh
@@ -13,6 +13,21 @@ test:
 
 verify:
 	bash scripts/rebuild-and-open.sh
+
+sandbox-check:
+	bash scripts/compile-check.sh --sandboxed
+
+sandbox-test:
+	AULYC_SKIP_WINDOW_SERVER_TESTS=1 bash scripts/swiftpm-sandbox.sh test
+
+sandbox-build:
+	bash scripts/bundle.sh --sandboxed
+
+icons:
+	bash scripts/generate-icon.sh
+
+icon-check:
+	bash scripts/generate-icon.sh --check
 
 version-check:
 	python3 scripts/release_tool.py version-check

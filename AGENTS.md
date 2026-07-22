@@ -18,6 +18,25 @@ bash scripts/rebuild-and-open.sh
 
 This script builds the app bundle, kills any running instance, launches the new build, and confirms it started.
 
+### SwiftPM in restricted sandboxes
+
+- Ordinary host build/test paths remain `bash scripts/compile-check.sh`,
+  `swift test`, and `bash scripts/bundle.sh`; preserve SwiftPM's normal sandbox
+  and user-level configuration on those paths.
+- In Codex `workspace-write` or a similarly restricted executor, use
+  `make sandbox-check`, `make sandbox-test`, and `make sandbox-build`.
+- `make sandbox-test` preserves the CI convention
+  `AULYC_SKIP_WINDOW_SERVER_TESTS=1`; it skips only tests that explicitly
+  require an interactive WindowServer session.
+- Restricted commands execute the project-owned
+  `scripts/swiftpm-sandbox.sh` copy. It keeps `.build/` as the artifact path,
+  uses the ignored `.cache/swiftpm/` for module/shared caches, and disables only
+  SwiftPM's nested sandbox. Never replace it with a central-repository runtime
+  path or broaden the outer sandbox.
+- Private registry configuration and security directories remain opt-in through
+  `SWIFTPM_SANDBOX_CONFIG_PATH` and `SWIFTPM_SANDBOX_SECURITY_PATH`; never store
+  credentials in the repository or `.cache/swiftpm/`.
+
 ## Project Structure
 
 - `aulycShot/App/` — Entry point (`main.swift`, `AppDelegate.swift`, `Info.plist`)
@@ -42,19 +61,22 @@ This script builds the app bundle, kills any running instance, launches the new 
 
 ## Packaging Lessons
 
-- SwiftPM target resources are not automatically present in the hand-assembled
-  `.app` bundle. `scripts/bundle.sh` must copy
-  `aulycShot_PermissionFlow.bundle` into `Contents/Resources/`, and
-  `PermissionFlowLocalizer` must resolve that packaged location before using
-  `Bundle.module` as the direct SwiftPM build/test fallback. Do not place files
-  beside `Contents`; Developer ID signing rejects unsealed App-root content.
-- Treat a missing SwiftPM resource bundle as a release-blocking error, not a
-  runtime fallback. The failure may only surface when a UI path first touches
-  `Bundle.module`, such as the PermissionFlow authorization panel.
 - After packaging changes, verify the final `.app` contents directly with
   `python3 scripts/release_tool.py verify-runtime-resources --app .cache/build/aulycShot.app`
   and, for release builds, confirm both the App and share extension contain only
   the `arm64` slice.
+
+## Icon Assets
+
+- `design/iconMark.svg` is the only geometry source for the menu bar, Dock,
+  About, and share-extension icons. Do not hand-edit generated SVG, ICNS, PNG,
+  or manifest files.
+- After changing icon geometry, run `make icons`; before packaging, run
+  `make icon-check`. `scripts/bundle.sh` enforces the same read-only check so
+  exact-tag builds never rewrite source files.
+- Keep presentation-specific color and stroke width in
+  `scripts/icon_assets.py`, while paths and glyph positioning remain in the
+  canonical mark. See `docs/ICON_ASSETS.md` for the resource call chain.
 
 ## Versioning and Release Profile
 

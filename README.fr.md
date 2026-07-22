@@ -66,6 +66,8 @@
 - Permission Enregistrement de l'écran pour ScreenCaptureKit
 - Permission Automatisation Finder pour modifier l'image sélectionnée
 
+Le statut unifié des fonctionnalités devient disponible uniquement lorsque les autorisations Accessibilité et Enregistrement de l'écran sont toutes les deux activées. Sinon, les actions de capture et d'enregistrement sont bloquées et ouvrent le guide d'autorisation combiné.
+
 ## Avertissement de vérification macOS
 
 Si macOS affiche un avertissement du type `Apple ne peut pas vérifier que "aulycShot" est exempt de logiciels malveillants`, supprimez l'attribut quarantine du bundle d'app que vous jugez fiable, puis ouvrez-le à nouveau :
