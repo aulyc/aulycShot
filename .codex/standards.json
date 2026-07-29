@@ -253,7 +253,7 @@
     },
     {
       "path": "scripts/gitee_release.py",
-      "sha256": "fc3a18db96eb6696415e57f74af0f22bd0469827c11742032e4f825c28d2e2f3"
+      "sha256": "e6629f535a8ad6abba9f005ed5992710bfbff718b3e13fca815a69d98eb3a6e4"
     },
     {
       "path": "scripts/generate-icon.sh",
@@ -317,7 +317,7 @@
     },
     {
       "path": "Tests/test_gitee_release.py",
-      "sha256": "1f3c72f1dc29a669561c55863774312983562aec3511fa93d06e9d84b92dd843"
+      "sha256": "e97d5e4b617db1e70399372f4c9cb6b26adc645157df0c95a4ab1c0b47875717"
     },
     {
       "path": "Tests/test_icon_assets.py",
