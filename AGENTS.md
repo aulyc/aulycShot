@@ -91,6 +91,9 @@ This script builds the app bundle, kills any running instance, launches the new 
 - Derived version fields: the assembled App copies the authoritative plist and
   `scripts/bundle.sh` synchronizes the share extension plist during packaging
 - Version synchronization: `make prepare-formal-release TARGET_VERSION=... TARGET_BUILD=...`
+- Release notes: English entries live in `CHANGELOG.md`, Simplified Chinese
+  entries live in `CHANGELOG.zh-CN.md`; GitHub Releases publish Chinese first
+  and English second, while Gitee Releases publish Simplified Chinese only
 - Drift check: `make version-check`
 - Bundle ID: `com.aulyc.aulycshot`; minimum macOS: 14.0
 - Entitlements owners: `scripts/aulycShot.entitlements` and
@@ -151,6 +154,9 @@ This script builds the app bundle, kills any running instance, launches the new 
 - Both mirrors must receive the same already-notarized DMG bytes. The manifest
   binds version, build, Commit, Bundle ID, Team ID, architecture and SHA-256,
   and download order remains GitHub then Gitee
+- Canonical and mirror GitHub Release descriptions must use the same bilingual
+  Chinese-first/English-second notes; the Gitee Release description must use
+  the matching Simplified Chinese notes
 - `GITEE_ACCESS_TOKEN` is a host credential used only by
   `scripts/gitee_release.py`; it must never be printed or written into the
   repository, product metadata, logs or provenance

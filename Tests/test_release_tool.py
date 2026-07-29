@@ -23,6 +23,7 @@ class ReleaseToolTests(unittest.TestCase):
         self.info = self.root / "aulycShot" / "App" / "Info.plist"
         self.extension_info = self.root / "aulycShot-share-extension" / "Info.plist"
         self.changelog = self.root / "CHANGELOG.md"
+        self.changelog_zh_cn = self.root / "CHANGELOG.zh-CN.md"
         self.adoption = self.root / ".codex" / "standards.json"
         self.info.parent.mkdir(parents=True)
         self.extension_info.parent.mkdir(parents=True)
@@ -41,13 +42,18 @@ class ReleaseToolTests(unittest.TestCase):
             {"CFBundleIdentifier": "com.aulyc.aulycshot.shareextension"},
         )
         self.changelog.write_text(
-            "# Changelog\n\n## [Unreleased]\n\n### Fixed\n- Keep the menu item alive\n\n## [1.6.12] - 2026-07-17\n\n- Previous\n",
+            "# Changelog\n\n## [Unreleased]\n\n### Fixed\n- Keep the menu item alive\n\n## [1.6.12] - 2026-07-17\n\n### Fixed\n\n- Previous\n",
+            encoding="utf-8",
+        )
+        self.changelog_zh_cn.write_text(
+            "# 更新日志\n\n## [Unreleased]\n\n### 修复\n- 保持菜单项可用\n\n## [1.6.12] - 2026-07-17\n\n### 修复\n\n- 之前的版本\n",
             encoding="utf-8",
         )
         release_tool.ROOT = self.root
         release_tool.INFO_PLIST = self.info
         release_tool.EXTENSION_INFO_PLIST = self.extension_info
         release_tool.CHANGELOG = self.changelog
+        release_tool.CHANGELOG_ZH_CN = self.changelog_zh_cn
         release_tool.ADOPTION = self.adoption
 
     def tearDown(self):
@@ -88,8 +94,64 @@ class ReleaseToolTests(unittest.TestCase):
 
         self.assertEqual(release_tool.version_identity(require_stable=True), ("1.6.13", 495))
         changelog = self.changelog.read_text(encoding="utf-8")
+        changelog_zh_cn = self.changelog_zh_cn.read_text(encoding="utf-8")
         self.assertIn("## [1.6.13] - ", changelog)
         self.assertLess(changelog.index("## [1.6.13]"), changelog.index("### Fixed"))
+        self.assertIn("## [1.6.13] - ", changelog_zh_cn)
+        self.assertLess(changelog_zh_cn.index("## [1.6.13]"), changelog_zh_cn.index("### 修复"))
+
+    def test_prepare_rejects_empty_chinese_unreleased_section(self):
+        self.changelog_zh_cn.write_text(
+            "# 更新日志\n\n## [Unreleased]\n\n## [1.6.12] - 2026-07-17\n\n- 之前的版本\n",
+            encoding="utf-8",
+        )
+
+        with self.assertRaisesRegex(
+            release_tool.ReleaseError,
+            "CHANGELOG.zh-CN.md Unreleased section is empty",
+        ):
+            release_tool.command_prepare(argparse.Namespace(version="1.6.13", build=495))
+
+        self.assertEqual(release_tool.version_identity(), ("1.6.12", 494))
+
+    def test_github_release_notes_put_chinese_before_english(self):
+        output = self.root / "github-notes.md"
+
+        release_tool.command_release_notes(
+            argparse.Namespace(version="1.6.12", channel="github", output=output)
+        )
+
+        notes = output.read_text(encoding="utf-8")
+        self.assertTrue(notes.startswith("## 中文\n\n"))
+        self.assertIn("### 修复\n\n- 之前的版本", notes)
+        self.assertIn("\n---\n\n## English\n\n", notes)
+        self.assertIn("- Previous", notes)
+        self.assertLess(notes.index("### 修复"), notes.index("## English"))
+
+    def test_gitee_release_notes_are_chinese_only(self):
+        output = self.root / "gitee-notes.md"
+
+        release_tool.command_release_notes(
+            argparse.Namespace(version="1.6.12", channel="gitee", output=output)
+        )
+
+        notes = output.read_text(encoding="utf-8")
+        self.assertEqual(notes, "### 修复\n\n- 之前的版本\n")
+        self.assertNotIn("Previous", notes)
+
+    def test_publish_scripts_route_bilingual_and_chinese_notes_by_platform(self):
+        canonical = (PROJECT_ROOT / "scripts" / "publish-release.sh").read_text(
+            encoding="utf-8"
+        )
+        mirrors = (PROJECT_ROOT / "scripts" / "publish-update-mirrors.sh").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("--channel github --output \"$GITHUB_NOTES\"", canonical)
+        self.assertIn("--channel gitee --output \"$GITEE_NOTES\"", canonical)
+        self.assertIn("--notes-file \"$GITHUB_NOTES\"", canonical)
+        self.assertIn("--notes-file \"$GITHUB_NOTES\"", mirrors)
+        self.assertIn("--notes \"$GITEE_NOTES\"", mirrors)
 
     def test_prepare_rejects_version_or_build_rollback(self):
         with self.assertRaisesRegex(release_tool.ReleaseError, "target version must be greater"):
@@ -299,6 +361,7 @@ class ReleaseToolTests(unittest.TestCase):
         tracked_paths = {item["path"] for item in adoption["trackedFiles"]}
 
         self.assertNotIn("CHANGELOG.md", tracked_paths)
+        self.assertNotIn("CHANGELOG.zh-CN.md", tracked_paths)
         self.assertNotIn("aulycShot/App/Info.plist", tracked_paths)
 
 

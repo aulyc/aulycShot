@@ -2,8 +2,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-PROVENANCE="$(cd "$(dirname "${1:?usage: publish-update-mirrors.sh <provenance> [notes]}")" && pwd)/$(basename "$1")"
-NOTES_INPUT="${2:-}"
+PROVENANCE="$(cd "$(dirname "${1:?usage: publish-update-mirrors.sh <provenance> [github-notes] [gitee-notes]}")" && pwd)/$(basename "$1")"
+GITHUB_NOTES_INPUT="${2:-}"
+GITEE_NOTES_INPUT="${3:-}"
 GITHUB_MIRROR="aulyc/aulycShot-releases"
 GITEE_OWNER="aulyc"
 GITEE_MIRROR="aulycShot-releases"
@@ -16,11 +17,24 @@ bash scripts/verify-formal-artifact.sh "$PROVENANCE"
 VERSION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["version"])' "$PROVENANCE")"
 DMG_NAME="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["artifacts"][0]["file"])' "$PROVENANCE")"
 DMG="$(dirname "$PROVENANCE")/$DMG_NAME"
-NOTES="${NOTES_INPUT:-$(dirname "$PROVENANCE")/aulycShot-$VERSION-release-notes.md}"
-if [[ -z "$NOTES_INPUT" ]]; then
-    python3 scripts/release_tool.py release-notes --version "$VERSION" --output "$NOTES"
+GITHUB_NOTES="${GITHUB_NOTES_INPUT:-$(dirname "$PROVENANCE")/aulycShot-$VERSION-release-notes.github.md}"
+GITEE_NOTES="${GITEE_NOTES_INPUT:-$(dirname "$PROVENANCE")/aulycShot-$VERSION-release-notes.gitee.md}"
+if [[ -z "$GITHUB_NOTES_INPUT" ]]; then
+    python3 scripts/release_tool.py release-notes \
+        --version "$VERSION" --channel github --output "$GITHUB_NOTES"
 fi
-[[ -f "$NOTES" ]] || { echo "error: release notes are missing: $NOTES" >&2; exit 1; }
+if [[ -z "$GITEE_NOTES_INPUT" ]]; then
+    python3 scripts/release_tool.py release-notes \
+        --version "$VERSION" --channel gitee --output "$GITEE_NOTES"
+fi
+[[ -f "$GITHUB_NOTES" ]] || {
+    echo "error: GitHub release notes are missing: $GITHUB_NOTES" >&2
+    exit 1
+}
+[[ -f "$GITEE_NOTES" ]] || {
+    echo "error: Gitee release notes are missing: $GITEE_NOTES" >&2
+    exit 1
+}
 
 [[ "$(gh repo view "$GITHUB_MIRROR" --json visibility --jq .visibility)" == "PUBLIC" ]] || {
     echo "error: GitHub update mirror is missing or is not public: $GITHUB_MIRROR" >&2
@@ -67,7 +81,7 @@ else
         --repo "$GITHUB_MIRROR" \
         --verify-tag \
         --title "aulycShot $VERSION" \
-        --notes-file "$NOTES" \
+        --notes-file "$GITHUB_NOTES" \
         "$DMG" "$DMG.sha256" "$PROVENANCE" "$PROVENANCE.sha256"
 fi
 
@@ -100,7 +114,7 @@ python3 scripts/gitee_release.py publish-release \
     --repo "$GITEE_MIRROR" \
     --tag "$VERSION" \
     --name "aulycShot $VERSION" \
-    --notes "$NOTES" \
+    --notes "$GITEE_NOTES" \
     --file "$DMG" \
     --file "$DMG.sha256" \
     --file "$PROVENANCE" \

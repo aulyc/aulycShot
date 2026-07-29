@@ -37,8 +37,10 @@ make version-check
 make prepare-formal-release TARGET_VERSION=1.6.13 TARGET_BUILD=495
 ```
 
-该入口先执行中央 GitHub preflight，再只修改 `aulycShot/App/Info.plist` 和
-`CHANGELOG.md`，并创建独立的 `chore: release 1.6.13` 元数据提交。
+该入口先执行中央 GitHub preflight，再只修改 `aulycShot/App/Info.plist`、
+英文 `CHANGELOG.md` 和简体中文 `CHANGELOG.zh-CN.md`，并创建独立的
+`chore: release 1.6.13` 元数据提交。两份 Changelog 的 `Unreleased` 都必须
+包含对应内容，缺少任一语言都会阻断正式版本准备。
 
 ## 标签前门禁
 
@@ -135,6 +137,17 @@ make publish-release RELEASE_PROVENANCE=/absolute/path/aulycShot-....release-pro
 SHA-256。只有远端标签已验证后，才以 `gh release create --verify-tag` 创建私有
 GitHub Release 并上传 DMG、checksums 和 provenance。
 
+发布说明按平台生成：权威 GitHub Release 和公开 GitHub 镜像使用同一份双语
+Markdown，顺序固定为简体中文在前、英文在后；Gitee Release 只发布与中文版
+Changelog 对应的简体中文说明。生成入口为：
+
+```bash
+python3 scripts/release_tool.py release-notes \
+  --version <version> --channel github --output <github-notes.md>
+python3 scripts/release_tool.py release-notes \
+  --version <version> --channel gitee --output <gitee-notes.md>
+```
+
 随后 `scripts/publish-update-mirrors.sh` 将完全相同的四个文件发布到：
 
 ```text
@@ -142,10 +155,11 @@ GitHub  https://github.com/aulyc/aulycShot-releases
 Gitee  https://gitee.com/aulyc/aulycShot-releases
 ```
 
-两个仓库都必须公开，但只保存正式安装包、校验和、provenance、发布说明和更新清单，
-不改变中央 registry 中唯一的私有 GitHub 源码绑定。GitHub 镜像由 `gh` 管理；
-Gitee 使用宿主机环境中的 `GITEE_ACCESS_TOKEN` 调用官方 OpenAPI。令牌不能写入
-仓库、日志、App、provenance 或命令行参数。
+两个仓库都必须公开，但只保存正式安装包、校验和、provenance、按上述平台语言
+策略生成的发布说明和更新清单，不改变中央 registry 中唯一的私有 GitHub 源码
+绑定。GitHub 镜像由 `gh` 管理；Gitee 使用宿主机环境中的
+`GITEE_ACCESS_TOKEN` 调用官方 OpenAPI。令牌不能写入仓库、日志、App、
+provenance 或命令行参数。
 
 镜像上传完成后，发布脚本生成同一份 `latest.json` 并分别写入两个仓库的 `main`：
 

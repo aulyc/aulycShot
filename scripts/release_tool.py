@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 INFO_PLIST = ROOT / "aulycShot" / "App" / "Info.plist"
 EXTENSION_INFO_PLIST = ROOT / "aulycShot-share-extension" / "Info.plist"
 CHANGELOG = ROOT / "CHANGELOG.md"
+CHANGELOG_ZH_CN = ROOT / "CHANGELOG.zh-CN.md"
 ADOPTION = ROOT / ".codex" / "standards.json"
 STABLE_SEMVER = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 SEMVER = re.compile(
@@ -116,8 +117,8 @@ def version_identity(require_stable: bool = False) -> tuple[str, int]:
     return version, build
 
 
-def changelog_has_release(version: str) -> bool:
-    text = CHANGELOG.read_text(encoding="utf-8")
+def changelog_has_release(path: Path, version: str) -> bool:
+    text = path.read_text(encoding="utf-8")
     return re.search(rf"^## \[{re.escape(version)}\] - \d{{4}}-\d{{2}}-\d{{2}}$", text, re.M) is not None
 
 
@@ -126,8 +127,10 @@ def command_version_check(args: argparse.Namespace) -> None:
     extension = read_plist(EXTENSION_INFO_PLIST)
     if extension.get("CFBundleIdentifier") != "com.aulyc.aulycshot.shareextension":
         raise ReleaseError("unexpected share extension bundle identifier")
-    if args.release and not changelog_has_release(version):
-        raise ReleaseError(f"CHANGELOG.md has no dated heading for {version}")
+    if args.release:
+        for path in (CHANGELOG, CHANGELOG_ZH_CN):
+            if not changelog_has_release(path, version):
+                raise ReleaseError(f"{path.name} has no dated heading for {version}")
     print(f"version identity valid: {version} build {build}")
 
 
@@ -138,6 +141,21 @@ def version_tuple(value: str) -> tuple[int, int, int]:
     return tuple(int(part) for part in match.groups())
 
 
+def prepared_changelog(path: Path, target_version: str) -> str:
+    text = path.read_text(encoding="utf-8")
+    marker = "## [Unreleased]"
+    if not text.startswith("# ") or marker not in text:
+        raise ReleaseError(f"{path.name} has no Unreleased heading")
+    marker_end = text.index(marker) + len(marker)
+    body = text[marker_end:].lstrip("\n")
+    first_heading = re.search(r"^## \[", body, re.M)
+    unreleased_body = body[: first_heading.start()] if first_heading else body
+    if not unreleased_body.strip():
+        raise ReleaseError(f"{path.name} Unreleased section is empty")
+    date = dt.date.today().isoformat()
+    return text[:marker_end] + f"\n\n## [{target_version}] - {date}\n\n" + body
+
+
 def command_prepare(args: argparse.Namespace) -> None:
     target_version = args.version
     target_build = args.build
@@ -146,23 +164,14 @@ def command_prepare(args: argparse.Namespace) -> None:
         raise ReleaseError("target version must be greater than the current version")
     if target_build <= current_build:
         raise ReleaseError("target build must be greater than the current build")
-    text = CHANGELOG.read_text(encoding="utf-8")
-    marker = "## [Unreleased]"
-    if not text.startswith("# ") or marker not in text:
-        raise ReleaseError("CHANGELOG.md has no Unreleased heading")
-    marker_end = text.index(marker) + len(marker)
-    body = text[marker_end:].lstrip("\n")
-    first_heading = re.search(r"^## \[", body, re.M)
-    unreleased_body = body[: first_heading.start()] if first_heading else body
-    if not unreleased_body.strip():
-        raise ReleaseError("Unreleased changelog section is empty")
-    date = dt.date.today().isoformat()
-    updated_text = text[:marker_end] + f"\n\n## [{target_version}] - {date}\n\n" + body
+    updated_changelog = prepared_changelog(CHANGELOG, target_version)
+    updated_changelog_zh_cn = prepared_changelog(CHANGELOG_ZH_CN, target_version)
     plist = read_plist(INFO_PLIST)
     plist["CFBundleShortVersionString"] = target_version
     plist["CFBundleVersion"] = str(target_build)
     write_plist(INFO_PLIST, plist)
-    CHANGELOG.write_text(updated_text, encoding="utf-8")
+    CHANGELOG.write_text(updated_changelog, encoding="utf-8")
+    CHANGELOG_ZH_CN.write_text(updated_changelog_zh_cn, encoding="utf-8")
     print(f"prepared release metadata: {target_version} build {target_build}")
 
 
@@ -383,14 +392,23 @@ def command_verify_runtime_resources(args: argparse.Namespace) -> None:
     print(f"runtime resources valid: {args.app}")
 
 
-def command_release_notes(args: argparse.Namespace) -> None:
-    text = CHANGELOG.read_text(encoding="utf-8")
-    start_match = re.search(rf"^## \[{re.escape(args.version)}\] - \d{{4}}-\d{{2}}-\d{{2}}\n", text, re.M)
+def extract_release_notes(path: Path, version: str) -> str:
+    text = path.read_text(encoding="utf-8")
+    start_match = re.search(rf"^## \[{re.escape(version)}\] - \d{{4}}-\d{{2}}-\d{{2}}\n", text, re.M)
     if start_match is None:
-        raise ReleaseError("release notes heading is missing")
+        raise ReleaseError(f"{path.name} release notes heading is missing")
     rest = text[start_match.end() :]
     end_match = re.search(r"^## \[", rest, re.M)
-    notes = (rest[: end_match.start()] if end_match else rest).strip() + "\n"
+    return (rest[: end_match.start()] if end_match else rest).strip() + "\n"
+
+
+def command_release_notes(args: argparse.Namespace) -> None:
+    english = extract_release_notes(CHANGELOG, args.version)
+    chinese = extract_release_notes(CHANGELOG_ZH_CN, args.version)
+    if args.channel == "github":
+        notes = f"## 中文\n\n{chinese}\n---\n\n## English\n\n{english}"
+    else:
+        notes = chinese
     args.output.write_text(notes, encoding="utf-8")
     print(args.output)
 
@@ -538,6 +556,7 @@ def make_parser() -> argparse.ArgumentParser:
 
     release_notes = subparsers.add_parser("release-notes")
     release_notes.add_argument("--version", required=True)
+    release_notes.add_argument("--channel", required=True, choices=("github", "gitee"))
     release_notes.add_argument("--output", required=True, type=Path)
     release_notes.set_defaults(func=command_release_notes)
 

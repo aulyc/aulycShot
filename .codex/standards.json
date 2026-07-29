@@ -24,6 +24,7 @@
       ".gitignore",
       "AGENTS.md",
       "CHANGELOG.md",
+      "CHANGELOG.zh-CN.md",
       "README.md",
       "docs/ICON_ASSETS.md",
       "docs/RELEASE.md",
@@ -197,11 +198,11 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "db02fd8ee91e1252587b003a4453ce06bc9555427db939b226f19fb4d32ff976"
+      "sha256": "a9cabf884d326970a149db6d9b45fdbec50346f9c63cfb76326383da5ca52d1f"
     },
     {
       "path": "README.md",
-      "sha256": "e2b61731ef7ac52182e2b96f1322c76ba5ece6ae239f29e704234e31fbc0e9a1"
+      "sha256": "2ac1b2a47cb1443aafa9e730fac77fdda2c2cee311289f03ecd8529dcbc46fc4"
     },
     {
       "path": "docs/ICON_ASSETS.md",
@@ -209,7 +210,7 @@
     },
     {
       "path": "docs/RELEASE.md",
-      "sha256": "feb72a2f1fe86a47f3b3a44903d85cc62e097ade3f2876f534d2142dab03595b"
+      "sha256": "a13768d807455453ae9ee24306d01ee848ecb4e266ab8f85f694f515188f4cca"
     },
     {
       "path": "design/icon-assets.generated.json",
@@ -273,15 +274,15 @@
     },
     {
       "path": "scripts/release_tool.py",
-      "sha256": "f085fbbc815cf6fd778b3a2012fa2d19b434d4c2f8915d09d0526deb4817263f"
+      "sha256": "db9691439e07b7d7e24ad6ea499fcb00231f79d38ffaab89eabf0e38143ec0c0"
     },
     {
       "path": "scripts/prepare-formal-release.sh",
-      "sha256": "60b5938e4aa56a6f2dc0808dfd36d072c7e8bd2c45f721a33aa6ca94052920d3"
+      "sha256": "60ad1bacca0dc7e4b0c8dfb95d21b2df5cb17a33c73d8da72dbf3179ef74e5f1"
     },
     {
       "path": "scripts/release-check.sh",
-      "sha256": "40e5e3bb3227b19ea25610e95955836c93d3c1480189327cbe7634771e91fe19"
+      "sha256": "2736088d5ffd69002de2dc7b45af4acd0b198acda7000a6ef8c29639eb6c2d44"
     },
     {
       "path": "scripts/create-release-tag.sh",
@@ -305,11 +306,11 @@
     },
     {
       "path": "scripts/publish-release.sh",
-      "sha256": "1fc97f5140322b94a89841360a69a9954a1908d470035e34fc19f8e57f041307"
+      "sha256": "148f253423ccf5834911cb29696de27b35877a279963bcd9db31f2d7af3a88ec"
     },
     {
       "path": "scripts/publish-update-mirrors.sh",
-      "sha256": "519d64a0a5a583b1fbace02c06c3653fb3d0676ac57bc154ac3aac2d59d91cc0"
+      "sha256": "bd7c8ecac9c853ba61cdf772897009d0691f6bed4b23b57b42e699c0c819a134"
     },
     {
       "path": "Tests/aulycShotTests/UpdateManifestTests.swift",
@@ -325,7 +326,7 @@
     },
     {
       "path": "Tests/test_release_tool.py",
-      "sha256": "4df37905dd87c8a95bb404eea85d67696f7a513a1ec84529e6b0f388583b3f90"
+      "sha256": "8faa9179a6123f4c6ab0b4b08ecaff201f12795be4568e76e067f7a9993a16dd"
     }
   ]
 }

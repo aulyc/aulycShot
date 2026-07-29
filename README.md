@@ -28,7 +28,7 @@
 
 <p align="center">
   <a href="https://github.com/aulyc/aulycShot-releases/releases/latest">下载</a> ·
-  <a href="CHANGELOG.md">更新日志</a> ·
+  <a href="CHANGELOG.zh-CN.md">更新日志</a> ·
   <a href="https://github.com/aulyc/aulycShot/issues">Issues</a>
 </p>
 

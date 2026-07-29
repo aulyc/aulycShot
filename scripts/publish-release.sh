@@ -20,8 +20,12 @@ printf '%s  %s\n' "$PROVENANCE_SHA" "$(basename "$PROVENANCE")" > "$PROVENANCE.s
 python3 "$STANDARDS_ROOT/scripts/formal_release_git.py" verify \
     --path "$ROOT" --tag "$VERSION" --provenance "$PROVENANCE"
 
-NOTES="$(dirname "$PROVENANCE")/aulycShot-$VERSION-release-notes.md"
-python3 scripts/release_tool.py release-notes --version "$VERSION" --output "$NOTES"
+GITHUB_NOTES="$(dirname "$PROVENANCE")/aulycShot-$VERSION-release-notes.github.md"
+GITEE_NOTES="$(dirname "$PROVENANCE")/aulycShot-$VERSION-release-notes.gitee.md"
+python3 scripts/release_tool.py release-notes \
+    --version "$VERSION" --channel github --output "$GITHUB_NOTES"
+python3 scripts/release_tool.py release-notes \
+    --version "$VERSION" --channel gitee --output "$GITEE_NOTES"
 if gh release view "$VERSION" --repo aulyc/aulycShot >/dev/null 2>&1; then
     echo "error: GitHub Release $VERSION already exists" >&2
     exit 1
@@ -30,8 +34,8 @@ gh release create "$VERSION" \
     --repo aulyc/aulycShot \
     --verify-tag \
     --title "aulycShot $VERSION" \
-    --notes-file "$NOTES" \
+    --notes-file "$GITHUB_NOTES" \
     "$DMG" "$DMG.sha256" "$PROVENANCE" "$PROVENANCE.sha256"
 gh release view "$VERSION" --repo aulyc/aulycShot --json tagName,isDraft,isPrerelease,url
-bash scripts/publish-update-mirrors.sh "$PROVENANCE" "$NOTES"
+bash scripts/publish-update-mirrors.sh "$PROVENANCE" "$GITHUB_NOTES" "$GITEE_NOTES"
 echo "Published private canonical GitHub Release and public GitHub/Gitee update mirrors for $VERSION"
