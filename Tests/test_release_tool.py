@@ -170,6 +170,105 @@ class ReleaseToolTests(unittest.TestCase):
         with self.assertRaisesRegex(release_tool.ReleaseError, "field architecture"):
             release_tool.validate_provenance(provenance)
 
+    def test_write_update_manifest_binds_same_artifact_to_both_mirrors(self):
+        dmg = self.root / "aulycShot-1.6.13-build.495-arm64.dmg"
+        dmg.write_bytes(b"formal artifact")
+        value = self.valid_provenance(dmg)
+        value.update(
+            {
+                "teamIdentifier": "M9M7M2ARFD",
+                "minimumSystemVersion": "14.0",
+            }
+        )
+        provenance = self.root / "release-provenance.json"
+        provenance.write_text(json.dumps(value), encoding="utf-8")
+        output = self.root / "latest.json"
+        github_url = (
+            "https://github.com/aulyc/aulycShot-releases/releases/download/"
+            "1.6.13/aulycShot-1.6.13-build.495-arm64.dmg"
+        )
+        gitee_url = (
+            "https://gitee.com/aulyc/aulycShot-releases/releases/download/"
+            "1.6.13/aulycShot-1.6.13-build.495-arm64.dmg"
+        )
+
+        release_tool.command_write_update_manifest(
+            argparse.Namespace(
+                provenance=provenance,
+                github_url=github_url,
+                gitee_url=gitee_url,
+                release_page_url=None,
+                output=output,
+            )
+        )
+
+        manifest = json.loads(output.read_text(encoding="utf-8"))
+        self.assertEqual(manifest["version"], "1.6.13")
+        self.assertEqual(manifest["buildNumber"], 495)
+        self.assertEqual(manifest["artifact"]["file"], dmg.name)
+        self.assertEqual(
+            [item["source"] for item in manifest["artifact"]["downloads"]],
+            ["github", "gitee"],
+        )
+        self.assertEqual(
+            {item["url"] for item in manifest["artifact"]["downloads"]},
+            {github_url, gitee_url},
+        )
+
+    def test_write_update_manifest_rejects_non_github_primary_url(self):
+        dmg = self.root / "aulycShot-1.6.13-build.495-arm64.dmg"
+        dmg.write_bytes(b"formal artifact")
+        value = self.valid_provenance(dmg)
+        value.update(
+            {
+                "teamIdentifier": "M9M7M2ARFD",
+                "minimumSystemVersion": "14.0",
+            }
+        )
+        provenance = self.root / "release-provenance.json"
+        provenance.write_text(json.dumps(value), encoding="utf-8")
+
+        with self.assertRaisesRegex(release_tool.ReleaseError, "github.com"):
+            release_tool.command_write_update_manifest(
+                argparse.Namespace(
+                    provenance=provenance,
+                    github_url="https://gitee.com/not-primary.dmg",
+                    gitee_url="https://gitee.com/fallback.dmg",
+                    release_page_url=None,
+                    output=self.root / "latest.json",
+                )
+            )
+
+    def test_write_update_manifest_rejects_another_github_repository(self):
+        dmg = self.root / "aulycShot-1.6.13-build.495-arm64.dmg"
+        dmg.write_bytes(b"formal artifact")
+        value = self.valid_provenance(dmg)
+        value.update(
+            {
+                "teamIdentifier": "M9M7M2ARFD",
+                "minimumSystemVersion": "14.0",
+            }
+        )
+        provenance = self.root / "release-provenance.json"
+        provenance.write_text(json.dumps(value), encoding="utf-8")
+
+        with self.assertRaisesRegex(release_tool.ReleaseError, "configured public mirror"):
+            release_tool.command_write_update_manifest(
+                argparse.Namespace(
+                    provenance=provenance,
+                    github_url=(
+                        "https://github.com/other/project/releases/download/"
+                        "1.6.13/aulycShot-1.6.13-build.495-arm64.dmg"
+                    ),
+                    gitee_url=(
+                        "https://gitee.com/aulyc/aulycShot-releases/releases/download/"
+                        "1.6.13/aulycShot-1.6.13-build.495-arm64.dmg"
+                    ),
+                    release_page_url=None,
+                    output=self.root / "latest.json",
+                )
+            )
+
     def test_refresh_standards_hashes_only_declared_files(self):
         controlled = self.root / "Makefile"
         controlled.write_text("version-check:\n", encoding="utf-8")
@@ -182,6 +281,15 @@ class ReleaseToolTests(unittest.TestCase):
 
         updated = json.loads(self.adoption.read_text(encoding="utf-8"))
         self.assertEqual(updated["trackedFiles"][0]["sha256"], release_tool.sha256(controlled))
+
+    def test_release_metadata_files_are_not_fixed_hash_controls(self):
+        adoption = json.loads(
+            (PROJECT_ROOT / ".codex" / "standards.json").read_text(encoding="utf-8")
+        )
+        tracked_paths = {item["path"] for item in adoption["trackedFiles"]}
+
+        self.assertNotIn("CHANGELOG.md", tracked_paths)
+        self.assertNotIn("aulycShot/App/Info.plist", tracked_paths)
 
 
 if __name__ == "__main__":

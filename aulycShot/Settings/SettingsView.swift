@@ -46,99 +46,95 @@ enum SettingsTab: CaseIterable {
     }
 }
 
+enum SettingsActivationState: String, CaseIterable {
+    case enabled
+    case disabled
+
+    init(isEnabled: Bool) {
+        self = isEnabled ? .enabled : .disabled
+    }
+
+    var isEnabled: Bool {
+        self == .enabled
+    }
+
+    var localizedTitle: String {
+        switch self {
+        case .enabled: return L10n.settingEnabled
+        case .disabled: return L10n.settingDisabled
+        }
+    }
+}
+
 class SettingsView: NSView {
 
     var onMenuBarToggle: ((Bool) -> Void)?
     var onPermissionHelpRequest: (() -> Void)?
 
-    // Switches
-    private var menuBarSwitch: NSSwitch!
-    private var launchAtLoginSwitch: NSSwitch!
-    private var demoModeSwitch: NSSwitch!
+    // Activation-state pickers
+    private var menuBarStatePicker: NSPopUpButton!
+    private var launchAtLoginStatePicker: NSPopUpButton!
+    private var demoModeStatePicker: NSPopUpButton!
 
     // Picker & slider
     private var langPicker: NSPopUpButton!
-
-    // Window-capture shadow card
-    private var windowShadowPicker: NSPopUpButton!
-    private var windowShadowPreviewButton: NSButton!
-    private var windowShadowPreview: ShadowPreviewView?
-    private var windowShadowPreviewPopover: NSPopover?
-    private var windowShadowTitleLabel: NSTextField!
-    private var windowShadowSubtitleLabel: NSTextField?
-    private var windowShadowLevelHintLabel: NSTextField?
 
     // Screenshot shortcut card
     private var shortcutTitleLabel: NSTextField!
     private var shortcutField: NSTextField!
     private var shortcutSetButton: NSButton!
-    private var shortcutRestoreButton: NSButton!
     private var shortcutRecordingMonitor: Any?
 
     // Pin selected image shortcut card
     private var selectedImagePinShortcutTitleLabel: NSTextField!
     private var selectedImagePinShortcutField: NSTextField!
     private var selectedImagePinShortcutSetButton: NSButton!
-    private var selectedImagePinShortcutRestoreButton: NSButton!
     private var selectedImagePinShortcutRecordingMonitor: Any?
 
     // Pin clipboard image shortcut card
     private var clipboardImagePinShortcutTitleLabel: NSTextField!
     private var clipboardImagePinShortcutField: NSTextField!
     private var clipboardImagePinShortcutSetButton: NSButton!
-    private var clipboardImagePinShortcutRestoreButton: NSButton!
     private var clipboardImagePinShortcutRecordingMonitor: Any?
 
     // Pin clipboard text shortcut card
     private var clipboardTextPinShortcutTitleLabel: NSTextField!
     private var clipboardTextPinShortcutField: NSTextField!
     private var clipboardTextPinShortcutSetButton: NSButton!
-    private var clipboardTextPinShortcutRestoreButton: NSButton!
     private var clipboardTextPinShortcutRecordingMonitor: Any?
 
     // Edit selected image shortcut card
     private var selectedImageEditShortcutTitleLabel: NSTextField!
     private var selectedImageEditShortcutField: NSTextField!
     private var selectedImageEditShortcutSetButton: NSButton!
-    private var selectedImageEditShortcutRestoreButton: NSButton!
     private var selectedImageEditShortcutRecordingMonitor: Any?
 
     // Edit clipboard image shortcut card
     private var clipboardImageEditShortcutTitleLabel: NSTextField!
     private var clipboardImageEditShortcutField: NSTextField!
     private var clipboardImageEditShortcutSetButton: NSButton!
-    private var clipboardImageEditShortcutRestoreButton: NSButton!
     private var clipboardImageEditShortcutRecordingMonitor: Any?
 
     // Recording shortcut card
     private var recordShortcutTitleLabel: NSTextField!
     private var recordShortcutField: NSTextField!
     private var recordShortcutSetButton: NSButton!
-    private var recordShortcutRestoreButton: NSButton!
     private var recordShortcutRecordingMonitor: Any?
 
     // Image Merge shortcut card
     private var imageMergeShortcutTitleLabel: NSTextField!
     private var imageMergeShortcutField: NSTextField!
     private var imageMergeShortcutSetButton: NSButton!
-    private var imageMergeShortcutRestoreButton: NSButton!
     private var imageMergeShortcutRecordingMonitor: Any?
 
-    // Copy-to-clipboard (editor confirm) shortcut card
+    // Screenshot execution (editor confirm) shortcut card
     private var clipboardShortcutTitleLabel: NSTextField!
     private var clipboardShortcutField: NSTextField!
     private var clipboardShortcutSetButton: NSButton!
-    private var clipboardShortcutRestoreButton: NSButton!
     private var clipboardShortcutRecordingMonitor: Any?
 
-    // Save-to-file shortcut card (default ⌘S)
-    private var fileSaveShortcutTitleLabel: NSTextField!
-    private var fileSaveShortcutField: NSTextField!
-    private var fileSaveShortcutSetButton: NSButton!
-    private var fileSaveShortcutRestoreButton: NSButton!
-    private var fileSaveShortcutRecordingMonitor: Any?
-
-    private var shortcutResetButton: NSButton?
+    private var detailResetButton: NSButton?
+    private weak var toolbarSettingsPane: ToolbarSettingsPane?
 
     // Sidebar permission status
     private var featurePermissionHelpButton: NSButton?
@@ -238,7 +234,6 @@ class SettingsView: NSView {
         cancelRecordShortcutRecording()
         cancelImageMergeShortcutRecording()
         cancelClipboardShortcutRecording()
-        cancelFileSaveShortcutRecording()
         NotificationCenter.default.removeObserver(self)
     }
 
@@ -290,7 +285,6 @@ class SettingsView: NSView {
         refreshRecordShortcutDisplay()
         refreshImageMergeShortcutDisplay()
         refreshClipboardShortcutDisplay()
-        refreshFileSaveShortcutDisplay()
     }
 
     // MARK: - Sidebar
@@ -439,7 +433,7 @@ class SettingsView: NSView {
             NSLayoutConstraint.deactivate([toBottom, aboveFooter])
             (showsAboutFooter ? aboveFooter : toBottom).isActive = true
         }
-        shortcutResetButton?.isHidden = tab != .shortcuts
+        detailResetButton?.isHidden = tab != .shortcuts && tab != .toolbar
 
         // Swap pane content
         guard let pane = paneViews[tab] else { return }
@@ -465,7 +459,7 @@ class SettingsView: NSView {
             ? SettingsPalette.primaryText
             : SettingsPalette.secondaryText
         detailTitleLabel?.isHidden = false
-        detailHeaderDivider?.isHidden = isAbout
+        detailHeaderDivider?.isHidden = isAbout || tab == .toolbar
     }
 
     func showGeneralTab() {
@@ -492,14 +486,16 @@ class SettingsView: NSView {
         let resetButton = SettingsActionButton(
             title: L10n.toolbarSettingsReset,
             target: self,
-            action: #selector(shortcutsResetClicked)
+            action: #selector(detailResetClicked)
         )
+        resetButton.identifier = NSUserInterfaceItemIdentifier("settings-detail-reset")
         configureGeneralActionButton(resetButton)
         resetButton.isHidden = true
         panel.addSubview(resetButton)
-        shortcutResetButton = resetButton
+        detailResetButton = resetButton
 
         let headerDivider = NSView()
+        headerDivider.identifier = NSUserInterfaceItemIdentifier("settings-detail-header-divider")
         headerDivider.wantsLayer = true
         headerDivider.layer?.backgroundColor = SettingsPalette.separator.cgColor
         headerDivider.translatesAutoresizingMaskIntoConstraints = false
@@ -628,39 +624,43 @@ class SettingsView: NSView {
         stack.addArrangedSubview(langCard)
         langCard.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
 
-        // Toggles card
-        let togglesCard = generalCard()
-        let togglesInner = verticalInnerStack()
-        togglesCard.addSubview(togglesInner)
-        pin(togglesInner, to: togglesCard, insets: NSEdgeInsets(top: 0, left: 14, bottom: 0, right: 14))
+        // Activation-state card
+        let activationCard = generalCard()
+        let activationInner = verticalInnerStack()
+        activationCard.addSubview(activationInner)
+        pin(
+            activationInner,
+            to: activationCard,
+            insets: NSEdgeInsets(top: 0, left: 14, bottom: 0, right: 14)
+        )
 
-        let menuBar = makeToggleRow(
+        let menuBar = makeActivationRow(
             title: L10n.showMenuBarIcon,
             subtitle: nil,
             isOn: Defaults.showMenuBar,
-            action: #selector(menuBarSwitchToggled(_:))
+            identifier: "menu-bar-state-picker",
+            action: #selector(menuBarStateChanged(_:))
         )
         menuBarTitleLabel = menuBar.title
-        menuBarSwitch = menuBar.toggle
-        togglesInner.addArrangedSubview(menuBar.row)
-        menuBar.row.widthAnchor.constraint(equalTo: togglesInner.widthAnchor).isActive = true
-        togglesInner.addArrangedSubview(rowDivider())
+        menuBarStatePicker = menuBar.picker
+        activationInner.addArrangedSubview(menuBar.row)
+        menuBar.row.widthAnchor.constraint(equalTo: activationInner.widthAnchor).isActive = true
+        activationInner.addArrangedSubview(rowDivider())
 
-        let login = makeToggleRow(
+        let login = makeActivationRow(
             title: L10n.launchAtLogin,
             subtitle: nil,
             isOn: LaunchAtLogin.isEnabled,
-            action: #selector(launchAtLoginToggled(_:))
+            identifier: "launch-at-login-state-picker",
+            action: #selector(launchAtLoginStateChanged(_:))
         )
         launchAtLoginTitleLabel = login.title
-        launchAtLoginSwitch = login.toggle
-        togglesInner.addArrangedSubview(login.row)
-        login.row.widthAnchor.constraint(equalTo: togglesInner.widthAnchor).isActive = true
+        launchAtLoginStatePicker = login.picker
+        activationInner.addArrangedSubview(login.row)
+        login.row.widthAnchor.constraint(equalTo: activationInner.widthAnchor).isActive = true
 
-        stack.addArrangedSubview(togglesCard)
-        togglesCard.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
-
-        buildWindowShadowCard(into: stack)
+        stack.addArrangedSubview(activationCard)
+        activationCard.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
 
         buildScreenshotOutputCard(into: stack)
 
@@ -679,92 +679,21 @@ class SettingsView: NSView {
         card.addSubview(inner)
         pin(inner, to: card, insets: NSEdgeInsets(top: 0, left: 14, bottom: 0, right: 14))
 
-        let demo = makeToggleRow(
+        let demo = makeActivationRow(
             title: L10n.demoMode,
             subtitle: L10n.demoModeHint,
             isOn: Defaults.demoMode,
-            action: #selector(demoModeToggled(_:))
+            identifier: "demo-mode-state-picker",
+            action: #selector(demoModeStateChanged(_:))
         )
         demoModeTitleLabel = demo.title
         demoModeSubtitleLabel = demo.subtitle
-        demoModeSwitch = demo.toggle
+        demoModeStatePicker = demo.picker
         inner.addArrangedSubview(demo.row)
         demo.row.widthAnchor.constraint(equalTo: inner.widthAnchor).isActive = true
 
         stack.addArrangedSubview(card)
         card.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
-    }
-
-    /// Window-capture shadow setting with an on-demand preview popover.
-    private func buildWindowShadowCard(into stack: NSStackView) {
-        let card = generalCard()
-        let inner = NSStackView()
-        inner.orientation = .vertical
-        inner.alignment = .leading
-        inner.spacing = 0
-        inner.translatesAutoresizingMaskIntoConstraints = false
-        card.addSubview(inner)
-        pin(inner, to: card, insets: NSEdgeInsets(top: 0, left: 14, bottom: 0, right: 14))
-
-        let optionRow = NSStackView()
-        optionRow.orientation = .horizontal
-        optionRow.alignment = .centerY
-        optionRow.spacing = 10
-        optionRow.translatesAutoresizingMaskIntoConstraints = false
-
-        let labelStack = NSStackView()
-        labelStack.orientation = .vertical
-        labelStack.alignment = .leading
-        labelStack.spacing = 3
-
-        windowShadowTitleLabel = primaryLabel(L10n.windowShadowLabel)
-        windowShadowSubtitleLabel = secondaryLabel(L10n.windowShadowHint, wrapping: true)
-        labelStack.addArrangedSubview(windowShadowTitleLabel)
-        if let windowShadowSubtitleLabel {
-            labelStack.addArrangedSubview(windowShadowSubtitleLabel)
-        }
-        optionRow.addArrangedSubview(labelStack)
-        labelStack.widthAnchor.constraint(greaterThanOrEqualToConstant: 300).isActive = true
-        optionRow.addArrangedSubview(flexSpacer())
-
-        windowShadowPreviewButton = makeGeneralIconButton(
-            symbolName: "eye",
-            tooltip: L10n.windowShadowPreviewButton,
-            target: self,
-            action: #selector(windowShadowPreviewClicked(_:))
-        )
-        optionRow.addArrangedSubview(windowShadowPreviewButton)
-
-        windowShadowPicker = SettingsPopUpButton(frame: .zero, pullsDown: false)
-        windowShadowPicker.controlSize = .small
-        windowShadowPicker.font = NSFont.systemFont(ofSize: 12)
-        windowShadowPicker.target = self
-        windowShadowPicker.action = #selector(windowShadowLevelChanged(_:))
-        constrainGeneralPopupWidth(windowShadowPicker)
-        optionRow.addArrangedSubview(windowShadowPicker)
-        constrainSettingsRowHeight(optionRow)
-
-        inner.addArrangedSubview(optionRow)
-        optionRow.widthAnchor.constraint(equalTo: inner.widthAnchor).isActive = true
-
-        refreshWindowShadowControls()
-
-        stack.addArrangedSubview(card)
-        card.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
-    }
-
-    private func refreshWindowShadowControls() {
-        let level = Defaults.windowShadowLevel
-        windowShadowPicker?.removeAllItems()
-        for option in WindowShadowLevel.allCases {
-            windowShadowPicker?.addItem(withTitle: option.localizedTitle)
-            windowShadowPicker?.lastItem?.representedObject = option.rawValue
-        }
-        if let index = WindowShadowLevel.allCases.firstIndex(of: level) {
-            windowShadowPicker?.selectItem(at: index)
-        }
-        windowShadowPreview?.shadowSize = CGFloat(level.shadowSize)
-        windowShadowPreview?.isEffectEnabled = level.isEnabled
     }
 
     private func refreshSavePathControls() {
@@ -844,133 +773,99 @@ class SettingsView: NSView {
         // Screenshot shortcut card
         let shortcut = buildShortcutCard(
             title: L10n.shortcutHeader,
-            setAction: #selector(shortcutSetClicked),
-            restoreAction: #selector(shortcutRestoreClicked)
+            setAction: #selector(shortcutSetClicked)
         )
         shortcutTitleLabel = shortcut.title
         shortcutField = shortcut.field
         shortcutSetButton = shortcut.setButton
-        shortcutRestoreButton = shortcut.restoreButton
         stack.addArrangedSubview(shortcut.card)
         shortcut.card.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
 
-        // Copy-to-clipboard (editor confirm) shortcut card
+        // Screenshot execution (editor confirm) shortcut card
         let clipboardShortcut = buildShortcutCard(
             title: L10n.clipboardShortcutHeader,
-            setAction: #selector(clipboardShortcutSetClicked),
-            restoreAction: #selector(clipboardShortcutRestoreClicked)
+            setAction: #selector(clipboardShortcutSetClicked)
         )
         clipboardShortcutTitleLabel = clipboardShortcut.title
         clipboardShortcutField = clipboardShortcut.field
         clipboardShortcutSetButton = clipboardShortcut.setButton
-        clipboardShortcutRestoreButton = clipboardShortcut.restoreButton
         stack.addArrangedSubview(clipboardShortcut.card)
         clipboardShortcut.card.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
-
-        // Save-to-file shortcut card (default ⌘S)
-        let fileSaveShortcut = buildShortcutCard(
-            title: L10n.fileSaveShortcutHeader,
-            setAction: #selector(fileSaveShortcutSetClicked),
-            restoreAction: #selector(fileSaveShortcutRestoreClicked)
-        )
-        fileSaveShortcutTitleLabel = fileSaveShortcut.title
-        fileSaveShortcutField = fileSaveShortcut.field
-        fileSaveShortcutSetButton = fileSaveShortcut.setButton
-        fileSaveShortcutRestoreButton = fileSaveShortcut.restoreButton
-        stack.addArrangedSubview(fileSaveShortcut.card)
-        fileSaveShortcut.card.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
 
         // Edit selected image shortcut card
         let selectedImageEditShortcut = buildShortcutCard(
             title: L10n.selectedImageEditShortcutHeader,
-            setAction: #selector(selectedImageEditShortcutSetClicked),
-            restoreAction: #selector(selectedImageEditShortcutRestoreClicked)
+            setAction: #selector(selectedImageEditShortcutSetClicked)
         )
         selectedImageEditShortcutTitleLabel = selectedImageEditShortcut.title
         selectedImageEditShortcutField = selectedImageEditShortcut.field
         selectedImageEditShortcutSetButton = selectedImageEditShortcut.setButton
-        selectedImageEditShortcutRestoreButton = selectedImageEditShortcut.restoreButton
         stack.addArrangedSubview(selectedImageEditShortcut.card)
         selectedImageEditShortcut.card.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
 
         // Edit clipboard image shortcut card
         let clipboardImageEditShortcut = buildShortcutCard(
             title: L10n.clipboardImageEditShortcutHeader,
-            setAction: #selector(clipboardImageEditShortcutSetClicked),
-            restoreAction: #selector(clipboardImageEditShortcutRestoreClicked)
+            setAction: #selector(clipboardImageEditShortcutSetClicked)
         )
         clipboardImageEditShortcutTitleLabel = clipboardImageEditShortcut.title
         clipboardImageEditShortcutField = clipboardImageEditShortcut.field
         clipboardImageEditShortcutSetButton = clipboardImageEditShortcut.setButton
-        clipboardImageEditShortcutRestoreButton = clipboardImageEditShortcut.restoreButton
         stack.addArrangedSubview(clipboardImageEditShortcut.card)
         clipboardImageEditShortcut.card.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
 
         // Pin selected image shortcut card
         let selectedImagePinShortcut = buildShortcutCard(
             title: L10n.selectedImagePinShortcutHeader,
-            setAction: #selector(selectedImagePinShortcutSetClicked),
-            restoreAction: #selector(selectedImagePinShortcutRestoreClicked)
+            setAction: #selector(selectedImagePinShortcutSetClicked)
         )
         selectedImagePinShortcutTitleLabel = selectedImagePinShortcut.title
         selectedImagePinShortcutField = selectedImagePinShortcut.field
         selectedImagePinShortcutSetButton = selectedImagePinShortcut.setButton
-        selectedImagePinShortcutRestoreButton = selectedImagePinShortcut.restoreButton
-        selectedImagePinShortcutRestoreButton.toolTip = L10n.selectedImagePinShortcutClear
         stack.addArrangedSubview(selectedImagePinShortcut.card)
         selectedImagePinShortcut.card.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
 
         // Pin clipboard image shortcut card
         let clipboardImagePinShortcut = buildShortcutCard(
             title: L10n.clipboardImagePinShortcutHeader,
-            setAction: #selector(clipboardImagePinShortcutSetClicked),
-            restoreAction: #selector(clipboardImagePinShortcutRestoreClicked)
+            setAction: #selector(clipboardImagePinShortcutSetClicked)
         )
         clipboardImagePinShortcutTitleLabel = clipboardImagePinShortcut.title
         clipboardImagePinShortcutField = clipboardImagePinShortcut.field
         clipboardImagePinShortcutSetButton = clipboardImagePinShortcut.setButton
-        clipboardImagePinShortcutRestoreButton = clipboardImagePinShortcut.restoreButton
-        clipboardImagePinShortcutRestoreButton.toolTip = L10n.clipboardImagePinShortcutClear
         stack.addArrangedSubview(clipboardImagePinShortcut.card)
         clipboardImagePinShortcut.card.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
 
         // Recording shortcut card
         let recordShortcut = buildShortcutCard(
             title: L10n.recordShortcutHeader,
-            setAction: #selector(recordShortcutSetClicked),
-            restoreAction: #selector(recordShortcutRestoreClicked)
+            setAction: #selector(recordShortcutSetClicked)
         )
         recordShortcutTitleLabel = recordShortcut.title
         recordShortcutField = recordShortcut.field
         recordShortcutSetButton = recordShortcut.setButton
-        recordShortcutRestoreButton = recordShortcut.restoreButton
         stack.addArrangedSubview(recordShortcut.card)
         recordShortcut.card.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
 
         // Image Merge shortcut card
         let imageMergeShortcut = buildShortcutCard(
             title: L10n.imageMergeShortcutHeader,
-            setAction: #selector(imageMergeShortcutSetClicked),
-            restoreAction: #selector(imageMergeShortcutRestoreClicked)
+            setAction: #selector(imageMergeShortcutSetClicked)
         )
         imageMergeShortcutTitleLabel = imageMergeShortcut.title
         imageMergeShortcutField = imageMergeShortcut.field
         imageMergeShortcutSetButton = imageMergeShortcut.setButton
-        imageMergeShortcutRestoreButton = imageMergeShortcut.restoreButton
         stack.addArrangedSubview(imageMergeShortcut.card)
         imageMergeShortcut.card.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
 
         // Pin clipboard text shortcut card
         let clipboardTextPinShortcut = buildShortcutCard(
             title: L10n.clipboardTextPinShortcutHeader,
-            setAction: #selector(clipboardTextPinShortcutSetClicked),
-            restoreAction: #selector(clipboardTextPinShortcutRestoreClicked)
+            setAction: #selector(clipboardTextPinShortcutSetClicked)
         )
         clipboardTextPinShortcutTitleLabel = clipboardTextPinShortcut.title
         clipboardTextPinShortcutField = clipboardTextPinShortcut.field
         clipboardTextPinShortcutSetButton = clipboardTextPinShortcut.setButton
-        clipboardTextPinShortcutRestoreButton = clipboardTextPinShortcut.restoreButton
-        clipboardTextPinShortcutRestoreButton.toolTip = L10n.clipboardTextPinShortcutClear
         stack.addArrangedSubview(clipboardTextPinShortcut.card)
         clipboardTextPinShortcut.card.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
 
@@ -1235,7 +1130,7 @@ class SettingsView: NSView {
 
     private func preferredGeneralPopupWidth() -> CGFloat {
         let titles = AppLanguage.allCases.map(\.displayName)
-            + WindowShadowLevel.allCases.map(\.localizedTitle)
+            + SettingsActivationState.allCases.map(\.localizedTitle)
             + ScreenshotOutputMode.allCases.map(\.localizedTitle)
             + ScreenshotImageQuality.allCases.map(\.localizedTitle)
             + RecordingSavePreference.allCases.map(\.displayName)
@@ -1306,6 +1201,7 @@ class SettingsView: NSView {
         let host = NSView()
         host.translatesAutoresizingMaskIntoConstraints = false
         let pane = ToolbarSettingsPane()
+        toolbarSettingsPane = pane
         host.addSubview(pane)
         NSLayoutConstraint.activate([
             pane.topAnchor.constraint(equalTo: host.topAnchor),
@@ -1758,13 +1654,11 @@ class SettingsView: NSView {
         let title: NSTextField
         let field: NSTextField
         let setButton: NSButton
-        let restoreButton: NSButton
     }
 
     private func buildShortcutCard(
         title: String,
-        setAction: Selector,
-        restoreAction: Selector
+        setAction: Selector
     ) -> ShortcutCardBuild {
         let card = generalCard()
         let inner = NSStackView()
@@ -1821,21 +1715,6 @@ class SettingsView: NSView {
         configureGeneralActionButton(setButton)
         row.addArrangedSubview(setButton)
 
-        let restoreButton = SettingsActionButton(
-            image: NSImage(
-                systemSymbolName: "arrow.counterclockwise.circle.fill",
-                accessibilityDescription: L10n.shortcutRestore
-            ) ?? NSImage(),
-            target: self,
-            action: restoreAction
-        )
-        restoreButton.imagePosition = .imageOnly
-        restoreButton.contentTintColor = NSColor.white.withAlphaComponent(0.62)
-        restoreButton.toolTip = L10n.shortcutRestore
-        configureGeneralActionButton(restoreButton)
-        restoreButton.widthAnchor.constraint(equalToConstant: 34).isActive = true
-        row.addArrangedSubview(restoreButton)
-
         inner.addArrangedSubview(row)
         row.widthAnchor.constraint(equalTo: inner.widthAnchor).isActive = true
         constrainSettingsRowHeight(row)
@@ -1844,24 +1723,24 @@ class SettingsView: NSView {
             card: card,
             title: titleLabel,
             field: field,
-            setButton: setButton,
-            restoreButton: restoreButton
+            setButton: setButton
         )
     }
 
-    private struct ToggleRowBuild {
+    private struct ActivationRowBuild {
         let row: NSView
         let title: NSTextField
         let subtitle: NSTextField?
-        let toggle: NSSwitch
+        let picker: NSPopUpButton
     }
 
-    private func makeToggleRow(
+    private func makeActivationRow(
         title: String,
         subtitle: String?,
         isOn: Bool,
+        identifier: String,
         action: Selector
-    ) -> ToggleRowBuild {
+    ) -> ActivationRowBuild {
         let row = NSView()
         row.translatesAutoresizingMaskIntoConstraints = false
 
@@ -1882,28 +1761,60 @@ class SettingsView: NSView {
             subtitleLabel = sub
         }
 
-        let sw = NSSwitch()
-        sw.state = isOn ? .on : .off
-        sw.target = self
-        sw.action = action
-        sw.controlSize = .small
-        sw.translatesAutoresizingMaskIntoConstraints = false
+        let picker = SettingsPopUpButton(frame: .zero, pullsDown: false)
+        picker.identifier = NSUserInterfaceItemIdentifier(identifier)
+        picker.target = self
+        picker.action = action
+        picker.controlSize = .small
+        picker.font = NSFont.systemFont(ofSize: 12)
+        constrainGeneralPopupWidth(picker)
+        refreshActivationPicker(picker, isEnabled: isOn)
 
         row.addSubview(textStack)
-        row.addSubview(sw)
+        row.addSubview(picker)
 
         NSLayoutConstraint.activate([
             textStack.leadingAnchor.constraint(equalTo: row.leadingAnchor),
             textStack.topAnchor.constraint(equalTo: row.topAnchor, constant: 10),
             textStack.bottomAnchor.constraint(equalTo: row.bottomAnchor, constant: -10),
-            textStack.trailingAnchor.constraint(lessThanOrEqualTo: sw.leadingAnchor, constant: -12),
+            textStack.trailingAnchor.constraint(lessThanOrEqualTo: picker.leadingAnchor, constant: -12),
 
-            sw.trailingAnchor.constraint(equalTo: row.trailingAnchor),
-            sw.centerYAnchor.constraint(equalTo: textStack.centerYAnchor),
+            picker.trailingAnchor.constraint(equalTo: row.trailingAnchor),
+            picker.centerYAnchor.constraint(equalTo: textStack.centerYAnchor),
         ])
         constrainSettingsRowHeight(row)
 
-        return ToggleRowBuild(row: row, title: titleLabel, subtitle: subtitleLabel, toggle: sw)
+        return ActivationRowBuild(
+            row: row,
+            title: titleLabel,
+            subtitle: subtitleLabel,
+            picker: picker
+        )
+    }
+
+    private func refreshActivationPicker(
+        _ picker: NSPopUpButton?,
+        isEnabled: Bool
+    ) {
+        guard let picker else { return }
+        let selectedState = SettingsActivationState(isEnabled: isEnabled)
+        picker.removeAllItems()
+        for state in SettingsActivationState.allCases {
+            picker.addItem(withTitle: state.localizedTitle)
+            picker.lastItem?.representedObject = state.rawValue
+        }
+        if let selectedIndex = SettingsActivationState.allCases.firstIndex(of: selectedState) {
+            picker.selectItem(at: selectedIndex)
+        }
+    }
+
+    private func selectedActivationState(
+        from picker: NSPopUpButton
+    ) -> SettingsActivationState? {
+        guard let rawValue = picker.selectedItem?.representedObject as? String else {
+            return nil
+        }
+        return SettingsActivationState(rawValue: rawValue)
     }
 
     private struct RadioRowBuild {
@@ -2084,76 +1995,23 @@ class SettingsView: NSView {
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
-    @objc private func windowShadowPreviewClicked(_ sender: NSButton) {
-        if let popover = windowShadowPreviewPopover, popover.isShown {
-            popover.performClose(sender)
-            return
-        }
-
-        let contentSize = NSSize(width: 520, height: 166)
-        let contentView = NSView(frame: NSRect(origin: .zero, size: contentSize))
-
-        let preview = ShadowPreviewView()
-        preview.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(preview)
-
-        let hintLabel = secondaryLabel(L10n.windowShadowLevelHint, wrapping: true)
-        hintLabel.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(hintLabel)
-
-        NSLayoutConstraint.activate([
-            preview.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 12),
-            preview.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12),
-            preview.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -12),
-            preview.heightAnchor.constraint(equalToConstant: 120),
-
-            hintLabel.topAnchor.constraint(equalTo: preview.bottomAnchor, constant: 8),
-            hintLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12),
-            hintLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -12),
-            hintLabel.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -10),
-        ])
-
-        let contentController = NSViewController()
-        contentController.view = contentView
-
-        let popover = NSPopover()
-        popover.behavior = .semitransient
-        popover.animates = true
-        popover.contentSize = contentSize
-        popover.contentViewController = contentController
-
-        windowShadowPreview = preview
-        windowShadowLevelHintLabel = hintLabel
-        windowShadowPreviewPopover = popover
-        refreshWindowShadowControls()
-
-        popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .maxY)
-    }
-
-    @objc private func windowShadowLevelChanged(_ sender: NSPopUpButton) {
-        guard let rawValue = sender.selectedItem?.representedObject as? String,
-              let level = WindowShadowLevel(rawValue: rawValue)
-        else {
-            return
-        }
-        Defaults.windowShadowLevel = level
-        refreshWindowShadowControls()
-    }
-
-    @objc private func launchAtLoginToggled(_ sender: NSSwitch) {
-        let enable = sender.state == .on
+    @objc private func launchAtLoginStateChanged(_ sender: NSPopUpButton) {
+        guard let state = selectedActivationState(from: sender) else { return }
+        let enable = state.isEnabled
         let ok = LaunchAtLogin.setEnabled(enable)
         if !ok {
-            sender.state = LaunchAtLogin.isEnabled ? .on : .off
+            refreshActivationPicker(sender, isEnabled: LaunchAtLogin.isEnabled)
         }
     }
 
-    @objc private func demoModeToggled(_ sender: NSSwitch) {
-        Defaults.demoMode = sender.state == .on
+    @objc private func demoModeStateChanged(_ sender: NSPopUpButton) {
+        guard let state = selectedActivationState(from: sender) else { return }
+        Defaults.demoMode = state.isEnabled
     }
 
-    @objc private func menuBarSwitchToggled(_ sender: NSSwitch) {
-        let visible = sender.state == .on
+    @objc private func menuBarStateChanged(_ sender: NSPopUpButton) {
+        guard let state = selectedActivationState(from: sender) else { return }
+        let visible = state.isEnabled
         Defaults.showMenuBar = visible
         onMenuBarToggle?(visible)
     }
@@ -2187,6 +2045,10 @@ class SettingsView: NSView {
                 self?.removePermissionAlertOutsideClickMonitor()
                 completion(response)
             }
+            DispatchQueue.main.async { [weak self, weak alert] in
+                guard let self, let alert else { return }
+                self.applyPermissionHelpAlertButtonRoles(alert)
+            }
             installPermissionAlertOutsideClickMonitor(for: alert.window)
         } else {
             completion(alert.runModal())
@@ -2196,7 +2058,7 @@ class SettingsView: NSView {
     private func installPermissionAlertOutsideClickMonitor(for sheetWindow: NSWindow) {
         removePermissionAlertOutsideClickMonitor()
         permissionAlertOutsideClickMonitor = NSEvent.addLocalMonitorForEvents(
-            matching: .leftMouseDown
+            matching: [.leftMouseDown, .keyDown]
         ) { [weak self, weak sheetWindow] event in
             guard let self,
                   let sheetWindow,
@@ -2205,7 +2067,21 @@ class SettingsView: NSView {
                 return event
             }
 
-            guard PermissionAlertDismissalPolicy.shouldDismiss(
+            if event.type == .keyDown,
+               PermissionAlertDismissalPolicy.shouldDismiss(
+                   keyCode: event.keyCode,
+                   modifiers: event.modifierFlags
+               ) {
+                removePermissionAlertOutsideClickMonitor()
+                DispatchQueue.main.async { [weak sheetWindow] in
+                    guard let sheetWindow, let parentWindow = sheetWindow.sheetParent else { return }
+                    parentWindow.endSheet(sheetWindow, returnCode: .cancel)
+                }
+                return nil
+            }
+
+            guard event.type == .leftMouseDown,
+                  PermissionAlertDismissalPolicy.shouldDismiss(
                 sheetFrame: sheetWindow.frame,
                 clickScreenPoint: NSEvent.mouseLocation
             ) else {
@@ -2241,13 +2117,39 @@ class SettingsView: NSView {
                 ? L10n.permissionAvailable
                 : L10n.permissionUnavailable
         )
-        alert.addButton(withTitle: L10n.permissionHelpOpenAccessibility)
-        alert.addButton(withTitle: L10n.permissionHelpOpenScreenRecording)
+        let accessibilityButton = alert.addButton(withTitle: L10n.permissionHelpOpenAccessibility)
+        accessibilityButton.keyEquivalent = ""
+        accessibilityButton.keyEquivalentModifierMask = []
+
+        let screenRecordingButton = alert.addButton(
+            withTitle: L10n.permissionHelpOpenScreenRecording
+        )
+        screenRecordingButton.keyEquivalent = ""
+        screenRecordingButton.keyEquivalentModifierMask = []
 
         let doneButton = alert.addButton(withTitle: L10n.permissionHelpDone)
-        doneButton.keyEquivalent = "\u{1b}"
+        doneButton.keyEquivalent = "\r"
         doneButton.keyEquivalentModifierMask = []
+        applyPermissionHelpAlertButtonRoles(alert)
         return alert
+    }
+
+    private func applyPermissionHelpAlertButtonRoles(_ alert: NSAlert) {
+        guard alert.buttons.count == 3 else { return }
+        let permissionButtons = alert.buttons.prefix(2)
+        let doneButton = alert.buttons[2]
+
+        for button in permissionButtons {
+            button.keyEquivalent = ""
+            button.keyEquivalentModifierMask = []
+            button.bezelColor = nil
+        }
+
+        doneButton.keyEquivalent = "\r"
+        doneButton.keyEquivalentModifierMask = []
+        doneButton.bezelColor = NSColor.controlAccentColor
+        alert.window.defaultButtonCell = doneButton.cell as? NSButtonCell
+        doneButton.needsDisplay = true
     }
 
     // MARK: - Shortcut recording
@@ -2310,9 +2212,6 @@ class SettingsView: NSView {
         if slot != .clipboard, clipboardShortcutRecordingMonitor != nil {
             cancelClipboardShortcutRecording()
         }
-        if slot != .fileSave, fileSaveShortcutRecordingMonitor != nil {
-            cancelFileSaveShortcutRecording()
-        }
     }
 
     @objc private func shortcutSetClicked() {
@@ -2324,7 +2223,6 @@ class SettingsView: NSView {
         HotkeyManager.shared.beginRecording()
         shortcutSetButton.title = L10n.shortcutCancel
         shortcutField.stringValue = L10n.shortcutWaiting
-        shortcutRestoreButton.isHidden = true
 
         shortcutRecordingMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self = self else { return event }
@@ -2367,15 +2265,6 @@ class SettingsView: NSView {
         }
     }
 
-    @objc private func shortcutRestoreClicked() {
-        if shortcutRecordingMonitor != nil {
-            cancelShortcutRecording()
-        }
-        Defaults.clearScreenshotHotkey()
-        NotificationCenter.default.post(name: .hotkeyDidChange, object: nil)
-        refreshShortcutDisplay()
-    }
-
     private func finishShortcutRecording() {
         if let m = shortcutRecordingMonitor {
             NSEvent.removeMonitor(m)
@@ -2399,10 +2288,8 @@ class SettingsView: NSView {
         shortcutSetButton?.title = L10n.shortcutSet
         if let display = HotkeyManager.currentDisplayString() {
             shortcutField?.stringValue = display
-            shortcutRestoreButton?.isHidden = false
         } else {
             shortcutField?.stringValue = L10n.shortcutDefaultDisplay
-            shortcutRestoreButton?.isHidden = true
         }
     }
 
@@ -2415,7 +2302,6 @@ class SettingsView: NSView {
         HotkeyManager.shared.beginRecording()
         selectedImagePinShortcutSetButton.title = L10n.shortcutCancel
         selectedImagePinShortcutField.stringValue = L10n.shortcutWaiting
-        selectedImagePinShortcutRestoreButton.isHidden = true
 
         selectedImagePinShortcutRecordingMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self = self else { return event }
@@ -2458,15 +2344,6 @@ class SettingsView: NSView {
         }
     }
 
-    @objc private func selectedImagePinShortcutRestoreClicked() {
-        if selectedImagePinShortcutRecordingMonitor != nil {
-            cancelSelectedImagePinShortcutRecording()
-        }
-        Defaults.clearSelectedImagePinHotkey()
-        NotificationCenter.default.post(name: .hotkeyDidChange, object: nil)
-        refreshSelectedImagePinShortcutDisplay()
-    }
-
     private func finishSelectedImagePinShortcutRecording() {
         if let m = selectedImagePinShortcutRecordingMonitor {
             NSEvent.removeMonitor(m)
@@ -2490,10 +2367,8 @@ class SettingsView: NSView {
         selectedImagePinShortcutSetButton?.title = L10n.shortcutSet
         if let display = HotkeyManager.currentSelectedImagePinDisplayString() {
             selectedImagePinShortcutField?.stringValue = display
-            selectedImagePinShortcutRestoreButton?.isHidden = false
         } else {
             selectedImagePinShortcutField?.stringValue = L10n.selectedImagePinShortcutDefaultDisplay
-            selectedImagePinShortcutRestoreButton?.isHidden = true
         }
     }
 
@@ -2506,7 +2381,6 @@ class SettingsView: NSView {
         HotkeyManager.shared.beginRecording()
         clipboardImagePinShortcutSetButton.title = L10n.shortcutCancel
         clipboardImagePinShortcutField.stringValue = L10n.shortcutWaiting
-        clipboardImagePinShortcutRestoreButton.isHidden = true
 
         clipboardImagePinShortcutRecordingMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self = self else { return event }
@@ -2549,15 +2423,6 @@ class SettingsView: NSView {
         }
     }
 
-    @objc private func clipboardImagePinShortcutRestoreClicked() {
-        if clipboardImagePinShortcutRecordingMonitor != nil {
-            cancelClipboardImagePinShortcutRecording()
-        }
-        Defaults.clearClipboardImagePinHotkey()
-        NotificationCenter.default.post(name: .hotkeyDidChange, object: nil)
-        refreshClipboardImagePinShortcutDisplay()
-    }
-
     private func finishClipboardImagePinShortcutRecording() {
         if let m = clipboardImagePinShortcutRecordingMonitor {
             NSEvent.removeMonitor(m)
@@ -2581,10 +2446,8 @@ class SettingsView: NSView {
         clipboardImagePinShortcutSetButton?.title = L10n.shortcutSet
         if let display = HotkeyManager.currentClipboardImagePinDisplayString() {
             clipboardImagePinShortcutField?.stringValue = display
-            clipboardImagePinShortcutRestoreButton?.isHidden = false
         } else {
             clipboardImagePinShortcutField?.stringValue = L10n.clipboardImagePinShortcutDefaultDisplay
-            clipboardImagePinShortcutRestoreButton?.isHidden = true
         }
     }
 
@@ -2597,7 +2460,6 @@ class SettingsView: NSView {
         HotkeyManager.shared.beginRecording()
         clipboardTextPinShortcutSetButton.title = L10n.shortcutCancel
         clipboardTextPinShortcutField.stringValue = L10n.shortcutWaiting
-        clipboardTextPinShortcutRestoreButton.isHidden = true
 
         clipboardTextPinShortcutRecordingMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self = self else { return event }
@@ -2638,15 +2500,6 @@ class SettingsView: NSView {
         }
     }
 
-    @objc private func clipboardTextPinShortcutRestoreClicked() {
-        if clipboardTextPinShortcutRecordingMonitor != nil {
-            cancelClipboardTextPinShortcutRecording()
-        }
-        Defaults.clearClipboardTextPinHotkey()
-        NotificationCenter.default.post(name: .hotkeyDidChange, object: nil)
-        refreshClipboardTextPinShortcutDisplay()
-    }
-
     private func finishClipboardTextPinShortcutRecording() {
         if let m = clipboardTextPinShortcutRecordingMonitor {
             NSEvent.removeMonitor(m)
@@ -2670,10 +2523,8 @@ class SettingsView: NSView {
         clipboardTextPinShortcutSetButton?.title = L10n.shortcutSet
         if let display = HotkeyManager.currentClipboardTextPinDisplayString() {
             clipboardTextPinShortcutField?.stringValue = display
-            clipboardTextPinShortcutRestoreButton?.isHidden = false
         } else {
             clipboardTextPinShortcutField?.stringValue = L10n.clipboardTextPinShortcutDefaultDisplay
-            clipboardTextPinShortcutRestoreButton?.isHidden = true
         }
     }
 
@@ -2686,7 +2537,6 @@ class SettingsView: NSView {
         HotkeyManager.shared.beginRecording()
         selectedImageEditShortcutSetButton.title = L10n.shortcutCancel
         selectedImageEditShortcutField.stringValue = L10n.shortcutWaiting
-        selectedImageEditShortcutRestoreButton.isHidden = true
 
         selectedImageEditShortcutRecordingMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self = self else { return event }
@@ -2727,15 +2577,6 @@ class SettingsView: NSView {
         }
     }
 
-    @objc private func selectedImageEditShortcutRestoreClicked() {
-        if selectedImageEditShortcutRecordingMonitor != nil {
-            cancelSelectedImageEditShortcutRecording()
-        }
-        Defaults.clearSelectedImageEditHotkey()
-        NotificationCenter.default.post(name: .hotkeyDidChange, object: nil)
-        refreshSelectedImageEditShortcutDisplay()
-    }
-
     private func finishSelectedImageEditShortcutRecording() {
         if let m = selectedImageEditShortcutRecordingMonitor {
             NSEvent.removeMonitor(m)
@@ -2759,10 +2600,8 @@ class SettingsView: NSView {
         selectedImageEditShortcutSetButton?.title = L10n.shortcutSet
         if let display = HotkeyManager.currentSelectedImageEditDisplayString() {
             selectedImageEditShortcutField?.stringValue = display
-            selectedImageEditShortcutRestoreButton?.isHidden = false
         } else {
             selectedImageEditShortcutField?.stringValue = L10n.selectedImageEditShortcutDefaultDisplay
-            selectedImageEditShortcutRestoreButton?.isHidden = true
         }
     }
 
@@ -2775,7 +2614,6 @@ class SettingsView: NSView {
         HotkeyManager.shared.beginRecording()
         clipboardImageEditShortcutSetButton.title = L10n.shortcutCancel
         clipboardImageEditShortcutField.stringValue = L10n.shortcutWaiting
-        clipboardImageEditShortcutRestoreButton.isHidden = true
 
         clipboardImageEditShortcutRecordingMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self = self else { return event }
@@ -2816,15 +2654,6 @@ class SettingsView: NSView {
         }
     }
 
-    @objc private func clipboardImageEditShortcutRestoreClicked() {
-        if clipboardImageEditShortcutRecordingMonitor != nil {
-            cancelClipboardImageEditShortcutRecording()
-        }
-        Defaults.clearClipboardImageEditHotkey()
-        NotificationCenter.default.post(name: .hotkeyDidChange, object: nil)
-        refreshClipboardImageEditShortcutDisplay()
-    }
-
     private func finishClipboardImageEditShortcutRecording() {
         if let m = clipboardImageEditShortcutRecordingMonitor {
             NSEvent.removeMonitor(m)
@@ -2848,10 +2677,8 @@ class SettingsView: NSView {
         clipboardImageEditShortcutSetButton?.title = L10n.shortcutSet
         if let display = HotkeyManager.currentClipboardImageEditDisplayString() {
             clipboardImageEditShortcutField?.stringValue = display
-            clipboardImageEditShortcutRestoreButton?.isHidden = false
         } else {
             clipboardImageEditShortcutField?.stringValue = L10n.clipboardImageEditShortcutDefaultDisplay
-            clipboardImageEditShortcutRestoreButton?.isHidden = true
         }
     }
 
@@ -2864,7 +2691,6 @@ class SettingsView: NSView {
         HotkeyManager.shared.beginRecording()
         recordShortcutSetButton.title = L10n.shortcutCancel
         recordShortcutField.stringValue = L10n.shortcutWaiting
-        recordShortcutRestoreButton.isHidden = true
 
         recordShortcutRecordingMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self = self else { return event }
@@ -2905,15 +2731,6 @@ class SettingsView: NSView {
         }
     }
 
-    @objc private func recordShortcutRestoreClicked() {
-        if recordShortcutRecordingMonitor != nil {
-            cancelRecordShortcutRecording()
-        }
-        Defaults.clearRecordHotkey()
-        NotificationCenter.default.post(name: .hotkeyDidChange, object: nil)
-        refreshRecordShortcutDisplay()
-    }
-
     private func finishRecordShortcutRecording() {
         if let m = recordShortcutRecordingMonitor {
             NSEvent.removeMonitor(m)
@@ -2937,10 +2754,8 @@ class SettingsView: NSView {
         recordShortcutSetButton?.title = L10n.shortcutSet
         if let display = HotkeyManager.currentRecordDisplayString() {
             recordShortcutField?.stringValue = display
-            recordShortcutRestoreButton?.isHidden = false
         } else {
             recordShortcutField?.stringValue = L10n.recordShortcutDefaultDisplay
-            recordShortcutRestoreButton?.isHidden = true
         }
     }
 
@@ -2953,7 +2768,6 @@ class SettingsView: NSView {
         HotkeyManager.shared.beginRecording()
         imageMergeShortcutSetButton.title = L10n.shortcutCancel
         imageMergeShortcutField.stringValue = L10n.shortcutWaiting
-        imageMergeShortcutRestoreButton.isHidden = true
 
         imageMergeShortcutRecordingMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self = self else { return event }
@@ -2994,15 +2808,6 @@ class SettingsView: NSView {
         }
     }
 
-    @objc private func imageMergeShortcutRestoreClicked() {
-        if imageMergeShortcutRecordingMonitor != nil {
-            cancelImageMergeShortcutRecording()
-        }
-        Defaults.clearImageMergeHotkey()
-        NotificationCenter.default.post(name: .hotkeyDidChange, object: nil)
-        refreshImageMergeShortcutDisplay()
-    }
-
     private func finishImageMergeShortcutRecording() {
         if let m = imageMergeShortcutRecordingMonitor {
             NSEvent.removeMonitor(m)
@@ -3026,10 +2831,8 @@ class SettingsView: NSView {
         imageMergeShortcutSetButton?.title = L10n.shortcutSet
         if let display = HotkeyManager.currentImageMergeDisplayString() {
             imageMergeShortcutField?.stringValue = display
-            imageMergeShortcutRestoreButton?.isHidden = false
         } else {
             imageMergeShortcutField?.stringValue = L10n.imageMergeShortcutDefaultDisplay
-            imageMergeShortcutRestoreButton?.isHidden = true
         }
     }
 
@@ -3042,7 +2845,6 @@ class SettingsView: NSView {
         HotkeyManager.shared.beginRecording()
         clipboardShortcutSetButton.title = L10n.shortcutCancel
         clipboardShortcutField.stringValue = L10n.shortcutWaiting
-        clipboardShortcutRestoreButton.isHidden = true
 
         clipboardShortcutRecordingMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self = self else { return event }
@@ -3083,15 +2885,6 @@ class SettingsView: NSView {
         }
     }
 
-    @objc private func clipboardShortcutRestoreClicked() {
-        if clipboardShortcutRecordingMonitor != nil {
-            cancelClipboardShortcutRecording()
-        }
-        Defaults.clearClipboardHotkey()
-        NotificationCenter.default.post(name: .hotkeyDidChange, object: nil)
-        refreshClipboardShortcutDisplay()
-    }
-
     private func finishClipboardShortcutRecording() {
         if let m = clipboardShortcutRecordingMonitor {
             NSEvent.removeMonitor(m)
@@ -3115,91 +2908,23 @@ class SettingsView: NSView {
         clipboardShortcutSetButton?.title = L10n.shortcutSet
         if let display = HotkeyManager.currentClipboardDisplayString() {
             clipboardShortcutField?.stringValue = display
-            clipboardShortcutRestoreButton?.isHidden = false
         } else {
             clipboardShortcutField?.stringValue = L10n.clipboardShortcutDefaultDisplay
-            clipboardShortcutRestoreButton?.isHidden = true
         }
     }
 
-    @objc private func fileSaveShortcutSetClicked() {
-        if fileSaveShortcutRecordingMonitor != nil {
-            cancelFileSaveShortcutRecording()
-            return
-        }
-        cancelShortcutRecordings(except: .fileSave)
-        HotkeyManager.shared.beginRecording()
-        fileSaveShortcutSetButton.title = L10n.shortcutCancel
-        fileSaveShortcutField.stringValue = L10n.shortcutWaiting
-        fileSaveShortcutRestoreButton.isHidden = true
-
-        fileSaveShortcutRecordingMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self = self else { return event }
-            let modifiers = event.modifierFlags
-            let isEscape = event.keyCode == UInt16(kVK_Escape)
-            let activeModifierMask: NSEvent.ModifierFlags = [.command, .shift, .option, .control]
-            let pressedModifiers = modifiers.intersection(activeModifierMask)
-
-            if isEscape && pressedModifiers.isEmpty {
-                self.cancelFileSaveShortcutRecording()
-                return nil
-            }
-
-            var carbonMods: UInt32 = 0
-            if modifiers.contains(.command) { carbonMods |= UInt32(cmdKey) }
-            if modifiers.contains(.shift)   { carbonMods |= UInt32(shiftKey) }
-            if modifiers.contains(.option)  { carbonMods |= UInt32(optionKey) }
-            if modifiers.contains(.control) { carbonMods |= UInt32(controlKey) }
-            let keyCode = UInt32(event.keyCode)
-
-            if let conflict = HotkeyManager.shared.hotkeyConflictMessage(
-                forKeyCode: keyCode, modifiers: carbonMods, assigningTo: .fileSave) {
-                self.cancelFileSaveShortcutRecording()
-                self.presentHotkeyConflictAlert(conflict)
-                return nil
-            }
-
-            Defaults.fileSaveHotkeyKeyCode = Int(keyCode)
-            Defaults.fileSaveHotkeyModifiers = Int(carbonMods)
-            self.finishFileSaveShortcutRecording()
-            return nil
+    @objc private func detailResetClicked() {
+        switch selectedTab {
+        case .shortcuts:
+            resetShortcutsToDefault()
+        case .toolbar:
+            toolbarSettingsPane?.resetToDefault()
+        case .general, .about:
+            break
         }
     }
 
-    @objc private func fileSaveShortcutRestoreClicked() {
-        if fileSaveShortcutRecordingMonitor != nil {
-            cancelFileSaveShortcutRecording()
-        }
-        Defaults.clearFileSaveHotkey()
-        refreshFileSaveShortcutDisplay()
-    }
-
-    private func finishFileSaveShortcutRecording() {
-        if let m = fileSaveShortcutRecordingMonitor {
-            NSEvent.removeMonitor(m)
-            fileSaveShortcutRecordingMonitor = nil
-        }
-        HotkeyManager.shared.endRecording()
-        refreshFileSaveShortcutDisplay()
-    }
-
-    func cancelFileSaveShortcutRecording() {
-        guard fileSaveShortcutRecordingMonitor != nil else { return }
-        if let m = fileSaveShortcutRecordingMonitor {
-            NSEvent.removeMonitor(m)
-            fileSaveShortcutRecordingMonitor = nil
-        }
-        HotkeyManager.shared.endRecording()
-        refreshFileSaveShortcutDisplay()
-    }
-
-    private func refreshFileSaveShortcutDisplay() {
-        fileSaveShortcutSetButton?.title = L10n.shortcutSet
-        fileSaveShortcutField?.stringValue = HotkeyManager.currentFileSaveDisplayString()
-        fileSaveShortcutRestoreButton?.isHidden = !Defaults.hasCustomFileSaveHotkey
-    }
-
-    @objc private func shortcutsResetClicked() {
+    private func resetShortcutsToDefault() {
         cancelShortcutRecording()
         cancelSelectedImagePinShortcutRecording()
         cancelClipboardImagePinShortcutRecording()
@@ -3209,7 +2934,6 @@ class SettingsView: NSView {
         cancelRecordShortcutRecording()
         cancelImageMergeShortcutRecording()
         cancelClipboardShortcutRecording()
-        cancelFileSaveShortcutRecording()
         Defaults.resetShortcutHotkeysToDefaults()
         NotificationCenter.default.post(name: .hotkeyDidChange, object: nil)
         refreshShortcutDisplay()
@@ -3221,7 +2945,6 @@ class SettingsView: NSView {
         refreshRecordShortcutDisplay()
         refreshImageMergeShortcutDisplay()
         refreshClipboardShortcutDisplay()
-        refreshFileSaveShortcutDisplay()
     }
 
     @objc private func updateLocalization() {
@@ -3229,9 +2952,10 @@ class SettingsView: NSView {
         launchAtLoginTitleLabel?.stringValue = L10n.launchAtLogin
         demoModeTitleLabel?.stringValue = L10n.demoMode
         demoModeSubtitleLabel?.stringValue = L10n.demoModeHint
+        refreshActivationPicker(menuBarStatePicker, isEnabled: Defaults.showMenuBar)
+        refreshActivationPicker(launchAtLoginStatePicker, isEnabled: LaunchAtLogin.isEnabled)
+        refreshActivationPicker(demoModeStatePicker, isEnabled: Defaults.demoMode)
         langTitleLabel?.stringValue = L10n.languageHeader
-        windowShadowPreviewButton?.toolTip = L10n.windowShadowPreviewButton
-        windowShadowPreviewButton?.setAccessibilityLabel(L10n.windowShadowPreviewButton)
         screenshotOutputActionTitleLabel?.stringValue = L10n.screenshotOutputActionLabel
         refreshScreenshotOutputControls()
         screenshotQualityTitleLabel?.stringValue = L10n.screenshotQualityLabel
@@ -3246,32 +2970,17 @@ class SettingsView: NSView {
         screenshotSavePathRevealButton?.toolTip = L10n.savePathReveal
         screenshotSavePathRevealButton?.setAccessibilityLabel(L10n.savePathReveal)
         refreshSavePathControls()
-        windowShadowTitleLabel?.stringValue = L10n.windowShadowLabel
-        windowShadowSubtitleLabel?.stringValue = L10n.windowShadowHint
-        windowShadowLevelHintLabel?.stringValue = L10n.windowShadowLevelHint
-        refreshWindowShadowControls()
         refreshGeneralPopupWidths()
         shortcutTitleLabel?.stringValue = L10n.shortcutHeader
-        shortcutRestoreButton?.toolTip = L10n.shortcutRestore
         selectedImagePinShortcutTitleLabel?.stringValue = L10n.selectedImagePinShortcutHeader
-        selectedImagePinShortcutRestoreButton?.toolTip = L10n.selectedImagePinShortcutClear
         clipboardImagePinShortcutTitleLabel?.stringValue = L10n.clipboardImagePinShortcutHeader
-        clipboardImagePinShortcutRestoreButton?.toolTip = L10n.clipboardImagePinShortcutClear
         clipboardTextPinShortcutTitleLabel?.stringValue = L10n.clipboardTextPinShortcutHeader
-        clipboardTextPinShortcutRestoreButton?.toolTip = L10n.clipboardTextPinShortcutClear
         selectedImageEditShortcutTitleLabel?.stringValue = L10n.selectedImageEditShortcutHeader
-        selectedImageEditShortcutRestoreButton?.toolTip = L10n.shortcutRestore
         clipboardImageEditShortcutTitleLabel?.stringValue = L10n.clipboardImageEditShortcutHeader
-        clipboardImageEditShortcutRestoreButton?.toolTip = L10n.shortcutRestore
         recordShortcutTitleLabel?.stringValue = L10n.recordShortcutHeader
-        recordShortcutRestoreButton?.toolTip = L10n.shortcutRestore
         imageMergeShortcutTitleLabel?.stringValue = L10n.imageMergeShortcutHeader
-        imageMergeShortcutRestoreButton?.toolTip = L10n.shortcutRestore
         clipboardShortcutTitleLabel?.stringValue = L10n.clipboardShortcutHeader
-        clipboardShortcutRestoreButton?.toolTip = L10n.shortcutRestore
-        fileSaveShortcutTitleLabel?.stringValue = L10n.fileSaveShortcutHeader
-        fileSaveShortcutRestoreButton?.toolTip = L10n.shortcutRestore
-        shortcutResetButton?.title = L10n.toolbarSettingsReset
+        detailResetButton?.title = L10n.toolbarSettingsReset
         aboutVersionLabel?.stringValue = aboutVersionValueString()
         aboutLicenseTitleLabel?.stringValue = L10n.aboutLicense
         aboutSourceTitleLabel?.stringValue = L10n.aboutSourceCode
@@ -3291,7 +3000,6 @@ class SettingsView: NSView {
         refreshRecordShortcutDisplay()
         refreshImageMergeShortcutDisplay()
         refreshClipboardShortcutDisplay()
-        refreshFileSaveShortcutDisplay()
         featurePermissionHelpButton?.toolTip = L10n.featurePermissionHelpTooltip
         featurePermissionHelpButton?.setAccessibilityLabel(L10n.featurePermissionHelpTooltip)
         featurePermissionStatus?.setTitle(L10n.featurePermissionStatus)
@@ -3324,6 +3032,14 @@ private enum PermissionSettingsDestination {
 enum PermissionAlertDismissalPolicy {
     static func shouldDismiss(sheetFrame: NSRect, clickScreenPoint: NSPoint) -> Bool {
         !sheetFrame.contains(clickScreenPoint)
+    }
+
+    static func shouldDismiss(
+        keyCode: UInt16,
+        modifiers: NSEvent.ModifierFlags
+    ) -> Bool {
+        let activeModifiers = modifiers.intersection([.command, .shift, .option, .control])
+        return keyCode == UInt16(kVK_Escape) && activeModifiers.isEmpty
     }
 }
 
@@ -3508,84 +3224,6 @@ final class TabButton: NSControl {
 }
 
 // MARK: - Card view
-
-/// Live preview of the window-capture shadow: a small window-like card
-/// floating on a desktop-like backdrop. The shadow scales with `shadowSize`
-/// so the user sees how high the captured window will appear to float.
-private final class ShadowPreviewView: NSView {
-    var shadowSize: CGFloat = 22 { didSet { needsDisplay = true } }
-    var isEffectEnabled: Bool = true { didSet { needsDisplay = true } }
-
-    override func draw(_ dirtyRect: NSRect) {
-        let backdrop = NSBezierPath(roundedRect: bounds, xRadius: 8, yRadius: 8)
-        backdrop.addClip()
-
-        // Desktop-like light backdrop so the dark shadow stays visible
-        // (the settings UI itself is dark).
-        let gradient = NSGradient(colors: [
-            NSColor(calibratedRed: 0.74, green: 0.78, blue: 0.85, alpha: 1),
-            NSColor(calibratedRed: 0.60, green: 0.64, blue: 0.72, alpha: 1)
-        ])
-        gradient?.draw(in: bounds, angle: -90)
-
-        // Window card geometry, centered; floats higher as the shadow grows.
-        let cardW = min(bounds.width * 0.56, 210)
-        let cardH: CGFloat = 64
-        let lift = isEffectEnabled ? min(shadowSize, 60) * 0.10 : 0
-        let cardRect = NSRect(
-            x: ((bounds.width - cardW) / 2).rounded(),
-            y: ((bounds.height - cardH) / 2 + lift).rounded(),
-            width: cardW,
-            height: cardH
-        )
-        let radius: CGFloat = 9
-        let cardPath = NSBezierPath(roundedRect: cardRect, xRadius: radius, yRadius: radius)
-
-        guard let ctx = NSGraphicsContext.current else { return }
-
-        // Shadow pass. Scaled down relative to the real export — the preview
-        // card is tiny — but proportional, so the slider's effect reads.
-        ctx.saveGraphicsState()
-        if isEffectEnabled, shadowSize > 0 {
-            let shadow = NSShadow()
-            shadow.shadowColor = NSColor.black.withAlphaComponent(0.42)
-            shadow.shadowBlurRadius = shadowSize * 0.62
-            shadow.shadowOffset = NSSize(width: 0, height: -shadowSize * 0.30)
-            shadow.set()
-        }
-        NSColor.white.setFill()
-        cardPath.fill()
-        ctx.restoreGraphicsState()
-
-        // Title-bar strip + traffic-light dots, clipped to the card.
-        ctx.saveGraphicsState()
-        cardPath.addClip()
-        NSColor(calibratedWhite: 0.93, alpha: 1).setFill()
-        NSBezierPath(rect: NSRect(
-            x: cardRect.minX, y: cardRect.maxY - 16,
-            width: cardRect.width, height: 16
-        )).fill()
-        let dotColors: [NSColor] = [
-            NSColor(calibratedRed: 1.00, green: 0.37, blue: 0.35, alpha: 1),
-            NSColor(calibratedRed: 1.00, green: 0.74, blue: 0.18, alpha: 1),
-            NSColor(calibratedRed: 0.31, green: 0.79, blue: 0.31, alpha: 1)
-        ]
-        for (i, color) in dotColors.enumerated() {
-            color.setFill()
-            let d: CGFloat = 7
-            NSBezierPath(ovalIn: NSRect(
-                x: cardRect.minX + 9 + CGFloat(i) * 12,
-                y: cardRect.maxY - 11.5, width: d, height: d
-            )).fill()
-        }
-        ctx.restoreGraphicsState()
-
-        // Hairline border for crispness.
-        NSColor.black.withAlphaComponent(0.08).setStroke()
-        cardPath.lineWidth = 1
-        cardPath.stroke()
-    }
-}
 
 private final class HairlineSeparatorView: NSView {
     private let separatorLayer = CALayer()

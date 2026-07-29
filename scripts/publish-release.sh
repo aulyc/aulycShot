@@ -33,4 +33,5 @@ gh release create "$VERSION" \
     --notes-file "$NOTES" \
     "$DMG" "$DMG.sha256" "$PROVENANCE" "$PROVENANCE.sha256"
 gh release view "$VERSION" --repo aulyc/aulycShot --json tagName,isDraft,isPrerelease,url
-echo "Published private GitHub Release $VERSION without Homebrew dispatch"
+bash scripts/publish-update-mirrors.sh "$PROVENANCE" "$NOTES"
+echo "Published private canonical GitHub Release and public GitHub/Gitee update mirrors for $VERSION"

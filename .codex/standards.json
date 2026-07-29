@@ -15,6 +15,8 @@
   "releaseSignals": {
     "ciPaths": [
       ".github/workflows/ci.yml",
+      "Tests/aulycShotTests/UpdateManifestTests.swift",
+      "Tests/test_gitee_release.py",
       "Tests/test_icon_assets.py",
       "Tests/test_release_tool.py"
     ],
@@ -22,6 +24,7 @@
       ".gitignore",
       "AGENTS.md",
       "CHANGELOG.md",
+      "README.md",
       "docs/ICON_ASSETS.md",
       "docs/RELEASE.md",
       "design/icon-assets.generated.json",
@@ -31,7 +34,11 @@
       "Makefile",
       "Resources/AppIcon.icns",
       "aulycShot/App/Info.plist",
+      "aulycShot/Utilities/UpdateChecker.swift",
+      "aulycShot/Utilities/UpdateInstaller.swift",
+      "aulycShot/Utilities/UpdateManifest.swift",
       "scripts/bundle.sh",
+      "scripts/gitee_release.py",
       "scripts/generate-icon.sh",
       "scripts/icon_assets.py",
       "scripts/inject-build-metadata.sh",
@@ -45,6 +52,9 @@
       "scripts/install-release.sh",
       "scripts/verify-installed.sh",
       "scripts/publish-release.sh",
+      "scripts/publish-update-mirrors.sh",
+      "Tests/aulycShotTests/UpdateManifestTests.swift",
+      "Tests/test_gitee_release.py",
       "Tests/test_icon_assets.py",
       "Tests/test_release_tool.py"
     ],
@@ -187,7 +197,11 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "d59772029021f430a227a0fef9a2713c92bc242218175ac27d76407b49958749"
+      "sha256": "db02fd8ee91e1252587b003a4453ce06bc9555427db939b226f19fb4d32ff976"
+    },
+    {
+      "path": "README.md",
+      "sha256": "e2b61731ef7ac52182e2b96f1322c76ba5ece6ae239f29e704234e31fbc0e9a1"
     },
     {
       "path": "docs/ICON_ASSETS.md",
@@ -195,7 +209,7 @@
     },
     {
       "path": "docs/RELEASE.md",
-      "sha256": "056da21eca67aed9d62c67f24c5d9680c3bb11ef48cd9ec513f1ca76a4bc87a5"
+      "sha256": "82f84bda2ad608f2af858111fc057be1b4079c7af27b1e5d16120734ed4d8b4d"
     },
     {
       "path": "design/icon-assets.generated.json",
@@ -215,15 +229,31 @@
     },
     {
       "path": "Makefile",
-      "sha256": "80c7209424970bb605a516b6b59839d00b23159126cfd0c589cbcd21e7fe6dc1"
+      "sha256": "8fbc9de046f3eea2101a6573b6a6a74856b8f5c041be786f22f34cd54cab1aae"
     },
     {
       "path": "Resources/AppIcon.icns",
       "sha256": "0760e08e586d171436b4ace3e25401c1a16c556f06d691149ff2fea3a1bad79a"
     },
     {
+      "path": "aulycShot/Utilities/UpdateChecker.swift",
+      "sha256": "0d5df08708c7b3909e47165f4d29621087696b7357194daf77d6590f66a21caf"
+    },
+    {
+      "path": "aulycShot/Utilities/UpdateInstaller.swift",
+      "sha256": "9c2d3769472d36655ed0a41cf1051d8903edb85e71a40ec234b31fdb63311862"
+    },
+    {
+      "path": "aulycShot/Utilities/UpdateManifest.swift",
+      "sha256": "4fd0ec8b428d0cbaf3d7cc8b40084fc9aacdb75fb73eea2f8e58434bc5a361f6"
+    },
+    {
       "path": "scripts/bundle.sh",
       "sha256": "8e6aa5a1c6e836769a50747bf241c3c7a4a54678cf3ce89c03dea81263edc97f"
+    },
+    {
+      "path": "scripts/gitee_release.py",
+      "sha256": "fc3a18db96eb6696415e57f74af0f22bd0469827c11742032e4f825c28d2e2f3"
     },
     {
       "path": "scripts/generate-icon.sh",
@@ -243,7 +273,7 @@
     },
     {
       "path": "scripts/release_tool.py",
-      "sha256": "ff64e9ce0c424a62068e1907849cd17e9595faae7298a20917ccec7b551dc4bc"
+      "sha256": "f085fbbc815cf6fd778b3a2012fa2d19b434d4c2f8915d09d0526deb4817263f"
     },
     {
       "path": "scripts/prepare-formal-release.sh",
@@ -275,7 +305,19 @@
     },
     {
       "path": "scripts/publish-release.sh",
-      "sha256": "97cc158d1ceb0b5ad260fb9fe8f1bd08074a7b83520ce2fc22518bca702149ba"
+      "sha256": "1fc97f5140322b94a89841360a69a9954a1908d470035e34fc19f8e57f041307"
+    },
+    {
+      "path": "scripts/publish-update-mirrors.sh",
+      "sha256": "519d64a0a5a583b1fbace02c06c3653fb3d0676ac57bc154ac3aac2d59d91cc0"
+    },
+    {
+      "path": "Tests/aulycShotTests/UpdateManifestTests.swift",
+      "sha256": "bf536b7d16c3e6c67d72c091f3569d815870dbe97ec0ee9d23e48cf01aba6365"
+    },
+    {
+      "path": "Tests/test_gitee_release.py",
+      "sha256": "1f3c72f1dc29a669561c55863774312983562aec3511fa93d06e9d84b92dd843"
     },
     {
       "path": "Tests/test_icon_assets.py",
@@ -283,7 +325,7 @@
     },
     {
       "path": "Tests/test_release_tool.py",
-      "sha256": "a03f9304cec15be81342b552dc535afda79aa36c88e7c23f1b7f8b6e8d61d733"
+      "sha256": "2d1073657b63a75fc4fd68bf9034bef87699c3ea42eeffb3ea531ff6ad41ee9e"
     }
   ]
 }

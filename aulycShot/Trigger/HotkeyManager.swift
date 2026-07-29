@@ -425,9 +425,8 @@ final class HotkeyManager {
         return modifierString(mods) + keyString(kc)
     }
 
-    /// Returns (keyCode, carbonModifiers) for the saved copy-to-clipboard
-    /// hotkey, or nil when the user hasn't bound one (the default is
-    /// "double-tap ⌘", handled separately by `KeyMonitor`).
+    /// Returns (keyCode, carbonModifiers) for the saved screenshot-execution
+    /// hotkey, or nil when the user hasn't bound one.
     /// Bare (no-modifier) values are allowed here — the clipboard hotkey is
     /// matched locally against keyDown events inside the editor, not registered
     /// as a global Carbon hotkey, so it won't intercept ordinary typing.
@@ -438,40 +437,16 @@ final class HotkeyManager {
         return (kc, mods)
     }
 
-    /// Display string for the saved clipboard hotkey, or nil if not set.
+    /// Display string for the saved screenshot-execution hotkey, or nil if not set.
     static func currentClipboardDisplayString() -> String? {
         guard let (kc, mods) = HotkeyManager.shared.currentClipboardHotkey() else { return nil }
         return modifierString(mods) + keyString(kc)
     }
 
     /// Returns true when the given keyDown event matches the user's
-    /// copy-to-clipboard hotkey. Returns false when no custom hotkey is set —
-    /// the default (double-tap ⌘) is detected via `KeyMonitor`, not keyDown.
+    /// screenshot-execution hotkey. Returns false when no custom hotkey is set.
     static func eventMatchesClipboardHotkey(_ event: NSEvent) -> Bool {
         guard let (kc, m) = HotkeyManager.shared.currentClipboardHotkey() else { return false }
-        return matches(event: event, keyCode: kc, modifiers: m)
-    }
-
-    /// Returns (keyCode, carbonModifiers) for the save-to-file hotkey. Falls
-    /// back to ⌘S when the user hasn't bound a custom one.
-    func currentFileSaveHotkey() -> (keyCode: UInt32, modifiers: UInt32) {
-        if Defaults.hasCustomFileSaveHotkey {
-            return (UInt32(Defaults.fileSaveHotkeyKeyCode),
-                    UInt32(Defaults.fileSaveHotkeyModifiers))
-        }
-        return (UInt32(kVK_ANSI_S), UInt32(cmdKey))
-    }
-
-    /// Display string for the save-to-file hotkey (default or custom).
-    static func currentFileSaveDisplayString() -> String {
-        let (kc, mods) = HotkeyManager.shared.currentFileSaveHotkey()
-        return modifierString(mods) + keyString(kc)
-    }
-
-    /// Returns true when the given keyDown event matches the save-to-file
-    /// hotkey (custom or the ⌘S default).
-    static func eventMatchesFileSaveHotkey(_ event: NSEvent) -> Bool {
-        let (kc, m) = HotkeyManager.shared.currentFileSaveHotkey()
         return matches(event: event, keyCode: kc, modifiers: m)
     }
 
@@ -499,7 +474,6 @@ final class HotkeyManager {
         case record
         case imageMerge
         case clipboard
-        case fileSave
     }
 
     /// Returns a localized message describing the existing binding a candidate
@@ -560,12 +534,6 @@ final class HotkeyManager {
         }
         if slot != .clipboard, let (kc, m) = currentClipboardHotkey(), kc == keyCode, m == modifiers {
             return L10n.shortcutConflictClipboard
-        }
-        if slot != .fileSave {
-            let (kc, m) = currentFileSaveHotkey()
-            if kc == keyCode, m == modifiers {
-                return L10n.shortcutConflictFileSave
-            }
         }
         return nil
     }
@@ -658,17 +626,12 @@ final class HotkeyManager {
     // MARK: - NSMenuItem integration
 
     /// Apply the saved hotkey to a menu item via the native keyEquivalent system.
-    /// When no custom hotkey is set, renders "⌘⌘" (double-tap ⌘) by using ⌘
-    /// as both the modifier mask and the key character — AppKit displays them
-    /// as two glyphs side-by-side in the shortcut column. The binding can't
-    /// fire from a real keystroke since ⌘ can't be pressed as a key while held
-    /// as a modifier, so it functions purely as a visual hint.
     static func applyToMenuItem(_ item: NSMenuItem) {
         item.attributedTitle = nil
 
         guard let (kc, mods) = HotkeyManager.shared.currentHotkey() else {
-            item.keyEquivalent = "\u{2318}"
-            item.keyEquivalentModifierMask = .command
+            item.keyEquivalent = ""
+            item.keyEquivalentModifierMask = []
             return
         }
 

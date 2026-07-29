@@ -22,6 +22,98 @@ enum ImageMergeBackground {
     case solid(NSColor)
 }
 
+protocol ImageMergeLayoutValuePreset: CaseIterable, Equatable {
+    var value: CGFloat { get }
+}
+
+extension ImageMergeLayoutValuePreset {
+    static func nearest(to value: CGFloat) -> Self {
+        guard let first = allCases.first else {
+            preconditionFailure("Image merge layout presets must not be empty")
+        }
+        return allCases.dropFirst().reduce(first) { closest, candidate in
+            let closestDistance = abs(closest.value - value)
+            let candidateDistance = abs(candidate.value - value)
+            if candidateDistance < closestDistance {
+                return candidate
+            }
+            if candidateDistance == closestDistance, candidate.value > closest.value {
+                return candidate
+            }
+            return closest
+        }
+    }
+}
+
+enum ImageMergeSpacingPreset: Int, CaseIterable, ImageMergeLayoutValuePreset {
+    case none
+    case small
+    case medium
+    case large
+
+    var value: CGFloat {
+        switch self {
+        case .none: return 0
+        case .small: return 8
+        case .medium: return 16
+        case .large: return 24
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .none: return L10n.imageMergePresetNone
+        case .small: return L10n.imageMergePresetSmall
+        case .medium: return L10n.imageMergePresetMedium
+        case .large: return L10n.imageMergePresetLarge
+        }
+    }
+}
+
+enum ImageMergeMarginPreset: Int, CaseIterable, ImageMergeLayoutValuePreset {
+    case none
+    case small
+    case medium
+    case large
+
+    var value: CGFloat {
+        switch self {
+        case .none: return 0
+        case .small: return 12
+        case .medium: return 24
+        case .large: return 40
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .none: return L10n.imageMergePresetNone
+        case .small: return L10n.imageMergePresetSmall
+        case .medium: return L10n.imageMergePresetMedium
+        case .large: return L10n.imageMergePresetLarge
+        }
+    }
+}
+
+enum ImageMergeCornerPreset: Int, CaseIterable, ImageMergeLayoutValuePreset {
+    case square
+    case rounded
+
+    var value: CGFloat {
+        switch self {
+        case .square: return 0
+        case .rounded: return 12
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .square: return L10n.imageMergeCornerSquare
+        case .rounded: return L10n.imageMergeCornerRounded
+        }
+    }
+}
+
 struct ImageMergeItem {
     let id: UUID
     let displayName: String
@@ -58,10 +150,10 @@ final class ImageMergeDocument {
     init(items: [ImageMergeItem] = []) {
         self.items = items
         template = Defaults.imageMergeTemplate
-        spacing = CGFloat(Defaults.imageMergeSpacing)
-        margin = CGFloat(Defaults.imageMergeMargin)
+        spacing = Defaults.imageMergeSpacingPreset.value
+        margin = Defaults.imageMergeMarginPreset.value
         background = Self.savedBackground()
-        cornerRadius = CGFloat(Defaults.imageMergeCornerRadius)
+        cornerRadius = Defaults.imageMergeCornerPreset.value
         selectedItemID = items.first?.id
     }
 

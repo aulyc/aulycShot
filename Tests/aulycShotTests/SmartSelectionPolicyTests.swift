@@ -174,9 +174,38 @@ final class SmartSelectionPolicyTests: XCTestCase {
         state.replaceCandidates([window, screen])
         state.cycle(reverse: false)
 
-        state.replaceCandidates([element, window, screen])
+        state.replaceCandidates([element, window, screen], preservingCurrent: true)
 
         XCTAssertEqual(state.currentCandidate, screen)
+    }
+
+    func testHoverStateResetsToMostSpecificCandidateWhenPointerMoves() {
+        let window = SmartSelectionCandidate(
+            kind: .window(99),
+            frame: CGRect(x: 20, y: 20, width: 500, height: 400)
+        )
+        let screen = SmartSelectionCandidate(
+            kind: .screen(1),
+            frame: CGRect(x: 0, y: 0, width: 1440, height: 900)
+        )
+        var state = SmartSelectionHoverState()
+        state.replaceCandidates([screen])
+
+        state.replaceCandidates([window, screen], preservingCurrent: false)
+
+        XCTAssertEqual(state.currentCandidate, window)
+    }
+
+    func testFullScreenHoverBorderIsInsetInsideDrawableBounds() {
+        let bounds = CGRect(x: 0, y: 0, width: 1440, height: 900)
+
+        let borderRect = SmartSelectionPolicy.hoverBorderRect(
+            candidateRect: bounds,
+            drawableBounds: bounds,
+            lineWidth: 3
+        )
+
+        XCTAssertEqual(borderRect, bounds.insetBy(dx: 1.5, dy: 1.5))
     }
 
     func testHoverStateFallsBackToFirstCandidateWhenPreviousCandidateDisappears() {

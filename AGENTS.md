@@ -81,8 +81,9 @@ This script builds the app bundle, kills any running instance, launches the new 
 ## Versioning and Release Profile
 
 - Release profile: `macos-arm64-app` 1.0.0
-- Distribution: Developer ID DMG published manually to the private GitHub
-  repository `aulyc/aulycShot`
+- Distribution: Developer ID DMG published canonically to the private GitHub
+  repository `aulyc/aulycShot`, then mirrored byte-for-byte to the public
+  `aulyc/aulycShot-releases` repositories on GitHub and Gitee
 - Architecture: Apple Silicon `arm64` only. Release gates require both the App
   and share extension to contain exactly the `arm64` slice
 - Authoritative version and build source: `aulycShot/App/Info.plist`
@@ -106,7 +107,8 @@ This script builds the app bundle, kills any running instance, launches the new 
 - Test releases are currently N/A because this project has no separately
   authorized test distribution channel. Do not rename a local build or formal
   candidate into a release
-- Automatic updates and Homebrew distribution are not part of the current
+- Automatic updates use identical public `latest.json` manifests with GitHub
+  first and Gitee fallback. Homebrew distribution is not part of the current
   release channel
 
 ## Release Gates
@@ -120,6 +122,8 @@ This script builds the app bundle, kills any running instance, launches the new 
   `make install-release RELEASE_PROVENANCE=/absolute/path/...release-provenance.json`
 - Read-only installed verification:
   `make verify-installed RELEASE_PROVENANCE=/absolute/path/...release-provenance.json`
+- Recoverable public-mirror publication:
+  `make publish-update-mirrors RELEASE_PROVENANCE=/absolute/path/...release-provenance.json`
 - Every formal artifact is rebuilt from an isolated worktree at the exact
   annotated tag. The source must remain clean before and after the build
 - Formal App and share extension require Developer ID, timestamp, Hardened
@@ -139,15 +143,24 @@ This script builds the app bundle, kills any running instance, launches the new 
 - `make publish-release RELEASE_PROVENANCE=/absolute/path/...release-provenance.json`
   uses the central gate for one atomic, non-force branch and annotated-tag push,
   remote ref readback and provenance finalization, then creates a GitHub Release
-  with `--verify-tag`
-- The GitHub repository is private. Publishing must not dispatch Homebrew,
-  create an automatic-update feed, or make the repository public
+  with `--verify-tag`, followed by the public GitHub/Gitee update mirrors
+- The canonical GitHub source repository remains private. Public mirror
+  repositories contain only formal artifacts, checksums, provenance, release
+  notes, and the shared update manifest; they are not additional source
+  authorities
+- Both mirrors must receive the same already-notarized DMG bytes. The manifest
+  binds version, build, Commit, Bundle ID, Team ID, architecture and SHA-256,
+  and download order remains GitHub then Gitee
+- `GITEE_ACCESS_TOKEN` is a host credential used only by
+  `scripts/gitee_release.py`; it must never be printed or written into the
+  repository, product metadata, logs or provenance
+- Publishing must not dispatch Homebrew or rebuild a separate Gitee artifact
 
 ## Data Credentials and Compatibility Identities
 
-- Apple certificates, the `notarytool` profile, GitHub CLI OAuth and SSH keys
-  remain in host-level credential stores and are never written into this
-  repository, product metadata, logs or release provenance
+- Apple certificates, the `notarytool` profile, GitHub CLI OAuth and SSH keys,
+  and the Gitee API token remain in host-level credential stores and are never
+  written into this repository, product metadata, logs or release provenance
 - Installation only replaces `/Applications/aulycShot.app`; it preserves
   preferences, screenshots, history, privacy grants, Keychain data and all
   other user data

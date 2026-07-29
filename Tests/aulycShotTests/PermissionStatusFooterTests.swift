@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import XCTest
 @testable import aulycShot
 
@@ -130,8 +131,35 @@ final class PermissionStatusFooterTests: XCTestCase {
                 L10n.permissionHelpDone,
             ]
         )
-        XCTAssertEqual(alert.buttons.last?.keyEquivalent, "\u{1b}")
+        XCTAssertEqual(alert.buttons[0].keyEquivalent, "")
+        XCTAssertEqual(alert.buttons[1].keyEquivalent, "")
+        XCTAssertEqual(alert.buttons.last?.keyEquivalent, "\r")
         XCTAssertEqual(alert.buttons.last?.keyEquivalentModifierMask, [])
+        XCTAssertTrue(alert.window.defaultButtonCell === alert.buttons.last?.cell)
+        XCTAssertNotEqual(alert.buttons[0].bezelColor, NSColor.controlAccentColor)
+        XCTAssertNotEqual(alert.buttons[1].bezelColor, NSColor.controlAccentColor)
+        XCTAssertEqual(alert.buttons[2].bezelColor, NSColor.controlAccentColor)
+    }
+
+    func testPermissionHelpAlertDismissesForBareEscapeOnly() {
+        XCTAssertTrue(
+            PermissionAlertDismissalPolicy.shouldDismiss(
+                keyCode: UInt16(kVK_Escape),
+                modifiers: []
+            )
+        )
+        XCTAssertFalse(
+            PermissionAlertDismissalPolicy.shouldDismiss(
+                keyCode: UInt16(kVK_Escape),
+                modifiers: [.command]
+            )
+        )
+        XCTAssertFalse(
+            PermissionAlertDismissalPolicy.shouldDismiss(
+                keyCode: UInt16(kVK_Return),
+                modifiers: []
+            )
+        )
     }
 }
 

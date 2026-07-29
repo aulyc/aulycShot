@@ -19,6 +19,58 @@ extension SelectionViewDelegate {
     func selectionDidDoubleClickInsideSelection(inView view: NSView) {}
 }
 
+enum CaptureSelectionChrome {
+    static let accentColor = SettingsPalette.accent
+    static let borderWidth: CGFloat = 2
+    static let dashPattern: [CGFloat] = [6, 4]
+    static let handleSize: CGFloat = 8
+}
+
+enum EditorCursorRoute: Equatable {
+    case selectionHandle
+    case selectionBorder
+    case annotationTool
+    case arrow
+}
+
+enum EditorCursorRoutingPolicy {
+    static func route(
+        selectionInteractionEnabled: Bool,
+        selectionLocked: Bool,
+        annotationToolActive: Bool,
+        selectionRect: NSRect?,
+        point: NSPoint,
+        isOverSelectionHandle: Bool,
+        isOverSelectionBorder: Bool = false
+    ) -> EditorCursorRoute? {
+        guard selectionLocked || !selectionInteractionEnabled else { return nil }
+        guard let selectionRect else { return nil }
+
+        if selectionInteractionEnabled && isOverSelectionHandle {
+            return .selectionHandle
+        }
+        if selectionInteractionEnabled && isOverSelectionBorder {
+            return .selectionBorder
+        }
+        if annotationToolActive && selectionRect.contains(point) {
+            return .annotationTool
+        }
+        return .arrow
+    }
+
+    static func isSelectionBorderHit(
+        point: NSPoint,
+        rect: NSRect,
+        hitSize: CGFloat
+    ) -> Bool {
+        guard hitSize > 0, rect.width > 0, rect.height > 0 else { return false }
+        let outer = rect.insetBy(dx: -hitSize, dy: -hitSize)
+        guard outer.contains(point) else { return false }
+        guard rect.width > hitSize * 2, rect.height > hitSize * 2 else { return true }
+        return !rect.insetBy(dx: hitSize, dy: hitSize).contains(point)
+    }
+}
+
 class SelectionView: NSView {
     weak var delegate: SelectionViewDelegate?
 
@@ -51,6 +103,7 @@ class SelectionView: NSView {
 
     // Whether annotation tools are active (pass mouse events through to canvas)
     var annotationToolActive = false
+    var refreshAnnotationCursor: (() -> Void)?
 
     // When true, clicking outside selection won't start a new selection
     var selectionLocked = false
@@ -90,11 +143,12 @@ class SelectionView: NSView {
 
     // MARK: - Constants
 
-    private let accentColor = NSColor(red: 0, green: 212.0/255.0, blue: 106.0/255.0, alpha: 1.0)
-    private let handleSize: CGFloat = 8
+    private let accentColor = CaptureSelectionChrome.accentColor
+    private let handleSize = CaptureSelectionChrome.handleSize
     private let handleHitSize: CGFloat = 12
-    private let borderWidth: CGFloat = 2.0
-    private let dashPattern: [CGFloat] = [6, 4]
+    private let selectionBorderHitSize: CGFloat = 7
+    private let borderWidth = CaptureSelectionChrome.borderWidth
+    private let dashPattern = CaptureSelectionChrome.dashPattern
     private let dimmingOverlayAlpha: CGFloat = 0.45
 
     // MARK: - Public
@@ -122,6 +176,70 @@ class SelectionView: NSView {
         selectionRect = rect
         state = .selected
         needsDisplay = true
+    }
+
+    /// Re-evaluates the editor cursor for a known point in this view. Keeping
+    /// this path shared with `mouseMoved` prevents tool activation from
+    /// bypassing the screenshot boundary.
+    @discardableResult
+    func refreshEditorCursor(at point: NSPoint) -> EditorCursorRoute? {
+        let selectedRect = state == .selected ? selectionRect : nil
+        let hoveredHandle = selectedRect.flatMap { hitTestHandle(point: point, rect: $0) }
+        let isOverSelectionBorder = selectedRect.map {
+            EditorCursorRoutingPolicy.isSelectionBorderHit(
+                point: point,
+                rect: $0,
+                hitSize: selectionBorderHitSize
+            )
+        } ?? false
+
+        guard let route = EditorCursorRoutingPolicy.route(
+            selectionInteractionEnabled: selectionInteractionEnabled,
+            selectionLocked: selectionLocked,
+            annotationToolActive: annotationToolActive,
+            selectionRect: selectedRect,
+            point: point,
+            isOverSelectionHandle: hoveredHandle != nil,
+            isOverSelectionBorder: isOverSelectionBorder
+        ) else {
+            return nil
+        }
+
+        switch route {
+        case .selectionHandle:
+            if let hoveredHandle {
+                SelectionView.setCursorForHandle(hoveredHandle)
+            } else {
+                NSCursor.arrow.set()
+            }
+        case .selectionBorder:
+            NSCursor.openHand.set()
+        case .annotationTool:
+            if let refreshAnnotationCursor {
+                refreshAnnotationCursor()
+            } else {
+                NSCursor.arrow.set()
+            }
+        case .arrow:
+            NSCursor.arrow.set()
+        }
+        return route
+    }
+
+    func refreshEditorCursorAtCurrentMouseLocation() {
+        guard let window else {
+            NSCursor.arrow.set()
+            return
+        }
+        let pointInWindow = window.convertPoint(fromScreen: NSEvent.mouseLocation)
+        let point = convert(pointInWindow, from: nil)
+        guard bounds.contains(point) else {
+            NSCursor.arrow.set()
+            return
+        }
+        if refreshEditorCursor(at: point) == nil {
+            NSCursor.arrow.set()
+        }
     }
 
     /// Translate the selection rect by `delta` from the supplied
@@ -371,6 +489,11 @@ class SelectionView: NSView {
     }
 
     override func mouseMoved(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        if refreshEditorCursor(at: point) != nil {
+            return
+        }
+
         guard selectionInteractionEnabled else {
             NSCursor.arrow.set()
             return
@@ -385,19 +508,6 @@ class SelectionView: NSView {
         guard state == .selected, let rect = selectionRect else {
             if !selectionLocked {
                 NSCursor.crosshair.set()
-            }
-            return
-        }
-
-        let point = convert(event.locationInWindow, from: nil)
-
-        // When editor is active, only show resize cursors on handles;
-        // don't override the cursor elsewhere (let editor/toolbar handle it)
-        if selectionLocked {
-            if let handle = hitTestHandle(point: point, rect: rect) {
-                SelectionView.setCursorForHandle(handle)
-            } else {
-                NSCursor.arrow.set()
             }
             return
         }
@@ -449,6 +559,7 @@ class SelectionView: NSView {
         // Convert screen point → CG point
         let primaryHeight = NSScreen.screens[0].frame.height
         let cgPoint = CGPoint(x: screenPoint.x, y: primaryHeight - screenPoint.y)
+        let pointerMoved = lastHoverCGPoint != cgPoint
         let screenFrame = CGDisplayBounds(displayID)
         var baseCandidates = detector.baseCandidates(
             at: cgPoint,
@@ -461,7 +572,7 @@ class SelectionView: NSView {
             baseCandidates.insert(previous, at: 0)
         }
         lastHoverCGPoint = cgPoint
-        applyHoverCandidates(baseCandidates)
+        applyHoverCandidates(baseCandidates, preservingCurrent: !pointerMoved)
 
         guard !baseCandidates.isEmpty else {
             clearHover()
@@ -479,18 +590,21 @@ class SelectionView: NSView {
                   !self.selectionLocked,
                   self.lastHoverCGPoint == cgPoint
             else { return }
-            self.applyHoverCandidates(candidates)
+            self.applyHoverCandidates(candidates, preservingCurrent: true)
         }
     }
 
-    private func applyHoverCandidates(_ candidates: [SmartSelectionCandidate]) {
+    private func applyHoverCandidates(
+        _ candidates: [SmartSelectionCandidate],
+        preservingCurrent: Bool
+    ) {
         guard !candidates.isEmpty else {
             clearHover()
             NSCursor.crosshair.set()
             return
         }
 
-        hoverState.replaceCandidates(candidates)
+        hoverState.replaceCandidates(candidates, preservingCurrent: preservingCurrent)
         applyCurrentHoverCandidate()
         NSCursor.pointingHand.set()
     }
@@ -556,8 +670,15 @@ class SelectionView: NSView {
             context.fillPath(using: .evenOdd)
             // Solid accent border
             context.setStrokeColor(accentColor.cgColor)
-            context.setLineWidth(borderWidth + 1)
-            context.stroke(hoverRect.insetBy(dx: -1.5, dy: -1.5))
+            let hoverLineWidth = borderWidth + 1
+            context.setLineWidth(hoverLineWidth)
+            if let hoverBorderRect = SmartSelectionPolicy.hoverBorderRect(
+                candidateRect: hoverRect,
+                drawableBounds: bounds,
+                lineWidth: hoverLineWidth
+            ) {
+                context.stroke(hoverBorderRect)
+            }
             // Size label
             SelectionView.drawSizeLabel(context: context, rect: hoverRect)
             return
@@ -582,7 +703,7 @@ class SelectionView: NSView {
         context.addPath(path)
         context.fillPath(using: .evenOdd)
 
-        // Draw border — solid red during scroll capture, green dashed otherwise
+        // Draw border — solid red during scroll capture, accent-blue dashed otherwise
         if scrollCaptureActive {
             // ScreenCaptureKit sees the overlay panel, so any stroke pixels
             // inside `rect` bleed into every captured frame and produce thin

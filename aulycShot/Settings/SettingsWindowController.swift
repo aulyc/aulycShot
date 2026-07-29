@@ -1,13 +1,38 @@
 import AppKit
+import Carbon.HIToolbox
 
 enum SettingsWindowPresentationPolicy {
-    static let visibleActivationPolicy = NSApplication.ActivationPolicy.regular
+    static let visibleActivationPolicy = NSApplication.ActivationPolicy.accessory
     static let hiddenActivationPolicy = NSApplication.ActivationPolicy.accessory
     static let windowLevel = NSWindow.Level.normal
     static let collectionBehavior = NSWindow.CollectionBehavior.managed
+
+    static func shouldCloseForEscape(
+        keyCode: UInt16,
+        modifiers: NSEvent.ModifierFlags
+    ) -> Bool {
+        let activeModifiers = modifiers.intersection([.command, .shift, .option, .control])
+        return keyCode == UInt16(kVK_Escape) && activeModifiers.isEmpty
+    }
 }
 
 private final class SettingsWindow: NSWindow {
+    override func cancelOperation(_ sender: Any?) {
+        performClose(sender)
+    }
+
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown,
+           SettingsWindowPresentationPolicy.shouldCloseForEscape(
+            keyCode: event.keyCode,
+            modifiers: event.modifierFlags
+        ) {
+            performClose(nil)
+            return
+        }
+        super.sendEvent(event)
+    }
+
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let commandModifiers: NSEvent.ModifierFlags = [.command, .shift, .option, .control]
         let modifiers = event.modifierFlags.intersection(commandModifiers)
@@ -114,7 +139,6 @@ extension SettingsWindowController: NSWindowDelegate {
         settingsView.cancelSelectedImageEditShortcutRecording()
         settingsView.cancelClipboardImageEditShortcutRecording()
         settingsView.cancelClipboardShortcutRecording()
-        settingsView.cancelFileSaveShortcutRecording()
         settingsView.closeErrorLogWindow()
         NSApp.setActivationPolicy(SettingsWindowPresentationPolicy.hiddenActivationPolicy)
         // The status item now exists before the permission gate. In startup

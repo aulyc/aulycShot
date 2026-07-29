@@ -48,8 +48,11 @@ struct SmartSelectionHoverState {
         candidates.isEmpty
     }
 
-    mutating func replaceCandidates(_ newCandidates: [SmartSelectionCandidate]) {
-        let previous = currentCandidate
+    mutating func replaceCandidates(
+        _ newCandidates: [SmartSelectionCandidate],
+        preservingCurrent: Bool = true
+    ) {
+        let previous = preservingCurrent ? currentCandidate : nil
         candidates = newCandidates
         if let previous,
            let preservedIndex = newCandidates.firstIndex(of: previous) {
@@ -121,6 +124,25 @@ enum SmartSelectionPolicy {
         return reverse
             ? (normalized - 1 + count) % count
             : (normalized + 1) % count
+    }
+
+    static func hoverBorderRect(
+        candidateRect: CGRect,
+        drawableBounds: CGRect,
+        lineWidth: CGFloat
+    ) -> CGRect? {
+        let visibleRect = candidateRect.standardized.intersection(drawableBounds.standardized)
+        guard !visibleRect.isNull,
+              visibleRect.width > 0,
+              visibleRect.height > 0,
+              lineWidth.isFinite,
+              lineWidth >= 0 else {
+            return nil
+        }
+
+        let borderRect = visibleRect.insetBy(dx: lineWidth / 2, dy: lineWidth / 2)
+        guard borderRect.width > 0, borderRect.height > 0 else { return nil }
+        return borderRect
     }
 
     private static func isUsableElement(_ candidate: SmartSelectionCandidate) -> Bool {

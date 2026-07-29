@@ -1,7 +1,7 @@
 import Foundation
 import CryptoKit
 
-/// Downloads a aulycShot release zip and installs it in place of the running app.
+/// Downloads a formal aulycShot DMG and installs it in place of the running app.
 ///
 /// The running `.app` bundle can't overwrite itself while it's open, so the
 /// final swap is handed to a detached `/bin/bash` helper: it waits for this
@@ -13,103 +13,183 @@ final class UpdateInstaller: NSObject {
     enum InstallError: Error {
         case download
         case checksumMismatch
-        case unzipFailed
+        case invalidManifest
+        case mountFailed
         case bundleNotFound
+        case identityMismatch
+        case signatureInvalid
         case notWritable
     }
 
     private var session: URLSession?
     private var progressHandler: ((Double) -> Void)?
     private var finishHandler: ((Result<URL, Error>) -> Void)?
+    private var downloadURLs: [URL] = []
+    private var downloadIndex = 0
+    private var expectedSHA256 = ""
+    private var activeTaskIdentifier: Int?
+    private var handledTaskIdentifiers = Set<Int>()
+    private var delivered = false
 
     // MARK: - Download
 
-    /// Downloads `url` to a temp file, reporting progress as a 0...1 fraction.
-    /// Both handlers fire on the main thread; `completion` yields the path of
-    /// the downloaded zip on success.
-    func downloadZip(
-        from url: URL,
+    /// Downloads the formal DMG from ordered mirrors. A transport, HTTP, or
+    /// checksum failure advances to the next URL. Both handlers fire on the
+    /// main thread.
+    func downloadDMG(
+        from urls: [URL],
+        expectedSHA256: String,
         progress: @escaping (Double) -> Void,
         completion: @escaping (Result<URL, Error>) -> Void
     ) {
+        guard !urls.isEmpty else {
+            DispatchQueue.main.async { completion(.failure(InstallError.download)) }
+            return
+        }
+
+        downloadURLs = urls
+        downloadIndex = 0
+        self.expectedSHA256 = expectedSHA256
         progressHandler = progress
         finishHandler = completion
+        activeTaskIdentifier = nil
+        handledTaskIdentifiers.removeAll()
+        delivered = false
 
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForResource = 300
         let session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
         self.session = session
+        startCurrentDownload()
+    }
 
-        var request = URLRequest(url: url)
+    private func startCurrentDownload() {
+        guard downloadURLs.indices.contains(downloadIndex), let session else {
+            deliver(.failure(InstallError.download))
+            return
+        }
+        DispatchQueue.main.async { self.progressHandler?(0) }
+        var request = URLRequest(url: downloadURLs[downloadIndex])
         request.setValue("aulycShot", forHTTPHeaderField: "User-Agent")
-        session.downloadTask(with: request).resume()
+        let task = session.downloadTask(with: request)
+        activeTaskIdentifier = task.taskIdentifier
+        task.resume()
+    }
+
+    private func retryDownload(after error: Error) {
+        guard !delivered else { return }
+        downloadIndex += 1
+        guard downloadURLs.indices.contains(downloadIndex) else {
+            deliver(.failure(error))
+            return
+        }
+        startCurrentDownload()
     }
 
     private func deliver(_ result: Result<URL, Error>) {
+        guard !delivered else { return }
+        delivered = true
         let handler = finishHandler
         finishHandler = nil
         progressHandler = nil
+        downloadURLs = []
+        activeTaskIdentifier = nil
+        session?.finishTasksAndInvalidate()
+        session = nil
         DispatchQueue.main.async { handler?(result) }
     }
 
     // MARK: - Install
 
-    /// Verifies the checksum (when `expectedSHA256` is given), unzips the
-    /// release, and spawns the detached helper that swaps the bundle and
-    /// relaunches. Throws before spawning the helper if anything looks wrong,
-    /// so a failure always leaves the running app untouched.
+    /// Verifies the DMG, mounts and copies its App, validates the immutable
+    /// release identity and Developer ID signature, then spawns the detached
+    /// helper that swaps the bundle and relaunches.
     ///
     /// `phase` is invoked synchronously on this thread as each step begins, so
     /// the UI can show "verifying / extracting / installing" in turn.
-    static func install(zipAt zipURL: URL,
-                         expectedSHA256: String?,
-                         phase: (InstallPhase) -> Void) throws {
+    static func install(
+        dmgAt dmgURL: URL,
+        manifest: UpdateManifest,
+        phase: (InstallPhase) -> Void
+    ) throws {
+        do {
+            try manifest.validate()
+        } catch {
+            throw InstallError.invalidManifest
+        }
+
         let fm = FileManager.default
-        // The downloaded zip is always disposable. The unpacked scratch dir is
-        // disposable too, *unless* the detached helper took ownership of it —
-        // it reads the new bundle from there after this process exits. So any
-        // failure before the hand-off cleans the scratch dir up here; a
-        // successful hand-off leaves it for the helper, which deletes it last.
         var scratchDir: URL?
+        var mountPoint: URL?
+        var mounted = false
         var handedOff = false
         defer {
-            try? fm.removeItem(at: zipURL)
+            if mounted, let mountPoint {
+                try? runProcess(
+                    "/usr/bin/hdiutil",
+                    ["detach", mountPoint.path],
+                    throwing: .mountFailed
+                )
+            }
+            try? fm.removeItem(at: dmgURL)
             if let dir = scratchDir, !handedOff { try? fm.removeItem(at: dir) }
         }
 
-        // 1. Checksum — guards against a truncated or corrupted download.
+        // 1. The checksum is mandatory and binds either mirror to the same
+        // exact-tag formal artifact.
         phase(.verifying)
-        if let expected = expectedSHA256 {
-            let data = try Data(contentsOf: zipURL)
-            let hex = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-            guard hex == expected.lowercased() else { throw InstallError.checksumMismatch }
+        guard try sha256(of: dmgURL) == manifest.artifact.sha256 else {
+            throw InstallError.checksumMismatch
         }
 
-        // 2. Unzip into a scratch directory.
+        // 2. Mount the notarized DMG read-only and copy the App to a private
+        // scratch directory before detaching the image.
         phase(.unzipping)
         let workDir = fm.temporaryDirectory
             .appendingPathComponent("aulycShot-update-\(UUID().uuidString)", isDirectory: true)
         scratchDir = workDir
         try fm.createDirectory(at: workDir, withIntermediateDirectories: true)
-        try runProcess("/usr/bin/ditto", ["-x", "-k", zipURL.path, workDir.path],
-                       throwing: .unzipFailed)
+        let mountedAt = workDir.appendingPathComponent("mount", isDirectory: true)
+        mountPoint = mountedAt
+        try fm.createDirectory(at: mountedAt, withIntermediateDirectories: true)
+        try runProcess(
+            "/usr/bin/hdiutil",
+            ["attach", dmgURL.path, "-nobrowse", "-readonly", "-mountpoint", mountedAt.path],
+            throwing: .mountFailed
+        )
+        mounted = true
 
-        // 3. Locate the unpacked .app and sanity-check it has an executable.
+        let mountedApp = mountedAt.appendingPathComponent("aulycShot.app", isDirectory: true)
+        guard fm.fileExists(atPath: mountedApp.path) else {
+            throw InstallError.bundleNotFound
+        }
+        let replacementDir = workDir.appendingPathComponent("replacement", isDirectory: true)
+        try fm.createDirectory(at: replacementDir, withIntermediateDirectories: true)
+        let newApp = replacementDir.appendingPathComponent("aulycShot.app", isDirectory: true)
+        try runProcess(
+            "/usr/bin/ditto",
+            [mountedApp.path, newApp.path],
+            throwing: .bundleNotFound
+        )
+        try runProcess(
+            "/usr/bin/hdiutil",
+            ["detach", mountedAt.path],
+            throwing: .mountFailed
+        )
+        mounted = false
+
+        guard fm.fileExists(
+            atPath: newApp.appendingPathComponent("Contents/MacOS/aulycShot").path
+        ) else {
+            throw InstallError.bundleNotFound
+        }
+
+        // 3. Verify product metadata, embedded exact-tag identity, architecture,
+        // Developer ID team, Hardened Runtime, nested code, and Gatekeeper.
+        try verifyApplication(at: newApp, manifest: manifest)
+
+        // 4. Confirm we can replace the running bundle before handing off.
         phase(.installing)
-        let entries = (try? fm.contentsOfDirectory(atPath: workDir.path)) ?? []
-        guard let appName = entries.first(where: { $0.hasSuffix(".app") }) else {
-            throw InstallError.bundleNotFound
-        }
-        let newApp = workDir.appendingPathComponent(appName)
-        guard fm.fileExists(atPath: newApp.appendingPathComponent("Contents/MacOS").path) else {
-            throw InstallError.bundleNotFound
-        }
-        // Strip quarantine so Gatekeeper doesn't block the relaunch.
-        _ = try? runProcess("/usr/bin/xattr",
-                            ["-dr", "com.apple.quarantine", newApp.path],
-                            throwing: .unzipFailed)
-
-        // 4. Confirm we can actually replace the running bundle.
         let oldApp = Bundle.main.bundleURL
         let parent = oldApp.deletingLastPathComponent()
         guard fm.isWritableFile(atPath: parent.path) else { throw InstallError.notWritable }
@@ -119,7 +199,7 @@ final class UpdateInstaller: NSObject {
         handedOff = true
     }
 
-    /// Deletes leftover update artifacts (`aulycShot-update-*` zips and scratch
+    /// Deletes leftover update artifacts (`aulycShot-update-*` DMGs and scratch
     /// dirs) from the temp directory. The current run cleans up after itself,
     /// but a crash or force-quit between download and swap can strand files;
     /// calling this before each update keeps them from accumulating.
@@ -131,6 +211,103 @@ final class UpdateInstaller: NSObject {
         ) else { return }
         for url in entries where url.lastPathComponent.hasPrefix("aulycShot-update-") {
             try? fm.removeItem(at: url)
+        }
+    }
+
+    static func sha256(of url: URL) throws -> String {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        var digest = SHA256()
+        while true {
+            guard let data = try handle.read(upToCount: 1024 * 1024),
+                  !data.isEmpty
+            else {
+                break
+            }
+            digest.update(data: data)
+        }
+        return digest.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func verifyApplication(
+        at app: URL,
+        manifest: UpdateManifest
+    ) throws {
+        let infoURL = app.appendingPathComponent("Contents/Info.plist")
+        guard let data = try? Data(contentsOf: infoURL),
+              let value = try? PropertyListSerialization.propertyList(from: data, format: nil),
+              let info = value as? [String: Any],
+              info["CFBundleIdentifier"] as? String == manifest.bundleIdentifier,
+              info["CFBundleShortVersionString"] as? String == manifest.version,
+              String(describing: info["CFBundleVersion"] ?? "") == String(manifest.buildNumber),
+              info["LSMinimumSystemVersion"] as? String == manifest.minimumSystemVersion,
+              info["AulycShotGitCommit"] as? String == manifest.commit,
+              info["AulycShotReleaseChannel"] as? String == "formal",
+              info["AulycShotReleaseTag"] as? String == manifest.tag,
+              info["AulycShotBuildDirty"] as? Bool == false
+        else {
+            throw InstallError.identityMismatch
+        }
+
+        let executable = app.appendingPathComponent("Contents/MacOS/aulycShot")
+        let extensionBundle = app.appendingPathComponent(
+            "Contents/PlugIns/AulycShotShareExtension.appex"
+        )
+        let extensionExecutable = extensionBundle.appendingPathComponent(
+            "Contents/MacOS/AulycShotShareExtension"
+        )
+        guard FileManager.default.fileExists(atPath: executable.path),
+              FileManager.default.fileExists(atPath: extensionExecutable.path)
+        else {
+            throw InstallError.bundleNotFound
+        }
+
+        try runProcess(
+            "/usr/bin/codesign",
+            ["--verify", "--deep", "--strict", "--verbose=2", app.path],
+            throwing: .signatureInvalid
+        )
+        try verifySignatureDetails(at: app, expectedTeamIdentifier: manifest.teamIdentifier)
+        try verifySignatureDetails(
+            at: extensionBundle,
+            expectedTeamIdentifier: manifest.teamIdentifier
+        )
+
+        guard try capturedOutput(
+            "/usr/bin/lipo",
+            ["-archs", executable.path],
+            throwing: .identityMismatch
+        ) == "arm64",
+        try capturedOutput(
+            "/usr/bin/lipo",
+            ["-archs", extensionExecutable.path],
+            throwing: .identityMismatch
+        ) == "arm64"
+        else {
+            throw InstallError.identityMismatch
+        }
+
+        try runProcess(
+            "/usr/sbin/spctl",
+            ["-a", "-vvv", "-t", "exec", app.path],
+            throwing: .signatureInvalid
+        )
+    }
+
+    private static func verifySignatureDetails(
+        at code: URL,
+        expectedTeamIdentifier: String
+    ) throws {
+        let details = try capturedOutput(
+            "/usr/bin/codesign",
+            ["-dv", "--verbose=4", code.path],
+            throwing: .signatureInvalid
+        )
+        guard details.contains("Authority=Developer ID Application:"),
+              details.contains("TeamIdentifier=\(expectedTeamIdentifier)"),
+              details.contains("(runtime)")
+        else {
+            throw InstallError.signatureInvalid
         }
     }
 
@@ -149,6 +326,25 @@ final class UpdateInstaller: NSObject {
         guard task.terminationStatus == 0 else { throw error }
     }
 
+    private static func capturedOutput(
+        _ launchPath: String,
+        _ arguments: [String],
+        throwing error: InstallError
+    ) throws -> String {
+        let task = Process()
+        let pipe = Pipe()
+        task.executableURL = URL(fileURLWithPath: launchPath)
+        task.arguments = arguments
+        task.standardOutput = pipe
+        task.standardError = pipe
+        try task.run()
+        task.waitUntilExit()
+        guard task.terminationStatus == 0 else { throw error }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        return String(decoding: data, as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     /// Launches a `/bin/bash` script that outlives this process: it waits for
     /// aulycShot to quit, swaps the bundle (keeping a backup it restores on
     /// failure), and reopens the app.
@@ -164,7 +360,6 @@ final class UpdateInstaller: NSObject {
         BACKUP="${OLD}.aulycShot-backup-${PID}"
         mv "$OLD" "$BACKUP" || exit 1
         if /usr/bin/ditto "$NEW" "$OLD"; then
-          /usr/bin/xattr -dr com.apple.quarantine "$OLD" 2>/dev/null || true
           rm -rf "$BACKUP"
         else
           # Restore the old bundle so the user isn't left with nothing.
@@ -200,21 +395,27 @@ extension UpdateInstaller: URLSessionDownloadDelegate {
         downloadTask: URLSessionDownloadTask,
         didFinishDownloadingTo location: URL
     ) {
-        // A non-200 response still "finishes" — its body is an error page, not
-        // a zip — so reject it before the caller tries to unzip.
+        guard downloadTask.taskIdentifier == activeTaskIdentifier, !delivered else { return }
+        handledTaskIdentifiers.insert(downloadTask.taskIdentifier)
+
         if let http = downloadTask.response as? HTTPURLResponse, http.statusCode != 200 {
-            deliver(.failure(InstallError.download))
+            retryDownload(after: InstallError.download)
             return
         }
-        // URLSession deletes `location` once this delegate returns, so move the
-        // file out to a stable path first.
+
         let dest = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aulycShot-update-\(UUID().uuidString).zip")
+            .appendingPathComponent("aulycShot-update-\(UUID().uuidString).dmg")
         do {
             try FileManager.default.moveItem(at: location, to: dest)
+            guard try Self.sha256(of: dest) == expectedSHA256 else {
+                try? FileManager.default.removeItem(at: dest)
+                retryDownload(after: InstallError.checksumMismatch)
+                return
+            }
             deliver(.success(dest))
         } catch {
-            deliver(.failure(error))
+            try? FileManager.default.removeItem(at: dest)
+            retryDownload(after: error)
         }
     }
 
@@ -223,10 +424,11 @@ extension UpdateInstaller: URLSessionDownloadDelegate {
         task: URLSessionTask,
         didCompleteWithError error: Error?
     ) {
-        // Success is already reported from didFinishDownloadingTo; this only
-        // catches transport failures (and deliver() ignores a second call).
-        if let error = error { deliver(.failure(error)) }
-        self.session?.finishTasksAndInvalidate()
-        self.session = nil
+        guard task.taskIdentifier == activeTaskIdentifier,
+              !handledTaskIdentifiers.contains(task.taskIdentifier),
+              !delivered
+        else { return }
+        handledTaskIdentifiers.insert(task.taskIdentifier)
+        retryDownload(after: error ?? InstallError.download)
     }
 }

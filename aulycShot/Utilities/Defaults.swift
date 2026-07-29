@@ -35,43 +35,6 @@ enum AppLanguage: String, CaseIterable {
     }
 }
 
-/// Discrete shadow choices shown in Settings. The raw values are persisted and
-/// must remain stable so users keep their selection across app updates.
-enum WindowShadowLevel: String, CaseIterable {
-    case disabled
-    case small
-    case medium
-    case large
-
-    var isEnabled: Bool { self != .disabled }
-
-    var shadowSize: Double {
-        switch self {
-        case .disabled: return 0
-        case .small: return 12
-        case .medium: return 22
-        case .large: return 40
-        }
-    }
-
-    var localizedTitle: String {
-        switch self {
-        case .disabled: return L10n.windowShadowDisabled
-        case .small: return L10n.windowShadowSmall
-        case .medium: return L10n.windowShadowMedium
-        case .large: return L10n.windowShadowLarge
-        }
-    }
-
-    /// Maps the former free-form slider value to the nearest discrete level.
-    static func resolve(legacyEnabled: Bool, legacySize: Double) -> WindowShadowLevel {
-        guard legacyEnabled else { return .disabled }
-        return [WindowShadowLevel.small, .medium, .large].min {
-            abs($0.shadowSize - legacySize) < abs($1.shadowSize - legacySize)
-        } ?? .medium
-    }
-}
-
 extension Notification.Name {
     static let languageDidChange = Notification.Name("aulycShot.languageDidChange")
     static let recordingSaveDirectoryDidChange = Notification.Name("aulycShot.recordingSaveDirectoryDidChange")
@@ -89,6 +52,8 @@ enum L10n {
     // Settings
     static var settingsTitle: String { s("settingsTitle") }
     static var showMenuBarIcon: String { s("showMenuBarIcon") }
+    static var settingEnabled: String { s("settingEnabled") }
+    static var settingDisabled: String { s("settingDisabled") }
     static var featurePermissionStatus: String { s("featurePermissionStatus") }
     static var permissionAvailable: String { s("permissionAvailable") }
     static var permissionUnavailable: String { s("permissionUnavailable") }
@@ -110,14 +75,6 @@ enum L10n {
     static var launchAtLogin: String { s("launchAtLogin") }
     static var demoMode: String { s("demoMode") }
     static var demoModeHint: String { s("demoModeHint") }
-    static var windowShadowLabel: String { s("windowShadowLabel") }
-    static var windowShadowHint: String { s("windowShadowHint") }
-    static var windowShadowLevelHint: String { s("windowShadowLevelHint") }
-    static var windowShadowPreviewButton: String { s("windowShadowPreviewButton") }
-    static var windowShadowDisabled: String { s("windowShadowDisabled") }
-    static var windowShadowSmall: String { s("windowShadowSmall") }
-    static var windowShadowMedium: String { s("windowShadowMedium") }
-    static var windowShadowLarge: String { s("windowShadowLarge") }
     static var recordingSavePathLabel: String { s("recordingSavePathLabel") }
     static var recordingSaveFormatSettingLabel: String { s("recordingSaveFormatSettingLabel") }
     static var screenshotSavePathLabel: String { s("screenshotSavePathLabel") }
@@ -151,18 +108,14 @@ enum L10n {
     static var shortcutWaiting: String { s("shortcutWaiting") }
     static var shortcutNeedsModifierTitle: String { s("shortcutNeedsModifierTitle") }
     static var shortcutNeedsModifier: String { s("shortcutNeedsModifier") }
-    static var shortcutRestore: String { s("shortcutRestore") }
 
     // Pin-image shortcut
     static var selectedImagePinShortcutHeader: String { s("selectedImagePinShortcutHeader") }
     static var selectedImagePinShortcutDefaultDisplay: String { s("selectedImagePinShortcutDefaultDisplay") }
-    static var selectedImagePinShortcutClear: String { s("selectedImagePinShortcutClear") }
     static var clipboardImagePinShortcutHeader: String { s("clipboardImagePinShortcutHeader") }
     static var clipboardImagePinShortcutDefaultDisplay: String { s("clipboardImagePinShortcutDefaultDisplay") }
-    static var clipboardImagePinShortcutClear: String { s("clipboardImagePinShortcutClear") }
     static var clipboardTextPinShortcutHeader: String { s("clipboardTextPinShortcutHeader") }
     static var clipboardTextPinShortcutDefaultDisplay: String { s("clipboardTextPinShortcutDefaultDisplay") }
-    static var clipboardTextPinShortcutClear: String { s("clipboardTextPinShortcutClear") }
     static var selectedImagePinNoImage: String { s("selectedImagePinNoImage") }
     static var clipboardImagePinNoImage: String { s("clipboardImagePinNoImage") }
     static var clipboardTextPinNoText: String { s("clipboardTextPinNoText") }
@@ -184,14 +137,10 @@ enum L10n {
     static var imageMergeShortcutHeader: String { s("imageMergeShortcutHeader") }
     static var imageMergeShortcutDefaultDisplay: String { s("imageMergeShortcutDefaultDisplay") }
 
-    // Copy-to-clipboard shortcut (editor confirm)
+    // Screenshot execution shortcut (editor confirm)
     static var clipboardShortcutHeader: String { s("clipboardShortcutHeader") }
     static var clipboardShortcutHint: String { s("clipboardShortcutHint") }
     static var clipboardShortcutDefaultDisplay: String { s("clipboardShortcutDefaultDisplay") }
-
-    // Save-to-file shortcut (editor save)
-    static var fileSaveShortcutHeader: String { s("fileSaveShortcutHeader") }
-    static var fileSaveShortcutHint: String { s("fileSaveShortcutHint") }
 
     // Shortcut conflict
     static var shortcutConflictTitle: String { s("shortcutConflictTitle") }
@@ -200,7 +149,6 @@ enum L10n {
     static var shortcutConflictClipboardImagePin: String { s("shortcutConflictClipboardImagePin") }
     static var shortcutConflictClipboardTextPin: String { s("shortcutConflictClipboardTextPin") }
     static var shortcutConflictClipboard: String { s("shortcutConflictClipboard") }
-    static var shortcutConflictFileSave: String { s("shortcutConflictFileSave") }
     static var shortcutConflictSelectedImageEdit: String { s("shortcutConflictSelectedImageEdit") }
     static var shortcutConflictClipboardImageEdit: String { s("shortcutConflictClipboardImageEdit") }
     static var shortcutConflictRecord: String { s("shortcutConflictRecord") }
@@ -287,8 +235,6 @@ enum L10n {
     static var tipNumbered: String { s("tipNumbered") }
     static var tipText: String { s("tipText") }
     static var tipQRCode: String { s("tipQRCode") }
-    static var tipEmoji: String { s("tipEmoji") }
-    static var tipMoreEmoji: String { s("tipMoreEmoji") }
     static var tipInsertImage: String { s("tipInsertImage") }
     static var tipUndo: String { s("tipUndo") }
     static var tipRedo: String { s("tipRedo") }
@@ -463,9 +409,16 @@ enum L10n {
     static var imageMergeSpacing: String { s("imageMergeSpacing") }
     static var imageMergeMargin: String { s("imageMergeMargin") }
     static var imageMergeCornerRadius: String { s("imageMergeCornerRadius") }
+    static var imageMergePresetNone: String { s("imageMergePresetNone") }
+    static var imageMergePresetSmall: String { s("imageMergePresetSmall") }
+    static var imageMergePresetMedium: String { s("imageMergePresetMedium") }
+    static var imageMergePresetLarge: String { s("imageMergePresetLarge") }
+    static var imageMergeCornerSquare: String { s("imageMergeCornerSquare") }
+    static var imageMergeCornerRounded: String { s("imageMergeCornerRounded") }
     static var imageMergeBackground: String { s("imageMergeBackground") }
     static var imageMergeTransparent: String { s("imageMergeTransparent") }
     static var imageMergeSolid: String { s("imageMergeSolid") }
+    static var imageMergeParameters: String { s("imageMergeParameters") }
     static var imageMergeOutput: String { s("imageMergeOutput") }
     static var imageMergeCopy: String { s("imageMergeCopy") }
     static var imageMergeSave: String { s("imageMergeSave") }
@@ -481,18 +434,8 @@ struct Defaults {
         UserDefaults.standard
     }
 
-    static var doubleTapInterval: TimeInterval {
-        get {
-            let val = defaults.double(forKey: "doubleTapInterval")
-            return val > 0 ? val : 0.3
-        }
-        set {
-            defaults.set(newValue, forKey: "doubleTapInterval")
-        }
-    }
-
-    // Custom screenshot hotkey. When the key is absent, no custom hotkey is set
-    // (fall back to double-tap ⌘). keyCode 0 is a valid value — it is the `A` key
+    // Custom screenshot hotkey. When the key is absent, no hotkey is configured.
+    // keyCode 0 is a valid value — it is the `A` key
     // (kVK_ANSI_A) — so presence must be checked via `hasCustomScreenshotHotkey`,
     // never by comparing the key code to 0.
     // Modifiers are stored using Carbon flags (cmdKey | shiftKey | optionKey | controlKey).
@@ -626,7 +569,6 @@ struct Defaults {
         clearRecordHotkey()
         clearImageMergeHotkey()
         clearClipboardHotkey()
-        clearFileSaveHotkey()
     }
 
     // Custom image-edit hotkeys. They are global Carbon hotkeys with no
@@ -720,40 +662,70 @@ struct Defaults {
         }
     }
 
-    static var imageMergeSpacing: Double {
+    static var imageMergeSpacingPreset: ImageMergeSpacingPreset {
         get {
+            let rawValue: CGFloat
             if defaults.object(forKey: "imageMergeSpacing") == nil {
-                return 12
+                rawValue = ImageMergeSpacingPreset.medium.value
+            } else {
+                rawValue = CGFloat(defaults.double(forKey: "imageMergeSpacing"))
             }
-            return min(max(defaults.double(forKey: "imageMergeSpacing"), 0), 80)
+            let preset = ImageMergeSpacingPreset.nearest(to: rawValue)
+            defaults.set(Double(preset.value), forKey: "imageMergeSpacing")
+            return preset
         }
         set {
-            defaults.set(min(max(newValue.rounded(), 0), 80), forKey: "imageMergeSpacing")
+            defaults.set(Double(newValue.value), forKey: "imageMergeSpacing")
         }
+    }
+
+    static var imageMergeMarginPreset: ImageMergeMarginPreset {
+        get {
+            let rawValue: CGFloat
+            if defaults.object(forKey: "imageMergeMargin") == nil {
+                rawValue = ImageMergeMarginPreset.medium.value
+            } else {
+                rawValue = CGFloat(defaults.double(forKey: "imageMergeMargin"))
+            }
+            let preset = ImageMergeMarginPreset.nearest(to: rawValue)
+            defaults.set(Double(preset.value), forKey: "imageMergeMargin")
+            return preset
+        }
+        set {
+            defaults.set(Double(newValue.value), forKey: "imageMergeMargin")
+        }
+    }
+
+    static var imageMergeCornerPreset: ImageMergeCornerPreset {
+        get {
+            let rawValue: CGFloat
+            if defaults.object(forKey: "imageMergeCornerRadius") == nil {
+                rawValue = ImageMergeCornerPreset.square.value
+            } else {
+                rawValue = CGFloat(defaults.double(forKey: "imageMergeCornerRadius"))
+            }
+            let preset = ImageMergeCornerPreset.nearest(to: rawValue)
+            defaults.set(Double(preset.value), forKey: "imageMergeCornerRadius")
+            return preset
+        }
+        set {
+            defaults.set(Double(newValue.value), forKey: "imageMergeCornerRadius")
+        }
+    }
+
+    static var imageMergeSpacing: Double {
+        get { Double(imageMergeSpacingPreset.value) }
+        set { imageMergeSpacingPreset = .nearest(to: CGFloat(newValue)) }
     }
 
     static var imageMergeMargin: Double {
-        get {
-            if defaults.object(forKey: "imageMergeMargin") == nil {
-                return 24
-            }
-            return min(max(defaults.double(forKey: "imageMergeMargin"), 0), 120)
-        }
-        set {
-            defaults.set(min(max(newValue.rounded(), 0), 120), forKey: "imageMergeMargin")
-        }
+        get { Double(imageMergeMarginPreset.value) }
+        set { imageMergeMarginPreset = .nearest(to: CGFloat(newValue)) }
     }
 
     static var imageMergeCornerRadius: Double {
-        get {
-            if defaults.object(forKey: "imageMergeCornerRadius") == nil {
-                return 0
-            }
-            return min(max(defaults.double(forKey: "imageMergeCornerRadius"), 0), 80)
-        }
-        set {
-            defaults.set(min(max(newValue.rounded(), 0), 80), forKey: "imageMergeCornerRadius")
-        }
+        get { Double(imageMergeCornerPreset.value) }
+        set { imageMergeCornerPreset = .nearest(to: CGFloat(newValue)) }
     }
 
     static var imageMergeBackgroundIsSolid: Bool {
@@ -878,9 +850,8 @@ struct Defaults {
         return URL(fileURLWithPath: expanded, isDirectory: true).standardizedFileURL
     }
 
-    // Custom copy-to-clipboard hotkey used inside the editor overlay to
-    // confirm the screenshot. When absent, the default is "double-tap ⌘",
-    // detected via the global flag monitor (KeyMonitor) — see AppDelegate.
+    // Custom screenshot-execution hotkey used inside the editor overlay to
+    // confirm the screenshot. When absent, no execution hotkey is configured.
     // Unlike the screenshot and pin hotkeys this is matched locally against
     // keyDown events instead of registered as a Carbon global hotkey, so it
     // may be bare (no modifiers). Presence must be checked via
@@ -925,29 +896,9 @@ struct Defaults {
     static func clearClipboardHotkey() {
         defaults.removeObject(forKey: "clipboardHotkeyKeyCode")
         defaults.removeObject(forKey: "clipboardHotkeyModifiers")
-    }
-
-    // Custom save-to-file hotkey used inside the editor overlay to invoke
-    // the configured-directory file save. When absent, defaults to ⌘S.
-    // Matched locally against keyDown events, same as the clipboard hotkey.
-
-    static var fileSaveHotkeyKeyCode: Int {
-        get { defaults.integer(forKey: "fileSaveHotkeyKeyCode") }
-        set { defaults.set(newValue, forKey: "fileSaveHotkeyKeyCode") }
-    }
-
-    static var fileSaveHotkeyModifiers: Int {
-        get { defaults.integer(forKey: "fileSaveHotkeyModifiers") }
-        set { defaults.set(newValue, forKey: "fileSaveHotkeyModifiers") }
-    }
-
-    static var hasCustomFileSaveHotkey: Bool {
-        defaults.object(forKey: "fileSaveHotkeyKeyCode") != nil
-    }
-
-    static func clearFileSaveHotkey() {
-        defaults.removeObject(forKey: "fileSaveHotkeyKeyCode")
-        defaults.removeObject(forKey: "fileSaveHotkeyModifiers")
+        defaults.removeObject(forKey: "saveHotkeyKeyCode")
+        defaults.removeObject(forKey: "saveHotkeyModifiers")
+        defaults.set(true, forKey: "clipboardHotkeyMigrated")
     }
 
     static var penColor: Int {
@@ -1114,31 +1065,6 @@ struct Defaults {
         }
     }
 
-    static var recentEmojis: [String] {
-        get {
-            normalizedEmojiList(defaults.stringArray(forKey: "recentEmojis") ?? [])
-        }
-        set {
-            let normalized = normalizedEmojiList(newValue)
-            if normalized.isEmpty {
-                defaults.removeObject(forKey: "recentEmojis")
-            } else {
-                defaults.set(normalized, forKey: "recentEmojis")
-            }
-        }
-    }
-
-    private static func normalizedEmojiList(_ values: [String]) -> [String] {
-        var result: [String] = []
-        for value in values {
-            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty, !result.contains(trimmed) else { continue }
-            result.append(trimmed)
-            if result.count == 10 { break }
-        }
-        return result
-    }
-
     private static func normalizedHexColor(_ hex: String?) -> String? {
         guard var trimmed = hex?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() else {
             return nil
@@ -1172,42 +1098,6 @@ struct Defaults {
             defaults.set(newValue, forKey: "showMenuBar")
         }
     }
-
-    // Window-capture drop shadow. Existing toggle/slider values are migrated
-    // once to the nearest discrete level; the legacy keys stay synchronized so
-    // downgrading the app does not discard the user's new choice.
-    static var windowShadowLevel: WindowShadowLevel {
-        get {
-            if let rawValue = defaults.string(forKey: "windowShadowLevel"),
-               let level = WindowShadowLevel(rawValue: rawValue) {
-                return level
-            }
-
-            let legacyEnabled = defaults.object(forKey: "windowShadowEnabled") == nil
-                ? true
-                : defaults.bool(forKey: "windowShadowEnabled")
-            let legacySize = defaults.object(forKey: "windowShadowSize") == nil
-                ? WindowShadowLevel.medium.shadowSize
-                : defaults.double(forKey: "windowShadowSize")
-            let level = WindowShadowLevel.resolve(
-                legacyEnabled: legacyEnabled,
-                legacySize: legacySize
-            )
-            defaults.set(level.rawValue, forKey: "windowShadowLevel")
-            return level
-        }
-        set {
-            defaults.set(newValue.rawValue, forKey: "windowShadowLevel")
-            defaults.set(newValue.isEnabled, forKey: "windowShadowEnabled")
-            if newValue.isEnabled {
-                defaults.set(newValue.shadowSize, forKey: "windowShadowSize")
-            }
-        }
-    }
-
-    static var windowShadowEnabled: Bool { windowShadowLevel.isEnabled }
-
-    static var windowShadowSize: Double { windowShadowLevel.shadowSize }
 
     static var language: AppLanguage {
         get {

@@ -18,7 +18,6 @@ enum ToolbarItemID: String, Codable, CaseIterable {
     case numbered
     case text
     case qrCode
-    case emoji
     case insertImage
     // Stateful actions
     case undo
@@ -46,7 +45,7 @@ extension ToolbarItemID {
 
     var kind: Kind {
         switch self {
-        case .rectangle, .ellipse, .arrow, .line, .pen, .marker, .mosaic, .eraser, .magnifier, .numbered, .text, .emoji:
+        case .rectangle, .ellipse, .arrow, .line, .pen, .marker, .mosaic, .eraser, .magnifier, .numbered, .text:
             return .toggleTool
         case .scrollCapture, .qrCode:
             return .toggleAction
@@ -69,14 +68,13 @@ extension ToolbarItemID {
         case .magnifier: return .magnifier
         case .numbered:  return .numbered
         case .text:      return .text
-        case .emoji:     return .emoji
         default:         return nil
         }
     }
 
     var symbolName: String {
         switch self {
-        case .rectangle:     return "rectangle"
+        case .rectangle:     return "square"
         case .ellipse:       return "circle"
         case .arrow:         return "arrow.up.right"
         case .line:          return "line.diagonal"
@@ -88,7 +86,6 @@ extension ToolbarItemID {
         case .numbered:      return "1.circle"
         case .text:          return "character"
         case .qrCode:        return "qrcode.viewfinder"
-        case .emoji:         return "face.smiling"
         case .insertImage:   return "photo"
         case .undo:          return "arrow.uturn.backward"
         case .redo:          return "arrow.uturn.forward"
@@ -159,7 +156,6 @@ extension ToolbarItemID {
         case .numbered:      title = L10n.tipNumbered
         case .text:          title = L10n.tipText
         case .qrCode:        title = L10n.tipQRCode
-        case .emoji:         title = L10n.tipEmoji
         case .insertImage:   title = L10n.tipInsertImage
         case .undo:          title = L10n.tipUndo
         case .redo:          title = L10n.tipRedo
@@ -187,8 +183,7 @@ extension ToolbarItemID {
         case .eraser:    return "E"
         case .text:      return "T"
         case .numbered:  return "N"
-        case .save:      return HotkeyManager.currentFileSaveDisplayString()
-        case .confirm:   return HotkeyManager.currentClipboardDisplayString() ?? L10n.clipboardShortcutDefaultDisplay
+        case .confirm:   return HotkeyManager.currentClipboardDisplayString()
         case .undo:      return "⌘+Z"
         case .redo:      return "Z"
         case .close:     return "X"
@@ -224,6 +219,8 @@ let toolbarDangerRed = NSColor(red: 1.0, green: 0.35, blue: 0.35, alpha: 1.0)
 /// User-customizable assignment of every toolbar item to the primary
 /// (horizontal) toolbar, the side (vertical) toolbar, or hidden.
 struct ToolbarLayout: Equatable {
+    static let maximumHiddenItems = 9
+
     var primary: [ToolbarItemID]
     var side: [ToolbarItemID]
     var hidden: [ToolbarItemID]
@@ -232,7 +229,7 @@ struct ToolbarLayout: Equatable {
     /// place any newly-introduced tool that an older persisted layout never
     /// recorded.
     static let canonicalOrder: [ToolbarItemID] = [
-        .rectangle, .ellipse, .line, .arrow, .pen, .marker, .mosaic, .eraser, .numbered, .text, .emoji, .insertImage,
+        .rectangle, .ellipse, .line, .arrow, .pen, .marker, .mosaic, .eraser, .numbered, .text, .insertImage,
         .magnifier, .undo, .redo, .scrollCapture, .qrCode,
         .save, .pin, .record, .close, .confirm,
     ]
@@ -243,7 +240,7 @@ struct ToolbarLayout: Equatable {
     static var `default`: ToolbarLayout {
         ToolbarLayout(
             primary: [
-                .rectangle, .ellipse, .line, .arrow, .pen, .marker, .mosaic, .eraser, .numbered, .text, .emoji, .insertImage,
+                .rectangle, .ellipse, .line, .arrow, .pen, .marker, .mosaic, .eraser, .numbered, .text, .insertImage,
                 .magnifier, .qrCode, .undo, .redo,
             ],
             side: [.scrollCapture, .save, .pin, .record, .close, .confirm],
@@ -280,6 +277,10 @@ struct ToolbarLayout: Equatable {
             }
             if !placed { p.insert(item, at: 0) }
             seen.insert(item)
+        }
+        if h.count > Self.maximumHiddenItems {
+            p.append(contentsOf: h.dropFirst(Self.maximumHiddenItems))
+            h = Array(h.prefix(Self.maximumHiddenItems))
         }
         return ToolbarLayout(primary: p, side: s, hidden: h)
     }

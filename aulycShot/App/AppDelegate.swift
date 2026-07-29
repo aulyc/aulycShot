@@ -5,7 +5,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private static let shareHandoffNotificationName = Notification.Name("com.aulyc.aulycshot.share-handoff")
 
     private var statusBarController: StatusBarController?
-    private var keyMonitor: KeyMonitor!
     private var overlayController: OverlayWindowController?
     private var recordingEngine: RecordingEngine?
     private var recordingHUDPanel: RecordingHUDPanel?
@@ -100,10 +99,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         ImageMergeLauncher.shared.onContinueEditing = { [weak self] image in
             self?.continueEditingMergedImage(image)
         }
-        keyMonitor = KeyMonitor(
-            onTrigger: { [weak self] in self?.handleDoubleTapCommand() }
-        )
-
         NotificationCenter.default.addObserver(
             forName: .hotkeyDidChange,
             object: nil,
@@ -160,14 +155,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if HotkeyManager.shared.isRecording {
             HotkeyManager.shared.unregister()
             unregisterNonScreenshotHotkeys()
-            keyMonitor?.isEnabled = false
             return
         }
 
         if recordingEngine != nil {
             unregisterNonScreenshotHotkeys()
-            keyMonitor?.isEnabled = true
-            keyMonitor?.isRegularDoubleTapEnabled = !Defaults.hasCustomScreenshotHotkey
             if Defaults.hasCustomScreenshotHotkey {
                 HotkeyManager.shared.register { [weak self] in
                     self?.stopRecordingAndSave()
@@ -178,7 +170,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        keyMonitor?.isEnabled = true
         if Defaults.hasCustomScreenshotHotkey {
             HotkeyManager.shared.register { [weak self] in
                 self?.handleTrigger(fromShortcut: true)
@@ -186,14 +177,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             HotkeyManager.shared.unregister()
         }
-
-        // Double-tap ⌘ does two jobs: it's the default screenshot trigger
-        // when no custom screenshot hotkey is set, and the default
-        // copy-to-clipboard trigger while an overlay is up (when no custom
-        // clipboard hotkey is set). Keep it live whenever either path needs it.
-        let needsDoubleTap = !Defaults.hasCustomScreenshotHotkey
-            || (overlayController != nil && !Defaults.hasCustomClipboardHotkey)
-        keyMonitor?.isRegularDoubleTapEnabled = needsDoubleTap
 
         // The pin hotkeys are independent of the screenshot hotkey.
         if Defaults.hasCustomSelectedImagePinHotkey {
@@ -330,23 +313,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         overlayController = controller
         applyHotkeyState()
         return true
-    }
-
-    /// KeyMonitor entry point for plain double-tap ⌘. While an overlay is
-    /// active this is the default copy-to-clipboard hotkey; otherwise it falls
-    /// through to the regular screenshot trigger.
-    private func handleDoubleTapCommand() {
-        if recordingEngine != nil {
-            stopRecordingAndSave()
-            return
-        }
-        if let overlay = overlayController {
-            if !Defaults.hasCustomClipboardHotkey {
-                overlay.confirmFromKeyboard()
-            }
-            return
-        }
-        handleTrigger(fromShortcut: true)
     }
 
     func handleTrigger(fromShortcut: Bool = false) {
@@ -583,7 +549,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             case .success(let output):
                 ClipboardManager.copyToClipboard(imageOutput: output)
                 if showsFeedback {
-                    ToastWindow.show()
+                    ToastWindow.showScreenshotSuccess()
                 }
                 completion(true)
             }
@@ -619,7 +585,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     try output.data.write(to: destination, options: .atomic)
                     if showsFeedback {
                         let directoryPath = SaveDestination.displayPath(destination.deletingLastPathComponent())
-                        ToastWindow.show(message: L10n.screenshotSaved(to: directoryPath))
+                        ToastWindow.showScreenshotSuccess(
+                            message: L10n.screenshotSaved(to: directoryPath)
+                        )
                     }
                     completion(.success(destination))
                 } catch {
@@ -656,7 +624,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             switch (clipboardSucceeded, saveResult) {
             case (true, .success(let destination)):
                 let directoryPath = SaveDestination.displayPath(destination.deletingLastPathComponent())
-                ToastWindow.show(message: L10n.screenshotCopiedAndSaved(to: directoryPath))
+                ToastWindow.showScreenshotSuccess(
+                    message: L10n.screenshotCopiedAndSaved(to: directoryPath)
+                )
             case (true, .failure(let error)):
                 ToastWindow.show(message: L10n.screenshotSaveFailed(error.localizedDescription), duration: 3.5)
             case (false, .success):

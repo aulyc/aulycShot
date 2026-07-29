@@ -3,6 +3,8 @@
 /* Settings */
 "settingsTitle" = "aulycShot Settings";
 "showMenuBarIcon" = "Show Menu Bar Icon";
+"settingEnabled" = "Enabled";
+"settingDisabled" = "Not Enabled";
 "featurePermissionStatus" = "Feature Status";
 "permissionAvailable" = "Available";
 "permissionUnavailable" = "Unavailable";
@@ -15,34 +17,22 @@
 "launchAtLogin" = "Launch at Login";
 "demoMode" = "Demo Mode";
 "demoModeHint" = "Allow screen recorders to capture the selection overlay and editor";
-"windowShadowLabel" = "Window Capture Shadow";
-"windowShadowHint" = "Round the corners of window captures and add a macOS-style drop shadow";
-"windowShadowLevelHint" = "Choose Small, Medium, or Large, with higher levels producing a softer, wider shadow";
-"windowShadowPreviewButton" = "Example";
-"windowShadowDisabled" = "Off";
-"windowShadowSmall" = "Small";
-"windowShadowMedium" = "Medium";
-"windowShadowLarge" = "Large";
 
 /* Screenshot shortcut */
 "shortcutHeader" = "Screenshot";
-"shortcutHint" = "Default: double-tap ⌘. Setting a custom shortcut disables double-tap";
-"shortcutDefaultDisplay" = "Double-tap ⌘";
+"shortcutHint" = "Set a shortcut to trigger screenshots from any app. Not set by default";
+"shortcutDefaultDisplay" = "Not set";
 "shortcutSet" = "Set";
 "shortcutCancel" = "Cancel";
 "shortcutWaiting" = "Press keys";
 "shortcutNeedsModifierTitle" = "Shortcut Needs a Modifier";
 "shortcutNeedsModifier" = "Use ⌘/⌥/⇧/⌃ plus another key (e.g. ⌘⇧8), or F1–F12 alone";
-"shortcutRestore" = "Restore Default";
 "selectedImagePinShortcutHeader" = "Pin Selected Image";
 "selectedImagePinShortcutDefaultDisplay" = "Not set";
-"selectedImagePinShortcutClear" = "Clear Pin Selected Image Shortcut";
 "clipboardImagePinShortcutHeader" = "Pin Clipboard Image";
 "clipboardImagePinShortcutDefaultDisplay" = "Not set";
-"clipboardImagePinShortcutClear" = "Clear Pin Clipboard Image Shortcut";
 "clipboardTextPinShortcutHeader" = "Pin Clipboard Text";
 "clipboardTextPinShortcutDefaultDisplay" = "Not set";
-"clipboardTextPinShortcutClear" = "Clear Pin Clipboard Text Shortcut";
 "selectedImagePinNoImage" = "No Finder image selected";
 "clipboardImagePinNoImage" = "No image on the clipboard";
 "clipboardTextPinNoText" = "No text on the clipboard";
@@ -62,14 +52,10 @@
 "recordShortcutHeader" = "Record";
 "recordShortcutDefaultDisplay" = "Not set";
 
-/* Copy-to-clipboard shortcut (editor confirm) */
-"clipboardShortcutHeader" = "Copy to Clipboard";
-"clipboardShortcutHint" = "Pressed inside the editor to commit the edit and copy the screenshot to the clipboard. Defaults to double-tap ⌘ when not set";
-"clipboardShortcutDefaultDisplay" = "Double-tap ⌘";
-
-/* Save-to-file shortcut (editor save) */
-"fileSaveShortcutHeader" = "Save to File";
-"fileSaveShortcutHint" = "Pressed inside the editor to save the screenshot as a PNG in the configured screenshot folder. Defaults to ⌘S";
+/* Screenshot execution shortcut (editor confirm) */
+"clipboardShortcutHeader" = "Execute Screenshot";
+"clipboardShortcutHint" = "Press it in the editor to complete the screenshot and apply the After screenshot execution setting. Not set by default";
+"clipboardShortcutDefaultDisplay" = "Not set";
 
 /* Shortcut conflict */
 "shortcutConflictTitle" = "Shortcut Already in Use";
@@ -77,8 +63,7 @@
 "shortcutConflictSelectedImagePin" = "This key combination is already used by the Pin Selected Image shortcut. Please choose a different one";
 "shortcutConflictClipboardImagePin" = "This key combination is already used by the Pin Clipboard Image shortcut. Please choose a different one";
 "shortcutConflictClipboardTextPin" = "This key combination is already used by the Pin Clipboard Text shortcut. Please choose a different one";
-"shortcutConflictClipboard" = "This key combination is already used by the Copy to Clipboard shortcut. Please choose a different one";
-"shortcutConflictFileSave" = "This key combination is already used by the Save to File shortcut. Please choose a different one";
+"shortcutConflictClipboard" = "This key combination is already used by the Execute Screenshot shortcut. Please choose a different one";
 "shortcutConflictSelectedImageEdit" = "This key combination is already used by the Edit Selected Image shortcut. Please choose a different one";
 "shortcutConflictClipboardImageEdit" = "This key combination is already used by the Edit Clipboard Image shortcut. Please choose a different one";
 "shortcutConflictRecord" = "This key combination is already used by the Record shortcut. Please choose a different one";
@@ -146,8 +131,6 @@
 "tipNumbered" = "Numbered";
 "tipText" = "Text";
 "tipQRCode" = "Recognize QR Code";
-"tipEmoji" = "Emoji";
-"tipMoreEmoji" = "More Emoji";
 "tipInsertImage" = "Insert Image";
 "tipUndo" = "Undo";
 "tipRedo" = "Redo";
@@ -156,7 +139,7 @@
 "tipPin" = "Pin to Screen";
 "tipRecord" = "Record";
 "tipCancel" = "Cancel";
-"tipConfirm" = "Copy to Clipboard";
+"tipConfirm" = "Execute Screenshot";
 "tipScrollCropConfirm" = "Save and Edit";
 "copyQRCodeContent" = "Copy QR code content";
 
@@ -282,18 +265,18 @@
 
 
 
-/* Image Merge */
-"imageMergeShortcutHeader" = "Merge Images";
+/* Image Stitching Tool */
+"imageMergeShortcutHeader" = "Image Stitching Tool";
 "imageMergeShortcutDefaultDisplay" = "Not set";
-"shortcutConflictImageMerge" = "This key combination is already used by the Merge Images shortcut. Please choose a different one";
-"mergeImages" = "Merge Images";
-"mergeEditExitHint" = "Editing merged image. Press X to exit editing";
-"imageMergeNeedTwoImages" = "Select at least two Finder images to merge";
+"shortcutConflictImageMerge" = "This key combination is already used by the Image Stitching Tool shortcut. Please choose a different one";
+"mergeImages" = "Image Stitching Tool";
+"mergeEditExitHint" = "Editing stitched image. Press X to exit editing";
+"imageMergeNeedTwoImages" = "Select at least two Finder images to stitch";
 "imageMergeSomeImagesSkipped" = "Some images could not be loaded";
 "imageMergeNoClipboardImage" = "No image on the clipboard";
-"imageMergeFailed" = "Image merge failed";
-"imageMergeSaved" = "Merged image saved";
-"imageMergeWindowTitle" = "Merge Images";
+"imageMergeFailed" = "Image stitching failed";
+"imageMergeSaved" = "Stitched image saved";
+"imageMergeWindowTitle" = "Image Stitching Tool";
 "imageMergeSources" = "Sources";
 "imageMergeAddFiles" = "Add Files";
 "imageMergeAddFromClipboard" = "Add from Clipboard";
@@ -306,16 +289,23 @@
 "imageMergeLayout" = "Layout";
 "imageMergeSpacing" = "Spacing";
 "imageMergeMargin" = "Outer Margin";
-"imageMergeCornerRadius" = "Corner Radius";
+"imageMergeCornerRadius" = "Corners";
+"imageMergePresetNone" = "None";
+"imageMergePresetSmall" = "Small";
+"imageMergePresetMedium" = "Medium";
+"imageMergePresetLarge" = "Large";
+"imageMergeCornerSquare" = "Square";
+"imageMergeCornerRounded" = "Rounded";
 "imageMergeBackground" = "Background";
 "imageMergeTransparent" = "Transparent";
 "imageMergeSolid" = "Solid";
+"imageMergeParameters" = "Parameters";
 "imageMergeOutput" = "Output";
 "imageMergeCopy" = "Copy";
 "imageMergeSave" = "Save";
 "imageMergeContinueEditing" = "Edit";
 "imageMergeClose" = "Close";
-"imageMergeEmptyTitle" = "Drop images to merge";
+"imageMergeEmptyTitle" = "Drop images to start stitching";
 "imageMergeEmptyBody" = "Add files, paste from clipboard, or drag images here";
 "imageMergeClipboardSourceName" = "Clipboard Image";
 
@@ -328,7 +318,7 @@
 "screenshotQualityCompressingSave" = "Compressing before save";
 "screenshotQualityCompressingClipboard" = "Compressing before copy";
 "screenshotCompressionFailed" = "Image compression failed";
-"screenshotOutputActionLabel" = "After screenshot";
+"screenshotOutputActionLabel" = "After screenshot execution";
 "screenshotOutputClipboardOnly" = "Copy to clipboard only";
 "screenshotOutputFileOnly" = "Save to directory only";
 "screenshotOutputClipboardAndFile" = "Copy and save";

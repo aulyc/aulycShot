@@ -4,6 +4,37 @@ import QuartzCore
 import UniformTypeIdentifiers
 
 class EditWindowController {
+    static func startupTool(isPresetImage: Bool) -> EditTool? {
+        isPresetImage ? nil : .rectangle
+    }
+
+    static func showsShapeStrokeStyleControl(for tool: EditTool) -> Bool {
+        false
+    }
+
+    static func normalizedShapeStrokeStyle(
+        _ strokeStyle: ShapeStrokeStyle,
+        for tool: EditTool
+    ) -> ShapeStrokeStyle {
+        switch tool {
+        case .rectangle, .ellipse:
+            return .standard
+        default:
+            return strokeStyle
+        }
+    }
+
+    static func showsArrowStyleControl(for tool: EditTool) -> Bool {
+        false
+    }
+
+    static func normalizedArrowStyle(
+        _ arrowStyle: ArrowStyle,
+        for tool: EditTool
+    ) -> ArrowStyle {
+        tool == .arrow ? .line : arrowStyle
+    }
+
     private var canvasView: EditCanvasView?
     private var canvasScrollView: EditorScrollView?
     private var selectionChromeOverlay: SelectionChromeOverlay?
@@ -86,7 +117,7 @@ class EditWindowController {
     // Drawing properties
     private var currentColor: NSColor = EditorStyleDefaults.primaryColor
     private var currentLineWidth: CGFloat = EditorStyleDefaults.standardLineWidth
-    private var currentArrowStyle: ArrowStyle = Defaults.lastArrowStyle
+    private var currentArrowStyle: ArrowStyle = .line
     private var currentMosaicBlockSize: CGFloat = CGFloat(Defaults.mosaicBlockSize)
     private var currentFontSize: CGFloat = CGFloat(Defaults.lastTextFontSize)
     /// Whether new text annotations get a contrast outline.
@@ -95,14 +126,11 @@ class EditWindowController {
     private var currentTextCallout: Bool = Defaults.lastTextCallout
     /// Whether new rectangle/ellipse annotations are filled.
     private var currentShapeFillMode: ShapeFillMode = Defaults.lastShapeFillMode
-    private var currentShapeStrokeStyle: ShapeStrokeStyle = Defaults.lastShapeStrokeStyle
+    private var currentShapeStrokeStyle: ShapeStrokeStyle = .standard
     /// Marker keeps its own color/size slot so toggling between pen and
     /// marker preserves each tool's last-used choice.
     private var currentMarkerColor: NSColor = EditorStyleDefaults.markerColor
     private var currentMarkerLineWidth: CGFloat = EditorStyleDefaults.markerLineWidth
-    private var currentEmoji: String?
-    private var recentEmojis: [String] = Defaults.recentEmojis
-    private var emojiPopover: NSPopover?
     var isTextEditing: Bool {
         canvasView?.isTextEditing == true
     }
@@ -170,16 +198,18 @@ class EditWindowController {
         canvas.onHistoryStateChanged = { [weak self] canUndo, canRedo in
             self?.updateHistoryButtons(canUndo: canUndo, canRedo: canRedo)
         }
-        canvas.onEmojiStamped = { [weak self] in
-            self?.handleEmojiStamped()
-        }
-
         scrollView.documentView = canvas
         scrollView.editorCanvasView = canvas
         scrollView.isInteractionEnabled = overrideBaseImage != nil
 
         self.canvasScrollView = scrollView
         self.canvasView = canvas
+        hostSelectionView.refreshAnnotationCursor = { [weak canvas] in
+            canvas?.refreshCursorAtCurrentLocation()
+        }
+        canvas.onCursorRefreshRequested = { [weak hostSelectionView] in
+            hostSelectionView?.refreshEditorCursorAtCurrentMouseLocation()
+        }
         hostSelectionView.addSubview(scrollView)
         resetCanvasScrollPosition()
 
@@ -198,6 +228,9 @@ class EditWindowController {
         self.selectionChromeOverlay = overlay
 
         showToolbar()
+        if let startupTool = Self.startupTool(isPresetImage: overrideBaseImage != nil) {
+            selectTool(startupTool)
+        }
         updateHistoryButtons(canUndo: canvas.canUndo, canRedo: canvas.canRedo)
         bringEditorToFront()
     }
@@ -325,6 +358,7 @@ class EditWindowController {
         activeTool = tool
         canvasView?.activeTool = tool
         normalizeShapeStrokeStyle(for: tool)
+        normalizeArrowStyle(for: tool)
         pushCurrentStyleToCanvas()
         toolbars.forEach { $0.updateSelection(tool: tool) }
         updateEditorInteractionState()
@@ -345,6 +379,8 @@ class EditWindowController {
         guard let tool = tool(for: annotation), tool != .none else { return }
 
         seedCurrentValues(from: annotation)
+        normalizeShapeStrokeStyle(for: tool)
+        normalizeArrowStyle(for: tool)
         pushCurrentStyleToCanvas()
 
         if activeTool != tool {
@@ -366,7 +402,6 @@ class EditWindowController {
         canvasView?.currentTextCallout = currentTextCallout
         canvasView?.currentShapeFillMode = currentShapeFillMode
         canvasView?.currentShapeStrokeStyle = currentShapeStrokeStyle
-        canvasView?.currentEmoji = currentEmoji
         canvasView?.currentMarkerColor = currentMarkerColor
         canvasView?.currentMarkerLineWidth = currentMarkerLineWidth
     }
@@ -383,7 +418,6 @@ class EditWindowController {
         case is MosaicAnnotation: return .mosaic
         case is MagnifierAnnotation: return .magnifier
         case is NumberAnnotation: return .numbered
-        case is EmojiAnnotation: return .emoji
         default: return nil
         }
     }
@@ -414,39 +448,44 @@ class EditWindowController {
             currentColor = r.color
             currentLineWidth = r.lineWidth
             currentShapeFillMode = r.fillMode
-            currentShapeStrokeStyle = r.strokeStyle
+            currentShapeStrokeStyle = Self.normalizedShapeStrokeStyle(r.strokeStyle, for: .rectangle)
         case let e as EllipseAnnotation:
             currentColor = e.color
             currentLineWidth = e.lineWidth
             currentShapeFillMode = e.fillMode
-            currentShapeStrokeStyle = e.strokeStyle == .rounded ? .standard : e.strokeStyle
+            currentShapeStrokeStyle = Self.normalizedShapeStrokeStyle(e.strokeStyle, for: .ellipse)
         case let a as ArrowAnnotation:
             currentColor = a.color
             currentLineWidth = a.lineWidth
-            currentArrowStyle = a.style
+            currentArrowStyle = Self.normalizedArrowStyle(a.style, for: .arrow)
             canvasView?.currentColor = a.color
             canvasView?.currentLineWidth = a.lineWidth
-            canvasView?.currentArrowStyle = a.style
+            canvasView?.currentArrowStyle = currentArrowStyle
         case let l as LineAnnotation:
             currentColor = l.color
             currentLineWidth = l.lineWidth
         case let n as NumberAnnotation:
             currentColor = n.color
-        case is EmojiAnnotation:
-            currentEmoji = nil
-            canvasView?.currentEmoji = nil
         default:
             break
         }
     }
 
     private func normalizeShapeStrokeStyle(for tool: EditTool) {
-        guard tool == .ellipse, currentShapeStrokeStyle == .rounded else { return }
-        currentShapeStrokeStyle = .standard
+        currentShapeStrokeStyle = Self.normalizedShapeStrokeStyle(
+            currentShapeStrokeStyle,
+            for: tool
+        )
+    }
+
+    private func normalizeArrowStyle(for tool: EditTool) {
+        currentArrowStyle = Self.normalizedArrowStyle(
+            currentArrowStyle,
+            for: tool
+        )
     }
 
     private func showSubToolbar(for tool: EditTool) {
-        dismissEmojiPopover()
         subToolbarView?.removeFromSuperview()
         subToolbarView = nil
 
@@ -463,28 +502,17 @@ class EditWindowController {
             showColorSizeSubToolbar(
                 sizes: EditorStyleDefaults.standardLineSizes,
                 currentSize: currentLineWidth,
-                width: ColorSizeSubToolbar.preferredWidth(
-                    sizes: EditorStyleDefaults.standardLineSizes,
-                    showsShapeFillModes: false,
-                    showsArrowStyles: true
-                ),
                 onSize: { [weak self] size in
                     self?.setCurrentDrawingLineWidth(size)
-                },
-                arrowStyle: currentArrowStyle,
-                onArrowStyle: { [weak self] style in
-                    self?.setArrowStyle(style)
                 }
             )
-        case .rectangle, .ellipse:
+        case .rectangle:
             showColorSizeSubToolbar(
                 sizes: EditorStyleDefaults.standardLineSizes,
                 currentSize: currentLineWidth,
                 width: ColorSizeSubToolbar.preferredWidth(
                     sizes: EditorStyleDefaults.standardLineSizes,
-                    showsShapeFillModes: true,
-                    showsShapeStrokeStyles: true,
-                    shapeStrokePreviewShape: tool == .ellipse ? .ellipse : .rectangle
+                    showsShapeFillModes: true
                 ),
                 onSize: { [weak self] size in
                     self?.setCurrentDrawingLineWidth(size)
@@ -492,11 +520,22 @@ class EditWindowController {
                 shapeFillMode: currentShapeFillMode,
                 onShapeFillMode: { [weak self] mode in
                     self?.setShapeFillMode(mode)
+                }
+            )
+        case .ellipse:
+            showColorSizeSubToolbar(
+                sizes: EditorStyleDefaults.standardLineSizes,
+                currentSize: currentLineWidth,
+                width: ColorSizeSubToolbar.preferredWidth(
+                    sizes: EditorStyleDefaults.standardLineSizes,
+                    showsShapeFillModes: true
+                ),
+                onSize: { [weak self] size in
+                    self?.setCurrentDrawingLineWidth(size)
                 },
-                shapeStrokeStyle: currentShapeStrokeStyle,
-                shapeStrokePreviewShape: tool == .ellipse ? .ellipse : .rectangle,
-                onShapeStrokeStyle: { [weak self] style in
-                    self?.setShapeStrokeStyle(style)
+                shapeFillMode: currentShapeFillMode,
+                onShapeFillMode: { [weak self] mode in
+                    self?.setShapeFillMode(mode)
                 }
             )
         case .magnifier:
@@ -522,8 +561,6 @@ class EditWindowController {
             )
         case .text:
             showTextSubToolbar()
-        case .emoji:
-            showEmojiSubToolbar()
         case .numbered:
             showColorSizeSubToolbar(
                 sizes: [],
@@ -696,97 +733,6 @@ class EditWindowController {
         subToolbarView = view
     }
 
-    private func showEmojiSubToolbar() {
-        guard let hostSelectionView, let toolbarFrame = subToolbarAnchorFrame else { return }
-        let width = min(
-            EmojiSubToolbar.preferredVisibleWidth,
-            max(EmojiSubToolbar.minimumVisibleWidth, hostSelectionView.bounds.width - 16)
-        )
-        let subRect = subToolbarRect(
-            width: width,
-            height: 42,
-            toolbarFrame: toolbarFrame,
-            in: hostSelectionView.bounds
-        )
-
-        let view = EmojiSubToolbar(
-            frame: subRect,
-            emojis: Self.recentEmojiChoices(from: recentEmojis),
-            selectedEmoji: currentEmoji
-        )
-        view.onEmojiSelected = { [weak self, weak view] emoji in
-            self?.selectEmoji(emoji, subToolbar: view, promotesToRecent: false)
-        }
-        view.onMoreRequested = { [weak self, weak view] anchor in
-            self?.showEmojiPicker(anchoredTo: anchor, subToolbar: view)
-        }
-        styleFloatingHUD(view)
-        hostSelectionView.addSubview(view)
-        subToolbarView = view
-    }
-
-    private func selectEmoji(_ emoji: String, subToolbar: EmojiSubToolbar?, promotesToRecent: Bool) {
-        currentEmoji = emoji
-        canvasView?.currentEmoji = emoji
-        let visibleEmojis = Self.recentEmojiChoices(from: recentEmojis)
-        if promotesToRecent, !visibleEmojis.contains(emoji) {
-            promoteRecentEmoji(emoji)
-            subToolbar?.emojis = Self.recentEmojiChoices(from: recentEmojis)
-        }
-        subToolbar?.selectedEmoji = emoji
-        dismissEmojiPopover()
-        bringEditorToFront()
-    }
-
-    private func showEmojiPicker(anchoredTo anchor: NSView, subToolbar: EmojiSubToolbar?) {
-        dismissEmojiPopover()
-
-        let picker = EmojiPickerView(
-            frame: NSRect(origin: .zero, size: EmojiPickerView.preferredSize),
-            emojis: Self.emojiPickerChoices,
-            selectedEmoji: currentEmoji
-        )
-        picker.onEmojiSelected = { [weak self, weak subToolbar] emoji in
-            self?.selectEmoji(emoji, subToolbar: subToolbar, promotesToRecent: true)
-        }
-
-        let viewController = NSViewController()
-        viewController.view = picker
-
-        let popover = NSPopover()
-        popover.behavior = .transient
-        popover.animates = true
-        popover.contentSize = EmojiPickerView.preferredSize
-        popover.contentViewController = viewController
-        popover.show(relativeTo: anchor.bounds, of: anchor, preferredEdge: .maxY)
-        emojiPopover = popover
-    }
-
-    private func dismissEmojiPopover() {
-        emojiPopover?.performClose(nil)
-        emojiPopover = nil
-    }
-
-    private func promoteRecentEmoji(_ emoji: String) {
-        var next = [emoji]
-        for existing in Self.recentEmojiChoices(from: recentEmojis) where existing != emoji {
-            next.append(existing)
-        }
-        for fallback in Self.defaultRecentEmojiChoices where !next.contains(fallback) {
-            next.append(fallback)
-        }
-        recentEmojis = Array(next.prefix(Self.recentEmojiLimit))
-        Defaults.recentEmojis = recentEmojis
-    }
-
-    private func handleEmojiStamped() {
-        currentEmoji = nil
-        canvasView?.currentEmoji = nil
-        (subToolbarView as? EmojiSubToolbar)?.selectedEmoji = nil
-        dismissEmojiPopover()
-        NSCursor.arrow.set()
-    }
-
     private func updateSubToolbarPosition() {
         guard
             let hostSelectionView,
@@ -931,7 +877,6 @@ class EditWindowController {
         activeTool = .none
         canvasView?.activeTool = .none
         toolbars.forEach { $0.updateSelection(tool: .none) }
-        dismissEmojiPopover()
         subToolbarView?.removeFromSuperview()
         subToolbarView = nil
         toolbars.forEach { $0.setScrollCaptureActive(true) }
@@ -940,7 +885,7 @@ class EditWindowController {
         // The first SCK capture runs synchronously on the main thread inside
         // ScrollCapturer.init, blocking the run loop on a semaphore. Without
         // forcing the view to redraw + commit here, the window backing store
-        // still shows the pre-scroll-capture chrome (green dashed border and
+        // still shows the pre-scroll-capture chrome (accent-blue dashed border and
         // corner handles), which would appear baked into the first frame and
         // get carried into the stitched output.
         hostSelectionView?.display()
@@ -1315,7 +1260,10 @@ class EditWindowController {
                     )
                     try output.data.write(to: destination, options: .atomic)
                     let directoryPath = SaveDestination.displayPath(destination.deletingLastPathComponent())
-                    ToastWindow.show(message: L10n.screenshotSaved(to: directoryPath), on: targetScreen)
+                    ToastWindow.showScreenshotSuccess(
+                        message: L10n.screenshotSaved(to: directoryPath),
+                        on: targetScreen
+                    )
                 } catch {
                     ToastWindow.show(
                         message: L10n.screenshotSaveFailed(error.localizedDescription),
@@ -1370,7 +1318,6 @@ class EditWindowController {
         canvasView?.activeTool = .none
         canvasView?.clearMultiSelection()
         toolbars.forEach { $0.updateSelection(tool: .none) }
-        dismissEmojiPopover()
         subToolbarView?.removeFromSuperview()
         subToolbarView = nil
         updateEditorInteractionState()
@@ -1480,13 +1427,6 @@ class EditWindowController {
         canvasView?.mutateSelectedAnnotationAtomic { $0.withShapeFillMode(mode) }
     }
 
-    private func setShapeStrokeStyle(_ style: ShapeStrokeStyle) {
-        currentShapeStrokeStyle = style
-        canvasView?.currentShapeStrokeStyle = style
-        Defaults.lastShapeStrokeStyle = style
-        canvasView?.mutateSelectedAnnotationAtomic { $0.withShapeStrokeStyle(style) }
-    }
-
     private func setCurrentDrawingColor(_ color: NSColor) {
         currentColor = color
         canvasView?.currentColor = color
@@ -1514,16 +1454,6 @@ class EditWindowController {
         currentMarkerLineWidth = clamped
         canvasView?.currentMarkerLineWidth = clamped
         Defaults.lastMarkerLineWidth = Double(clamped)
-    }
-
-    private func setArrowStyle(_ style: ArrowStyle) {
-        currentArrowStyle = style
-        canvasView?.currentArrowStyle = style
-        Defaults.lastArrowStyle = style
-        canvasView?.mutateSelectedAnnotationAtomic { annotation in
-            guard let arrow = annotation as? ArrowAnnotation else { return annotation }
-            return arrow.withStyle(style)
-        }
     }
 
     private static func hex(from color: NSColor) -> String? {
@@ -1631,35 +1561,10 @@ class EditWindowController {
         return NSImage(contentsOf: url)
     }
 
-    private static let recentEmojiLimit = 10
-
-    private static let defaultRecentEmojiChoices = [
-        "⭐️", "❤️", "👍", "👎", "🚀",
-        "😀", "😂", "😍", "🔥", "✅",
-    ]
-
-    private static let emojiPickerChoices = [
-        "😀", "😄", "😂", "🤣", "😍", "🤔", "😎", "🤯", "😱",
-        "😤", "🥳", "🤡", "💩", "👻", "🤖", "👽", "😈",
-        "🙈", "🙉", "🙊", "💪", "👏", "🙌", "🤝", "🫡",
-        "⭐️", "❤️", "👍", "👎", "🚀", "✅", "❌", "⚠️", "❓",
-        "🔥", "✨", "🎉", "💡", "📌", "🚩", "☝️",
-    ]
-
-    private static func recentEmojiChoices(from stored: [String]) -> [String] {
-        var result: [String] = []
-        for emoji in stored + defaultRecentEmojiChoices {
-            guard !emoji.isEmpty, !result.contains(emoji) else { continue }
-            result.append(emoji)
-            if result.count == recentEmojiLimit { break }
-        }
-        return result
-    }
-
     func confirmFromKeyboard() {
-        // The clipboard hotkey during auto-scroll stops scrolling and moves to
-        // crop mode; during crop mode it confirms the crop. It must not copy to
-        // the clipboard until the user is actually in the editor.
+        // The screenshot-execution hotkey during auto-scroll stops scrolling
+        // and moves to crop mode; during crop mode it confirms the crop. The
+        // configured output action runs only after the user reaches the editor.
         if isScrollCaptureFinalizing {
             return
         }
@@ -1672,23 +1577,6 @@ class EditWindowController {
             return
         }
         confirm()
-    }
-
-    /// Save-to-file (⌘S) entry point — mirrors `confirmFromKeyboard`'s phased
-    /// behavior so the hotkey works regardless of which stage the editor is in.
-    func saveFromKeyboard() {
-        if isScrollCaptureFinalizing {
-            return
-        }
-        if isScrollCapturing {
-            stopScrollCapture(reason: "save-hotkey")
-            return
-        }
-        if isCropping {
-            confirmCrop()
-            return
-        }
-        save()
     }
 
     func confirmCropFromKeyboard(for event: NSEvent) -> Bool {
@@ -1818,6 +1706,7 @@ class EditWindowController {
         canvasView = nil
         selectionChromeOverlay?.removeFromSuperview()
         selectionChromeOverlay = nil
+        hostSelectionView?.refreshAnnotationCursor = nil
         hostSelectionView?.annotationToolActive = false
         hostSelectionView?.selectionInteractionEnabled = true
         hostSelectionView?.scrollCaptureActive = false
@@ -1826,7 +1715,6 @@ class EditWindowController {
         scrollCaptureModeName = nil
         toolbarView = nil
         sideToolbarView = nil
-        dismissEmojiPopover()
         subToolbarView?.removeFromSuperview()
         subToolbarView = nil
     }
@@ -1877,20 +1765,10 @@ class EditWindowController {
             ? fallbackBaseImage
             : nil
 
-        guard let composite = canvasView?.compositeImage(
+        return canvasView?.compositeImage(
             fallbackBaseImage: fallbackBaseImage,
             annotationClipMask: annotationClipMask
-        ) else { return nil }
-
-        // Window captures get rounded corners and, when enabled, a macOS-style
-        // drop shadow. Scroll-capture stitched results keep their own shape.
-        guard isWindowCapture, canvasView?.hasPreviewImage != true else {
-            return composite
-        }
-
-        let rounded = windowBaseImage == nil ? WindowEffects.roundedCorners(composite) : composite
-        guard Defaults.windowShadowEnabled else { return rounded }
-        return WindowEffects.withShadow(rounded, size: CGFloat(Defaults.windowShadowSize))
+        )
     }
 
     private func windowShapedBaseImage(from image: NSImage?) -> NSImage? {
@@ -2099,6 +1977,20 @@ private enum EditorKeyboardShortcut {
 
 let accentGreen = NSColor(red: 0, green: 212.0/255.0, blue: 106.0/255.0, alpha: 1.0)
 
+enum EditorOptionChrome {
+    static let selectionColor = CaptureSelectionChrome.accentColor
+    static let sliderTrackHeight: CGFloat = 2
+    static let lineWidthValueBadgeDiameter: CGFloat = 22
+    static let shapeFillSelectionBorderWidth: CGFloat = 2
+    static let shapeFillSelectionDrawsBackground = false
+
+    static func usesCircularWidthValueBadge(minValue: Double, maxValue: Double) -> Bool {
+        minValue >= Defaults.editorLineWidthMin
+            && maxValue <= Defaults.editorLineWidthMax
+            && maxValue > minValue
+    }
+}
+
 private final class ClosureMenuItem: NSMenuItem {
     private let handler: () -> Void
 
@@ -2294,7 +2186,7 @@ class ToolbarView: NSView {
         guard sender.tag >= 0, sender.tag < items.count else { return }
         let id = items[sender.tag]
         switch id {
-        case .rectangle, .ellipse, .arrow, .line, .pen, .marker, .mosaic, .eraser, .magnifier, .numbered, .text, .emoji:
+        case .rectangle, .ellipse, .arrow, .line, .pen, .marker, .mosaic, .eraser, .magnifier, .numbered, .text:
             guard let tool = id.editTool else { return }
             // Click an already-selected tool to deselect it and enter adjust
             // mode (no tool, but existing marks remain draggable).
@@ -2708,378 +2600,6 @@ private final class ScrollPreviewWindow: NSPanel {
         orderOut(nil)
         imageView.image = nil
         contentView = nil
-    }
-}
-
-// MARK: - Emoji Sub-toolbar
-
-private final class EmojiSubToolbar: NSView {
-    static let preferredVisibleWidth: CGFloat = horizontalPad * 2
-        + moreButtonSize
-        + moreSeparatorGap
-        + separatorWidth
-        + emojiSeparatorGap
-        + CGFloat(visibleEmojiCount) * itemSize
-        + CGFloat(visibleEmojiCount - 1) * itemGap
-    static let minimumVisibleWidth: CGFloat = preferredVisibleWidth
-
-    var emojis: [String] {
-        didSet { rebuildEmojiViews() }
-    }
-    var selectedEmoji: String? {
-        didSet { updateSelection() }
-    }
-    var onEmojiSelected: ((String) -> Void)?
-    var onMoreRequested: ((NSView) -> Void)?
-
-    private let moreButton = EmojiMoreButton(frame: .zero)
-    private let separatorView = AdaptiveSeparatorView()
-    private var emojiViews: [EmojiChoiceView] = []
-
-    private static let visibleEmojiCount = 10
-    private static let itemSize: CGFloat = 30
-    private static let itemGap: CGFloat = 4
-    private static let horizontalPad: CGFloat = 8
-    private static let moreButtonSize: CGFloat = 30
-    private static let moreSeparatorGap: CGFloat = 8
-    private static let emojiSeparatorGap: CGFloat = 8
-    private static let separatorWidth: CGFloat = 1
-
-    init(frame: NSRect, emojis: [String], selectedEmoji: String?) {
-        self.emojis = emojis
-        self.selectedEmoji = selectedEmoji
-        super.init(frame: frame)
-        setup()
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-
-    private func setup() {
-        moreButton.target = self
-        moreButton.action = #selector(showMoreEmojiPicker)
-        addSubview(moreButton)
-
-        addSubview(separatorView)
-
-        rebuildEmojiViews()
-    }
-
-    override func layout() {
-        super.layout()
-
-        let centerY = bounds.midY
-        var x = Self.horizontalPad
-        for view in emojiViews {
-            view.frame = NSRect(
-                x: x,
-                y: centerY - Self.itemSize / 2,
-                width: Self.itemSize,
-                height: Self.itemSize
-            )
-            x += Self.itemSize + Self.itemGap
-        }
-
-        moreButton.frame = NSRect(
-            x: bounds.maxX - Self.horizontalPad - Self.moreButtonSize,
-            y: centerY - Self.moreButtonSize / 2,
-            width: Self.moreButtonSize,
-            height: Self.moreButtonSize
-        )
-
-        let separatorX = moreButton.frame.minX - Self.moreSeparatorGap - Self.separatorWidth
-        separatorView.frame = NSRect(
-            x: separatorX,
-            y: 8,
-            width: Self.separatorWidth,
-            height: max(1, bounds.height - 16)
-        )
-    }
-
-    private func rebuildEmojiViews() {
-        for view in emojiViews {
-            view.removeFromSuperview()
-        }
-        emojiViews.removeAll()
-
-        for emoji in emojis.prefix(Self.visibleEmojiCount) {
-            let item = EmojiChoiceView(
-                frame: .zero,
-                emoji: emoji,
-                isSelected: emoji == selectedEmoji,
-                fontSize: 19
-            )
-            item.onSelect = { [weak self] emoji in
-                self?.onEmojiSelected?(emoji)
-            }
-            addSubview(item)
-            emojiViews.append(item)
-        }
-
-        needsLayout = true
-    }
-
-    private func updateSelection() {
-        for view in emojiViews {
-            view.isSelected = view.emoji == selectedEmoji
-        }
-    }
-
-    @objc private func showMoreEmojiPicker() {
-        onMoreRequested?(moreButton)
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: 8, yRadius: 8)
-        AdaptiveChrome.toolbarBackground.setFill()
-        path.fill()
-    }
-}
-
-private final class EmojiPickerView: NSView {
-    static let preferredSize = NSSize(width: 520, height: 226)
-
-    var selectedEmoji: String? {
-        didSet { updateSelection() }
-    }
-    var onEmojiSelected: ((String) -> Void)?
-
-    private let emojis: [String]
-    private var choiceViews: [EmojiChoiceView] = []
-
-    private static let gridColumns = 8
-    private static let gridItemSize: CGFloat = 32
-    private static let gridColumnGap: CGFloat = 25
-    private static let gridRowGap: CGFloat = 8
-    private static let topPad: CGFloat = 16
-    private static let maxGridItems = 40
-
-    init(frame: NSRect, emojis: [String], selectedEmoji: String?) {
-        self.emojis = emojis
-        self.selectedEmoji = selectedEmoji
-        super.init(frame: frame)
-        setup()
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-
-    private func setup() {
-        wantsLayer = true
-
-        let gridWidth = CGFloat(Self.gridColumns) * Self.gridItemSize
-            + CGFloat(Self.gridColumns - 1) * Self.gridColumnGap
-        let gridLeft = (bounds.width - gridWidth) / 2
-        let gridTopY = bounds.maxY - Self.topPad - Self.gridItemSize
-
-        for (index, emoji) in emojis.prefix(Self.maxGridItems).enumerated() {
-            let row = index / Self.gridColumns
-            let column = index % Self.gridColumns
-            addChoice(
-                emoji: emoji,
-                frame: NSRect(
-                    x: gridLeft + CGFloat(column) * (Self.gridItemSize + Self.gridColumnGap),
-                    y: gridTopY - CGFloat(row) * (Self.gridItemSize + Self.gridRowGap),
-                    width: Self.gridItemSize,
-                    height: Self.gridItemSize
-                ),
-                fontSize: 23
-            )
-        }
-    }
-
-    private func addChoice(emoji: String, frame: NSRect, fontSize: CGFloat) {
-        let item = EmojiChoiceView(
-            frame: frame,
-            emoji: emoji,
-            isSelected: emoji == selectedEmoji,
-            fontSize: fontSize
-        )
-        item.onSelect = { [weak self] emoji in
-            self?.onEmojiSelected?(emoji)
-        }
-        addSubview(item)
-        choiceViews.append(item)
-    }
-
-    private func updateSelection() {
-        for view in choiceViews {
-            view.isSelected = view.emoji == selectedEmoji
-        }
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        let rect = bounds.insetBy(dx: 1, dy: 1)
-        let path = NSBezierPath(roundedRect: rect, xRadius: 14, yRadius: 14)
-        AdaptiveChrome.popoverBackground.setFill()
-        path.fill()
-
-        AdaptiveChrome.border.setStroke()
-        path.lineWidth = 1
-        path.stroke()
-    }
-}
-
-private final class EmojiChoiceView: NSView {
-    let emoji: String
-    var onSelect: ((String) -> Void)?
-    var isSelected: Bool {
-        didSet { needsDisplay = true }
-    }
-    private let fontSize: CGFloat
-    private var hoverTrackingArea: NSTrackingArea?
-    private var isHovering = false {
-        didSet { needsDisplay = true }
-    }
-
-    init(frame: NSRect, emoji: String, isSelected: Bool, fontSize: CGFloat) {
-        self.emoji = emoji
-        self.isSelected = isSelected
-        self.fontSize = fontSize
-        super.init(frame: frame)
-        wantsLayer = true
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-
-    override func resetCursorRects() {
-        super.resetCursorRects()
-        addCursorRect(bounds, cursor: .pointingHand)
-    }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let area = hoverTrackingArea {
-            removeTrackingArea(area)
-        }
-        let area = NSTrackingArea(
-            rect: bounds,
-            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(area)
-        hoverTrackingArea = area
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        isHovering = true
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        isHovering = false
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        onSelect?(emoji)
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        if isSelected || isHovering {
-            let bg = NSBezierPath(roundedRect: bounds.insetBy(dx: 1.5, dy: 1.5), xRadius: 7, yRadius: 7)
-            (isSelected ? AdaptiveChrome.selectedFill : AdaptiveChrome.subtleFill).setFill()
-            bg.fill()
-            if isSelected {
-                accentGreen.setStroke()
-                bg.lineWidth = 1.4
-                bg.stroke()
-            }
-        }
-
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: fontSize)
-        ]
-        let size = (emoji as NSString).size(withAttributes: attributes)
-        let point = NSPoint(
-            x: bounds.midX - size.width / 2,
-            y: bounds.midY - size.height / 2
-        )
-        (emoji as NSString).draw(at: point, withAttributes: attributes)
-    }
-}
-
-private final class EmojiMoreButton: NSButton {
-    private var hoverTrackingArea: NSTrackingArea?
-    private var isHovering = false {
-        didSet { needsDisplay = true }
-    }
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        commonInit()
-    }
-
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        commonInit()
-    }
-
-    private func commonInit() {
-        bezelStyle = .regularSquare
-        isBordered = false
-        setButtonType(.momentaryPushIn)
-        imagePosition = .imageOnly
-        toolTip = L10n.tipMoreEmoji
-        contentTintColor = .secondaryLabelColor
-        wantsLayer = true
-        (cell as? NSButtonCell)?.highlightsBy = []
-
-        if let image = NSImage(systemSymbolName: "ellipsis.circle", accessibilityDescription: L10n.tipMoreEmoji) {
-            self.image = image.withSymbolConfiguration(
-                NSImage.SymbolConfiguration(pointSize: 17, weight: .medium)
-            )
-        }
-    }
-
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-
-    override func resetCursorRects() {
-        super.resetCursorRects()
-        addCursorRect(bounds, cursor: .pointingHand)
-    }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let area = hoverTrackingArea {
-            removeTrackingArea(area)
-        }
-        let area = NSTrackingArea(
-            rect: bounds,
-            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(area)
-        hoverTrackingArea = area
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        isHovering = true
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        isHovering = false
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        let active = isHovering || isHighlighted
-        contentTintColor = active ? .labelColor : .secondaryLabelColor
-        if active {
-            let bg = NSBezierPath(roundedRect: bounds.insetBy(dx: 1.5, dy: 1.5), xRadius: 7, yRadius: 7)
-            AdaptiveChrome.subtleFill.setFill()
-            bg.fill()
-        }
-        super.draw(dirtyRect)
     }
 }
 
@@ -3714,7 +3234,7 @@ private final class ArrowStyleButtonView: NSView {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func draw(_ dirtyRect: NSRect) {
-        let color = isSelected ? accentGreen : NSColor.secondaryLabelColor
+        let color = isSelected ? EditorOptionChrome.selectionColor : NSColor.secondaryLabelColor
         color.setFill()
         color.setStroke()
 
@@ -3874,11 +3394,8 @@ final class HUDSlider: NSControl {
     }
 
     static let preferredHeight: CGFloat = 24
-    private let trackLeftHeight: CGFloat = 5
-    private let trackRightHeight: CGFloat = 14
-    private let trackCornerRadius: CGFloat = 3
-    private let knobHeight: CGFloat = 20
-    private let knobMinWidth: CGFloat = 34
+    private let standardKnobHeight: CGFloat = 20
+    private let standardKnobMinWidth: CGFloat = 34
     private let knobHorizontalPadding: CGFloat = 12
     private let valueFont = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .semibold)
 
@@ -3913,35 +3430,15 @@ final class HUDSlider: NSControl {
     override func draw(_ dirtyRect: NSRect) {
         let enabledAlpha: CGFloat = isEnabled ? 1 : 0.35
         let trackRect = currentTrackRect
-        let trackPath = trapezoidPath(
-            in: trackRect,
-            leftHeight: trackLeftHeight,
-            rightHeight: trackRightHeight
+        let trackPath = NSBezierPath(
+            roundedRect: trackRect,
+            xRadius: EditorOptionChrome.sliderTrackHeight / 2,
+            yRadius: EditorOptionChrome.sliderTrackHeight / 2
         )
-        AdaptiveChrome.subtleFill.withAlphaComponent(enabledAlpha).setFill()
+        AdaptiveChrome.border.withAlphaComponent(0.9 * enabledAlpha).setFill()
         trackPath.fill()
 
         let knobCenterX = trackRect.minX + normalizedValue * trackRect.width
-        if knobCenterX > trackRect.minX {
-            let fraction = normalizedValue
-            let fillRightHeight = interpolatedTrackHeight(at: fraction)
-            let fillPath = trapezoidPath(
-                in: NSRect(
-                    x: trackRect.minX,
-                    y: trackRect.minY,
-                    width: knobCenterX - trackRect.minX,
-                    height: trackRect.height
-                ),
-                leftHeight: trackLeftHeight,
-                rightHeight: fillRightHeight
-            )
-            accentGreen.withAlphaComponent(0.18 * enabledAlpha).setFill()
-            fillPath.fill()
-        }
-
-        AdaptiveChrome.border.withAlphaComponent(enabledAlpha).setStroke()
-        trackPath.lineWidth = 1.5
-        trackPath.stroke()
 
         let knobWidth = currentKnobWidth
         let knobRect = NSRect(
@@ -4019,7 +3516,23 @@ final class HUDSlider: NSControl {
         return CGFloat((value - minValue) / (maxValue - minValue))
     }
 
+    private var usesCircularWidthValueBadge: Bool {
+        EditorOptionChrome.usesCircularWidthValueBadge(
+            minValue: minValue,
+            maxValue: maxValue
+        )
+    }
+
+    private var knobHeight: CGFloat {
+        usesCircularWidthValueBadge
+            ? EditorOptionChrome.lineWidthValueBadgeDiameter
+            : standardKnobHeight
+    }
+
     private var currentKnobWidth: CGFloat {
+        if usesCircularWidthValueBadge {
+            return EditorOptionChrome.lineWidthValueBadgeDiameter
+        }
         let samples = [
             displayText(for: minValue),
             displayText(for: maxValue),
@@ -4028,16 +3541,16 @@ final class HUDSlider: NSControl {
         let maxWidth = samples
             .map { ceil(($0 as NSString).size(withAttributes: [.font: valueFont]).width) }
             .max() ?? 0
-        return max(knobMinWidth, maxWidth + knobHorizontalPadding)
+        return max(standardKnobMinWidth, maxWidth + knobHorizontalPadding)
     }
 
     private var currentTrackRect: NSRect {
         let knobWidth = currentKnobWidth
         return NSRect(
             x: knobWidth / 2,
-            y: floor(bounds.midY - trackRightHeight / 2),
+            y: floor(bounds.midY - EditorOptionChrome.sliderTrackHeight / 2),
             width: max(1, bounds.width - knobWidth),
-            height: trackRightHeight
+            height: EditorOptionChrome.sliderTrackHeight
         )
     }
 
@@ -4054,68 +3567,6 @@ final class HUDSlider: NSControl {
         if notify, let action {
             sendAction(action, to: target)
         }
-    }
-
-    private func trapezoidPath(in rect: NSRect, leftHeight: CGFloat, rightHeight: CGFloat) -> NSBezierPath {
-        let leftHalf = leftHeight / 2
-        let rightHalf = rightHeight / 2
-        return roundedPolygonPath(
-            points: [
-                NSPoint(x: rect.minX, y: rect.midY + leftHalf),
-                NSPoint(x: rect.maxX, y: rect.midY + rightHalf),
-                NSPoint(x: rect.maxX, y: rect.midY - rightHalf),
-                NSPoint(x: rect.minX, y: rect.midY - leftHalf),
-            ],
-            radius: trackCornerRadius
-        )
-    }
-
-    private func roundedPolygonPath(points: [NSPoint], radius: CGFloat) -> NSBezierPath {
-        let path = NSBezierPath()
-        guard points.count > 2, radius > 0 else {
-            if let first = points.first {
-                path.move(to: first)
-                for point in points.dropFirst() {
-                    path.line(to: point)
-                }
-                path.close()
-            }
-            return path
-        }
-
-        for index in points.indices {
-            let current = points[index]
-            let previous = points[(index - 1 + points.count) % points.count]
-            let next = points[(index + 1) % points.count]
-            let previousVector = CGVector(dx: previous.x - current.x, dy: previous.y - current.y)
-            let nextVector = CGVector(dx: next.x - current.x, dy: next.y - current.y)
-            let previousLength = hypot(previousVector.dx, previousVector.dy)
-            let nextLength = hypot(nextVector.dx, nextVector.dy)
-            guard previousLength > 0, nextLength > 0 else { continue }
-
-            let cornerDistance = min(radius, previousLength / 2, nextLength / 2)
-            let start = NSPoint(
-                x: current.x + previousVector.dx / previousLength * cornerDistance,
-                y: current.y + previousVector.dy / previousLength * cornerDistance
-            )
-            let end = NSPoint(
-                x: current.x + nextVector.dx / nextLength * cornerDistance,
-                y: current.y + nextVector.dy / nextLength * cornerDistance
-            )
-
-            if index == points.startIndex {
-                path.move(to: start)
-            } else {
-                path.line(to: start)
-            }
-            path.curve(to: end, controlPoint1: current, controlPoint2: current)
-        }
-        path.close()
-        return path
-    }
-
-    private func interpolatedTrackHeight(at fraction: CGFloat) -> CGFloat {
-        trackLeftHeight + (trackRightHeight - trackLeftHeight) * max(0, min(1, fraction))
     }
 
     private func drawValue(in rect: NSRect, enabledAlpha: CGFloat) {
@@ -4195,9 +3646,18 @@ private final class ShapeFillModeSegmentedControl: NSView {
             let width = widths[index]
             let segmentRect = NSRect(x: x, y: rect.minY, width: width, height: rect.height)
             if mode == selectedMode {
-                let selected = NSBezierPath(roundedRect: segmentRect.insetBy(dx: 0.5, dy: 0.5), xRadius: 7, yRadius: 7)
-                accentGreen.setFill()
-                selected.fill()
+                let selected = NSBezierPath(
+                    roundedRect: segmentRect.insetBy(dx: 1, dy: 1),
+                    xRadius: 6,
+                    yRadius: 6
+                )
+                if EditorOptionChrome.shapeFillSelectionDrawsBackground {
+                    EditorOptionChrome.selectionColor.setFill()
+                    selected.fill()
+                }
+                EditorOptionChrome.selectionColor.setStroke()
+                selected.lineWidth = EditorOptionChrome.shapeFillSelectionBorderWidth
+                selected.stroke()
             } else if index > 0 {
                 AdaptiveChrome.separator.setStroke()
                 let sep = NSBezierPath()
@@ -4243,10 +3703,9 @@ private final class ShapeFillModeSegmentedControl: NSView {
     }
 
     private func drawTitle(for mode: ShapeFillMode, in rect: NSRect) {
-        let selected = mode == selectedMode
         let attributes: [NSAttributedString.Key: Any] = [
             .font: Self.font,
-            .foregroundColor: selected ? NSColor.white : NSColor.labelColor,
+            .foregroundColor: NSColor.labelColor,
         ]
         let title = Self.title(for: mode) as NSString
         let size = title.size(withAttributes: attributes)
@@ -4287,11 +3746,11 @@ private final class ShapeStrokeStyleButtonView: NSView {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func draw(_ dirtyRect: NSRect) {
-        let color = isSelected ? accentGreen : NSColor.secondaryLabelColor
+        let color = isSelected ? EditorOptionChrome.selectionColor : NSColor.secondaryLabelColor
 
         if isSelected {
             let bg = NSBezierPath(roundedRect: bounds.insetBy(dx: 1.5, dy: 1.5), xRadius: 7, yRadius: 7)
-            accentGreen.withAlphaComponent(0.12).setFill()
+            EditorOptionChrome.selectionColor.withAlphaComponent(0.12).setFill()
             bg.fill()
         }
 
@@ -4428,7 +3887,7 @@ private final class HUDCheckboxButton: NSButton {
         let boxPath = NSBezierPath(roundedRect: boxRect, xRadius: 4, yRadius: 4)
 
         if state == .on {
-            accentGreen.withAlphaComponent(enabledAlpha).setFill()
+            EditorOptionChrome.selectionColor.withAlphaComponent(enabledAlpha).setFill()
         } else {
             AdaptiveChrome.subtleFill
                 .withAlphaComponent((isHighlighted ? 1.0 : 0.72) * enabledAlpha)
@@ -4615,11 +4074,11 @@ final class SelectionChromeOverlay: NSView {
     }
 
     static func isBorderHit(point: NSPoint, rect: NSRect, hitSize: CGFloat) -> Bool {
-        guard hitSize > 0, rect.width > 0, rect.height > 0 else { return false }
-        let outer = rect.insetBy(dx: -hitSize, dy: -hitSize)
-        guard outer.contains(point) else { return false }
-        guard rect.width > hitSize * 2, rect.height > hitSize * 2 else { return true }
-        return !rect.insetBy(dx: hitSize, dy: hitSize).contains(point)
+        EditorCursorRoutingPolicy.isSelectionBorderHit(
+            point: point,
+            rect: rect,
+            hitSize: hitSize
+        )
     }
 
     override func updateTrackingAreas() {

@@ -3,6 +3,34 @@ import XCTest
 @testable import aulycShot
 
 final class SettingsScreenshotQualityControlTests: XCTestCase {
+    func testBooleanSettingsUseActivationPickersInsteadOfSwitches() throws {
+        let settingsView = SettingsView(frame: NSRect(x: 0, y: 0, width: 920, height: 696))
+        settingsView.layoutSubtreeIfNeeded()
+
+        let expectedStates = SettingsActivationState.allCases
+        let expectedRawValues = expectedStates.map(\.rawValue)
+        let expectedTitles = expectedStates.map(\.localizedTitle)
+        for identifier in [
+            "menu-bar-state-picker",
+            "launch-at-login-state-picker",
+            "demo-mode-state-picker",
+        ] {
+            let picker = try XCTUnwrap(
+                settingsView.descendants(of: SettingsPopUpButton.self).first {
+                    $0.identifier?.rawValue == identifier
+                }
+            )
+
+            XCTAssertEqual(
+                picker.itemArray.compactMap { $0.representedObject as? String },
+                expectedRawValues
+            )
+            XCTAssertEqual(picker.itemTitles, expectedTitles)
+        }
+
+        XCTAssertTrue(settingsView.descendants(of: NSSwitch.self).isEmpty)
+    }
+
     func testGeneralPaneContainsOneSharedScreenshotQualityPicker() {
         let settingsView = SettingsView(frame: NSRect(x: 0, y: 0, width: 920, height: 696))
         settingsView.layoutSubtreeIfNeeded()
@@ -46,20 +74,16 @@ final class SettingsScreenshotQualityControlTests: XCTestCase {
         }
     }
 
-    func testWindowShadowPreviewUsesSquareIconButton() throws {
+    func testGeneralPaneOmitsRemovedWindowShadowPicker() {
         let settingsView = SettingsView(frame: NSRect(x: 0, y: 0, width: 920, height: 696))
         settingsView.layoutSubtreeIfNeeded()
 
-        let previewButton = try XCTUnwrap(
-            settingsView.descendants(of: SettingsOutlinedButton.self).first {
-                $0.accessibilityLabel() == L10n.windowShadowPreviewButton
-            }
-        )
+        let removedShadowValues = Set(["disabled", "small", "medium", "large"])
+        let removedShadowPickers = settingsView.descendants(of: NSPopUpButton.self).filter { popup in
+            Set(popup.itemArray.compactMap { $0.representedObject as? String }) == removedShadowValues
+        }
 
-        XCTAssertEqual(previewButton.frame.width, 34, accuracy: 0.5)
-        XCTAssertEqual(previewButton.frame.height, 34, accuracy: 0.5)
-        XCTAssertEqual(previewButton.imagePosition, .imageOnly)
-        XCTAssertNotNil(previewButton.image)
+        XCTAssertTrue(removedShadowPickers.isEmpty)
     }
 
     func testPermissionAlertOutsideClickDismissalPolicy() {

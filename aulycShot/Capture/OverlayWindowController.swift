@@ -1,6 +1,61 @@
 import AppKit
 import QuartzCore
 
+enum OverlayEventDeliveryScope {
+    case overlayApplication
+    case outsideApplication
+}
+
+/// Capture cancellation is intentionally scoped to events delivered to this
+/// application. A global Escape or right-click may belong to automation that
+/// is only switching another application to the foreground.
+enum OverlayCancellationPolicy {
+    static func shouldCancel(
+        _ event: NSEvent,
+        deliveryScope: OverlayEventDeliveryScope,
+        isTextEditing: Bool
+    ) -> Bool {
+        guard deliveryScope == .overlayApplication, !isTextEditing else {
+            return false
+        }
+
+        switch event.type {
+        case .keyDown:
+            return event.keyCode == 53
+        case .rightMouseDown:
+            return true
+        default:
+            return false
+        }
+    }
+}
+
+enum OverlayPresentationPolicy {
+    static let windowLevel = NSWindow.Level.screenSaver
+    static let hidesOnDeactivate = false
+    static let collectionBehavior: NSWindow.CollectionBehavior = [
+        .canJoinAllSpaces,
+        .fullScreenAuxiliary,
+    ]
+
+    static func configure(_ window: NSWindow) {
+        window.level = windowLevel
+        window.hidesOnDeactivate = hidesOnDeactivate
+        window.collectionBehavior = collectionBehavior
+    }
+
+    static func restoreOrdering(of windows: [NSWindow]) {
+        // Reassert the capture level without taking keyboard focus back from
+        // the newly activated application. The next overlay click can make its
+        // non-activating panel key again when the user resumes the capture.
+        for window in windows where window.isVisible {
+            window.level = windowLevel
+            window.hidesOnDeactivate = hidesOnDeactivate
+            window.orderFrontRegardless()
+        }
+    }
+}
+
 struct CaptureResult {
     let rect: CGRect       // In CG coordinates (top-left origin) for capture
     let screen: NSScreen   // The screen where selection was made
@@ -49,9 +104,8 @@ class OverlayWindowController {
     private var windows: [NSWindow] = []
     private var chipWindow: CursorChipWindow?
     private var escLocalMonitor: Any?
-    private var escGlobalMonitor: Any?
     private var rightMouseLocalMonitor: Any?
-    private var rightMouseGlobalMonitor: Any?
+    private var workspaceActivationObserver: NSObjectProtocol?
     private var editController: EditWindowController?
     private var activeSelectionView: SelectionView?
     private var activeScreen: NSScreen?
@@ -114,8 +168,8 @@ class OverlayWindowController {
         }
     }
 
-    /// Route the default copy-to-clipboard hotkey (double-tap ⌘) into the
-    /// editor while the overlay is active. No-op when the editor isn't up yet.
+    /// Route the configured screenshot-execution hotkey into the editor while
+    /// the overlay is active. No-op when the editor isn't up yet.
     func confirmFromKeyboard() {
         editController?.confirmFromKeyboard()
     }
@@ -236,11 +290,10 @@ class OverlayWindowController {
                 backing: .buffered,
                 defer: false
             )
-            window.level = .screenSaver
+            OverlayPresentationPolicy.configure(window)
             window.isOpaque = false
             window.backgroundColor = .clear
             window.ignoresMouseEvents = false
-            window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             window.sharingType = Defaults.demoMode ? .readOnly : .none
             window.acceptsMouseMovedEvents = true
             window.animationBehavior = .none
@@ -266,10 +319,12 @@ class OverlayWindowController {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         for window in windows {
-            window.orderFront(nil)
+            window.orderFrontRegardless()
         }
         windows.first?.makeKey()
         CATransaction.commit()
+
+        installWorkspaceActivationObserver()
 
         if presetImage == nil, suspendedDraft == nil {
             for case let selectionView as SelectionView in windows.compactMap(\.contentView) {
@@ -281,7 +336,8 @@ class OverlayWindowController {
         chipWindow?.show()
 
         escLocalMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            if self?.editController?.isTextEditing == true {
+            let isTextEditing = self?.editController?.isTextEditing == true
+            if isTextEditing {
                 return event
             }
             if self?.editController?.confirmCropFromKeyboard(for: event) == true {
@@ -302,7 +358,11 @@ class OverlayWindowController {
             if self?.editController?.deleteSelectedAnnotationFromKeyboard(for: event) == true {
                 return nil
             }
-            if event.keyCode == 53 { // Escape
+            if OverlayCancellationPolicy.shouldCancel(
+                event,
+                deliveryScope: .overlayApplication,
+                isTextEditing: isTextEditing
+            ) {
                 self?.cancel()
                 return nil
             }
@@ -316,35 +376,22 @@ class OverlayWindowController {
                 self?.editController?.confirmFromKeyboard()
                 return nil
             }
-            if HotkeyManager.eventMatchesFileSaveHotkey(event) {
-                self?.editController?.saveFromKeyboard()
-                return nil
-            }
             if self?.editController?.handleEditorShortcutFromKeyboard(for: event) == true {
                 return nil
             }
             return event
         }
-        escGlobalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            if self?.editController?.isTextEditing == true {
-                return
-            }
-            if event.keyCode == 53 {
-                self?.cancel()
-            }
-        }
         rightMouseLocalMonitor = NSEvent.addLocalMonitorForEvents(matching: .rightMouseDown) { [weak self] event in
-            if self?.editController?.isTextEditing == true {
+            let isTextEditing = self?.editController?.isTextEditing == true
+            if !OverlayCancellationPolicy.shouldCancel(
+                event,
+                deliveryScope: .overlayApplication,
+                isTextEditing: isTextEditing
+            ) {
                 return event
             }
             self?.cancel()
             return nil
-        }
-        rightMouseGlobalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .rightMouseDown) { [weak self] _ in
-            if self?.editController?.isTextEditing == true {
-                return
-            }
-            self?.cancel()
         }
 
         if presetImage == nil, suspendedDraft == nil {
@@ -697,6 +744,29 @@ class OverlayWindowController {
 
     private var cursorPopped = false
 
+    private func installWorkspaceActivationObserver() {
+        guard workspaceActivationObserver == nil else { return }
+        let ownPID = ProcessInfo.processInfo.processIdentifier
+        workspaceActivationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard
+                let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
+                    as? NSRunningApplication,
+                application.processIdentifier != ownPID
+            else {
+                return
+            }
+            self?.restoreOverlayOrderingAfterApplicationSwitch()
+        }
+    }
+
+    private func restoreOverlayOrderingAfterApplicationSwitch() {
+        OverlayPresentationPolicy.restoreOrdering(of: windows)
+    }
+
     private func tearDown() {
         ToastWindow.dismiss()
 
@@ -709,9 +779,11 @@ class OverlayWindowController {
         chipWindow = nil
 
         if let m = escLocalMonitor { NSEvent.removeMonitor(m); escLocalMonitor = nil }
-        if let m = escGlobalMonitor { NSEvent.removeMonitor(m); escGlobalMonitor = nil }
         if let m = rightMouseLocalMonitor { NSEvent.removeMonitor(m); rightMouseLocalMonitor = nil }
-        if let m = rightMouseGlobalMonitor { NSEvent.removeMonitor(m); rightMouseGlobalMonitor = nil }
+        if let observer = workspaceActivationObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+            workspaceActivationObserver = nil
+        }
 
         for window in windows {
             window.orderOut(nil)

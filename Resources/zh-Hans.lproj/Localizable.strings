@@ -3,6 +3,8 @@
 /* Settings */
 "settingsTitle" = "aulycShot 设置";
 "showMenuBarIcon" = "显示菜单栏图标";
+"settingEnabled" = "启用中";
+"settingDisabled" = "未启用";
 "featurePermissionStatus" = "功能状态";
 "permissionAvailable" = "可用";
 "permissionUnavailable" = "不可用";
@@ -15,34 +17,22 @@
 "launchAtLogin" = "开机自动启动";
 "demoMode" = "演示模式";
 "demoModeHint" = "录屏软件可以录到选区遮罩与编辑器，仅影响外部录制";
-"windowShadowLabel" = "窗口截图阴影";
-"windowShadowHint" = "点选窗口截图时自动裁出圆角，并加上 macOS 风格的投影";
-"windowShadowLevelHint" = "可选择小、中、大三档，档位越高投影越柔和、扩散越远";
-"windowShadowPreviewButton" = "示例";
-"windowShadowDisabled" = "不开启";
-"windowShadowSmall" = "小";
-"windowShadowMedium" = "中";
-"windowShadowLarge" = "大";
 
 /* Screenshot shortcut */
 "shortcutHeader" = "截图";
-"shortcutHint" = "默认双击 ⌘ 触发；自定义后双击 ⌘ 失效，可点恢复回到默认";
-"shortcutDefaultDisplay" = "双击 ⌘";
+"shortcutHint" = "设置后可在任意应用中触发截图，默认未设置";
+"shortcutDefaultDisplay" = "未设置";
 "shortcutSet" = "录制";
 "shortcutCancel" = "取消";
 "shortcutWaiting" = "等待按键";
 "shortcutNeedsModifierTitle" = "快捷键需要修饰键";
 "shortcutNeedsModifier" = "需要组合键：⌘/⌥/⇧/⌃ + 其他按键（如 ⌘⇧8），或单独按 F1–F12";
-"shortcutRestore" = "恢复默认";
 "selectedImagePinShortcutHeader" = "钉起选中的图片";
 "selectedImagePinShortcutDefaultDisplay" = "未设置";
-"selectedImagePinShortcutClear" = "清除钉起选中图片快捷键";
 "clipboardImagePinShortcutHeader" = "钉起剪贴板图片";
 "clipboardImagePinShortcutDefaultDisplay" = "未设置";
-"clipboardImagePinShortcutClear" = "清除钉起剪贴板图片快捷键";
 "clipboardTextPinShortcutHeader" = "钉起剪贴板文本";
 "clipboardTextPinShortcutDefaultDisplay" = "未设置";
-"clipboardTextPinShortcutClear" = "清除钉起剪贴板文本快捷键";
 "selectedImagePinNoImage" = "未找到 Finder 中选中的图片";
 "clipboardImagePinNoImage" = "剪贴板里没有可钉起的图片";
 "clipboardTextPinNoText" = "剪贴板里没有文本";
@@ -62,14 +52,10 @@
 "recordShortcutHeader" = "录制";
 "recordShortcutDefaultDisplay" = "未设置";
 
-/* Copy-to-clipboard shortcut (editor confirm) */
-"clipboardShortcutHeader" = "复制到剪贴板";
-"clipboardShortcutHint" = "在编辑器内按下以确认编辑并把截图复制到剪贴板。未设置时默认双击 ⌘";
-"clipboardShortcutDefaultDisplay" = "双击 ⌘";
-
-/* Save-to-file shortcut (editor save) */
-"fileSaveShortcutHeader" = "保存到文件";
-"fileSaveShortcutHint" = "在编辑器内按下后，把截图保存为 PNG 到设置的截图保存路径。默认 ⌘S";
+/* Screenshot execution shortcut (editor confirm) */
+"clipboardShortcutHeader" = "触发截图执行";
+"clipboardShortcutHint" = "在编辑器内按下以完成截图，并执行“截图执行后”设置，默认未设置";
+"clipboardShortcutDefaultDisplay" = "未设置";
 
 /* Shortcut conflict */
 "shortcutConflictTitle" = "快捷键已被占用";
@@ -77,8 +63,7 @@
 "shortcutConflictSelectedImagePin" = "该按键组合已被钉起选中图片快捷键占用，请换一个";
 "shortcutConflictClipboardImagePin" = "该按键组合已被钉起剪贴板图片快捷键占用，请换一个";
 "shortcutConflictClipboardTextPin" = "该按键组合已被钉起剪贴板文本快捷键占用，请换一个";
-"shortcutConflictClipboard" = "该按键组合已被复制到剪贴板快捷键占用，请换一个";
-"shortcutConflictFileSave" = "该按键组合已被保存到文件快捷键占用，请换一个";
+"shortcutConflictClipboard" = "该按键组合已被触发截图执行快捷键占用，请换一个";
 "shortcutConflictSelectedImageEdit" = "该按键组合已被编辑选中图片快捷键占用，请换一个";
 "shortcutConflictClipboardImageEdit" = "该按键组合已被编辑剪贴板图片快捷键占用，请换一个";
 "shortcutConflictRecord" = "该按键组合已被录制快捷键占用，请换一个";
@@ -146,8 +131,6 @@
 "tipNumbered" = "序号";
 "tipText" = "文字";
 "tipQRCode" = "识别二维码";
-"tipEmoji" = "表情";
-"tipMoreEmoji" = "更多表情";
 "tipInsertImage" = "插入图片";
 "tipUndo" = "撤销";
 "tipRedo" = "恢复撤销";
@@ -156,7 +139,7 @@
 "tipPin" = "钉在屏幕";
 "tipRecord" = "录制";
 "tipCancel" = "取消";
-"tipConfirm" = "复制到剪贴板";
+"tipConfirm" = "触发截图执行";
 "tipScrollCropConfirm" = "保存并编辑";
 "copyQRCodeContent" = "复制二维码内容";
 
@@ -282,18 +265,18 @@
 
 
 
-/* Image Merge */
-"imageMergeShortcutHeader" = "合并图片";
+/* Image Stitching Tool */
+"imageMergeShortcutHeader" = "图片拼接工具";
 "imageMergeShortcutDefaultDisplay" = "未设置";
-"shortcutConflictImageMerge" = "该按键组合已被合并图片快捷键占用，请换一个";
-"mergeImages" = "合并图片";
-"mergeEditExitHint" = "正在编辑合并图片，按 X 退出编辑";
-"imageMergeNeedTwoImages" = "请选择至少两张 Finder 图片再合并";
+"shortcutConflictImageMerge" = "该按键组合已被图片拼接工具快捷键占用，请换一个";
+"mergeImages" = "图片拼接工具";
+"mergeEditExitHint" = "正在编辑拼接结果，按 X 退出编辑";
+"imageMergeNeedTwoImages" = "请选择至少两张 Finder 图片进行拼接";
 "imageMergeSomeImagesSkipped" = "部分图片无法载入，已跳过";
 "imageMergeNoClipboardImage" = "剪贴板里没有图片";
-"imageMergeFailed" = "图片合并失败";
-"imageMergeSaved" = "合并图片已保存";
-"imageMergeWindowTitle" = "合并图片";
+"imageMergeFailed" = "图片拼接失败";
+"imageMergeSaved" = "拼接结果已保存";
+"imageMergeWindowTitle" = "图片拼接工具";
 "imageMergeSources" = "图片来源";
 "imageMergeAddFiles" = "添加文件";
 "imageMergeAddFromClipboard" = "从剪贴板添加";
@@ -306,16 +289,23 @@
 "imageMergeLayout" = "布局";
 "imageMergeSpacing" = "间距";
 "imageMergeMargin" = "外边距";
-"imageMergeCornerRadius" = "圆角";
+"imageMergeCornerRadius" = "边角";
+"imageMergePresetNone" = "无";
+"imageMergePresetSmall" = "小";
+"imageMergePresetMedium" = "中";
+"imageMergePresetLarge" = "大";
+"imageMergeCornerSquare" = "直角";
+"imageMergeCornerRounded" = "圆角";
 "imageMergeBackground" = "背景";
 "imageMergeTransparent" = "透明";
 "imageMergeSolid" = "纯色";
+"imageMergeParameters" = "参数";
 "imageMergeOutput" = "输出";
 "imageMergeCopy" = "复制";
 "imageMergeSave" = "保存";
 "imageMergeContinueEditing" = "编辑";
 "imageMergeClose" = "关闭";
-"imageMergeEmptyTitle" = "拖入图片开始合并";
+"imageMergeEmptyTitle" = "拖入图片开始拼接";
 "imageMergeEmptyBody" = "添加文件、从剪贴板添加，或直接把图片拖到这里";
 "imageMergeClipboardSourceName" = "剪贴板图片";
 
@@ -328,7 +318,7 @@
 "screenshotQualityCompressingSave" = "正在压缩后保存";
 "screenshotQualityCompressingClipboard" = "正在压缩后复制";
 "screenshotCompressionFailed" = "图片压缩失败";
-"screenshotOutputActionLabel" = "截图完成后";
+"screenshotOutputActionLabel" = "截图执行后";
 "screenshotOutputClipboardOnly" = "仅复制到剪贴板";
 "screenshotOutputFileOnly" = "仅保存到目录";
 "screenshotOutputClipboardAndFile" = "同时操作";

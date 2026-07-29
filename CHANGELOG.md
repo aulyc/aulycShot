@@ -7,13 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add a compact Image Stitching Tool with fixed spacing, margin, corner, background, and color presets
+- Add public GitHub and Gitee update mirrors backed by identical formal DMG manifests and mandatory SHA-256 verification
+
 ### Changed
 
 - Show screenshot and recording permission availability in the Settings sidebar with manual setup guidance
+- Check identical public GitHub and Gitee update manifests in order, require the formal DMG SHA-256, and verify the installed release identity before replacement
+- Keep the screenshot overlay visible while switching applications and scope Escape or right-click cancellation to events delivered to the overlay
+- Start captured screenshots with the rectangle tool selected and keep annotation cursors inside the active selection
+- Preserve the selected smart-selection level while accessibility results arrive and keep full-screen hover borders inside drawable bounds
+- Simplify shortcut settings so all screenshot and execution shortcuts are opt-in and one reset clears every configured shortcut
+- Simplify annotation controls with fixed shape and arrow styles, consistent blue selection chrome, compact sliders, and an on-demand hidden-tools grid
+- Show screenshot copy and save success notifications immediately for one second without fade animations
 
 ### Removed
 
 - Remove the dedicated permissions tab and drag-to-authorize panel
+- Remove the default double-tap Command trigger, the separate editor save shortcut, and per-row shortcut restore buttons
+- Remove the emoji annotation tool and its recent-emoji picker
+- Remove window capture drop shadows and their Settings controls while retaining window contours and rounded corners
 
 ## [1.7.3] - 2026-07-21
 

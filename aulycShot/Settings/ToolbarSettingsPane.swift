@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 
 /// Which toolbar a grid section maps to in `ToolbarLayout`.
 enum ToolbarSection {
@@ -7,9 +8,9 @@ enum ToolbarSection {
     case hidden
 }
 
-/// Settings tab for customizing the editor toolbars. Shows a live preview of
-/// the editor with the current layout, plus three drag-and-drop grids for
-/// assigning tools to the main toolbar, the side toolbar, or hiding them.
+/// Settings tab for customizing the editor toolbars. The main and side
+/// toolbars are edited directly in the preview, while hidden tools live in an
+/// on-demand nine-slot panel anchored to the preview's lower-right corner.
 final class ToolbarSettingsPane: NSView {
     /// Layout currently shown in the grids and preview. Drag edits persist
     /// immediately, so the settings page has no separate apply step.
@@ -17,18 +18,15 @@ final class ToolbarSettingsPane: NSView {
 
     private let preview = ToolbarLayoutPreviewView()
     private var previewHeightConstraint: NSLayoutConstraint!
-    private var primaryGrid: ToolbarSlotGridView!
-    private var sideGrid: ToolbarSlotGridView!
-    private var hiddenGrid: ToolbarSlotGridView!
-
-    private let primaryTitle = ToolbarSettingsPane.sectionTitleLabel()
-    private let primaryHint = ToolbarSettingsPane.hintLabel()
-    private let sideTitle = ToolbarSettingsPane.sectionTitleLabel()
-    private let sideHint = ToolbarSettingsPane.hintLabel()
-    private let hiddenTitle = ToolbarSettingsPane.sectionTitleLabel()
-    private let hiddenHint = ToolbarSettingsPane.hintLabel()
-    private let footnote = ToolbarSettingsPane.hintLabel()
-    private let resetButton = NSButton()
+    let hiddenGrid = ToolbarSlotGridView(
+        section: .hidden,
+        fixedGridColumns: 3,
+        fixedGridRows: 3,
+        maximumItemCount: ToolbarLayout.maximumHiddenItems
+    )
+    let hiddenToolsButton = SettingsOutlinedButton(title: "", target: nil, action: nil)
+    private var hiddenToolsPanel: ToolbarHiddenToolsPanel?
+    private var hiddenToolsEventMonitor: Any?
     private var pageScrollObserver: NSObjectProtocol?
     private weak var observedPageClipView: NSClipView?
 
@@ -50,6 +48,7 @@ final class ToolbarSettingsPane: NSView {
     }
 
     deinit {
+        dismissHiddenToolsPanel(restoreFocus: false)
         stopObservingPageScroll()
         NotificationCenter.default.removeObserver(self)
     }
@@ -57,16 +56,21 @@ final class ToolbarSettingsPane: NSView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         stopObservingPageScroll()
-        guard window != nil, let clipView = enclosingScrollView?.contentView else { return }
+        guard window != nil else {
+            dismissHiddenToolsPanel(restoreFocus: false)
+            return
+        }
+        guard let clipView = enclosingScrollView?.contentView else { return }
         clipView.postsBoundsChangedNotifications = true
         observedPageClipView = clipView
         pageScrollObserver = NotificationCenter.default.addObserver(
             forName: NSView.boundsDidChangeNotification,
             object: clipView,
             queue: .main
-        ) { _ in
+        ) { [weak self] _ in
             ToolbarTooltipHoverGate.suppressForScroll()
             ToolTipWindow.hide()
+            self?.positionHiddenToolsPanel()
         }
     }
 
@@ -88,79 +92,38 @@ final class ToolbarSettingsPane: NSView {
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
 
-        // Preview card.
-        let previewCard = Self.makeCard()
+        let allDropZones: () -> [ToolbarSlotGridView] = { [weak self] in
+            guard let self else { return [] }
+            return [self.preview.primaryGrid, self.preview.sideGrid, self.hiddenGrid]
+        }
+        preview.onLayoutChanged = { [weak self] in self?.collectWorkingLayout() }
+        preview.gridProvider = allDropZones
+        hiddenGrid.identifier = NSUserInterfaceItemIdentifier("toolbar-hidden-drop-zone")
+        hiddenGrid.onLayoutChanged = { [weak self] in self?.collectWorkingLayout() }
+        hiddenGrid.gridProvider = allDropZones
+
         preview.translatesAutoresizingMaskIntoConstraints = false
         preview.setContentCompressionResistancePriority(.required, for: .vertical)
         preview.setContentHuggingPriority(.required, for: .vertical)
-        previewCard.addSubview(preview)
         previewHeightConstraint = preview.heightAnchor.constraint(equalToConstant: preview.preferredHeight)
+        stack.addArrangedSubview(preview)
+        preview.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        previewHeightConstraint.isActive = true
+
+        hiddenToolsButton.identifier = NSUserInterfaceItemIdentifier("toolbar-hidden-tools-toggle")
+        hiddenToolsButton.target = self
+        hiddenToolsButton.action = #selector(hiddenToolsButtonClicked)
+        hiddenToolsButton.imagePosition = .imageOnly
+        hiddenToolsButton.imageScaling = .scaleProportionallyDown
+        hiddenToolsButton.translatesAutoresizingMaskIntoConstraints = false
+        preview.addSubview(hiddenToolsButton)
+
         NSLayoutConstraint.activate([
-            preview.topAnchor.constraint(equalTo: previewCard.topAnchor, constant: 14),
-            preview.leadingAnchor.constraint(equalTo: previewCard.leadingAnchor, constant: 14),
-            preview.trailingAnchor.constraint(equalTo: previewCard.trailingAnchor, constant: -14),
-            preview.bottomAnchor.constraint(equalTo: previewCard.bottomAnchor, constant: -14),
-            previewHeightConstraint,
+            hiddenToolsButton.trailingAnchor.constraint(equalTo: preview.trailingAnchor, constant: -14),
+            hiddenToolsButton.bottomAnchor.constraint(equalTo: preview.bottomAnchor, constant: -14),
+            hiddenToolsButton.widthAnchor.constraint(equalToConstant: 36),
+            hiddenToolsButton.heightAnchor.constraint(equalToConstant: 36),
         ])
-        stack.addArrangedSubview(previewCard)
-        previewCard.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
-
-        // Sections card — the three drag grids.
-        primaryGrid = ToolbarSlotGridView(section: .primary)
-        sideGrid = ToolbarSlotGridView(section: .side)
-        hiddenGrid = ToolbarSlotGridView(section: .hidden)
-        for grid in [primaryGrid, sideGrid, hiddenGrid] {
-            grid?.onLayoutChanged = { [weak self] in self?.collectWorkingLayout() }
-            grid?.gridProvider = { [weak self] in
-                [self?.primaryGrid, self?.sideGrid, self?.hiddenGrid].compactMap { $0 }
-            }
-        }
-
-        let sectionsCard = Self.makeCard()
-        let sectionsStack = NSStackView()
-        sectionsStack.orientation = .vertical
-        sectionsStack.alignment = .leading
-        sectionsStack.spacing = 8
-        sectionsStack.translatesAutoresizingMaskIntoConstraints = false
-        sectionsCard.addSubview(sectionsStack)
-        NSLayoutConstraint.activate([
-            sectionsStack.topAnchor.constraint(equalTo: sectionsCard.topAnchor, constant: 16),
-            sectionsStack.leadingAnchor.constraint(equalTo: sectionsCard.leadingAnchor, constant: 16),
-            sectionsStack.trailingAnchor.constraint(equalTo: sectionsCard.trailingAnchor, constant: -16),
-            sectionsStack.bottomAnchor.constraint(equalTo: sectionsCard.bottomAnchor, constant: -16),
-        ])
-
-        addSection(to: sectionsStack, title: primaryTitle, hint: primaryHint, grid: primaryGrid)
-        addSection(to: sectionsStack, title: sideTitle, hint: sideHint, grid: sideGrid)
-        addSection(to: sectionsStack, title: hiddenTitle, hint: hiddenHint, grid: hiddenGrid)
-
-        footnote.lineBreakMode = .byWordWrapping
-        footnote.maximumNumberOfLines = 2
-        sectionsStack.setCustomSpacing(14, after: hiddenGrid)
-        sectionsStack.addArrangedSubview(footnote)
-        footnote.widthAnchor.constraint(equalTo: sectionsStack.widthAnchor).isActive = true
-
-        stack.addArrangedSubview(sectionsCard)
-        sectionsCard.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
-
-        // Footer: reset lives at the lower-right. Drag changes apply instantly.
-        let footer = NSStackView()
-        footer.orientation = .horizontal
-        footer.alignment = .centerY
-        footer.spacing = 10
-        footer.translatesAutoresizingMaskIntoConstraints = false
-
-        Self.styleButton(resetButton, title: "", prominent: false)
-        resetButton.target = self
-        resetButton.action = #selector(resetTapped)
-
-        let spacer = NSView()
-        spacer.translatesAutoresizingMaskIntoConstraints = false
-        footer.addArrangedSubview(spacer)
-        footer.addArrangedSubview(resetButton)
-
-        stack.addArrangedSubview(footer)
-        footer.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
 
         NSLayoutConstraint.activate([
             stack.topAnchor.constraint(equalTo: topAnchor, constant: 4),
@@ -172,43 +135,25 @@ final class ToolbarSettingsPane: NSView {
         applyLocalizedStrings()
     }
 
-    private func addSection(
-        to stack: NSStackView,
-        title: NSTextField,
-        hint: NSTextField,
-        grid: ToolbarSlotGridView
-    ) {
-        stack.addArrangedSubview(title)
-        stack.addArrangedSubview(hint)
-        stack.setCustomSpacing(2, after: title)
-        stack.setCustomSpacing(10, after: hint)
-        stack.addArrangedSubview(grid)
-        grid.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
-        if grid !== hiddenGrid {
-            stack.setCustomSpacing(16, after: grid)
-        }
-    }
-
     // MARK: - Layout sync
 
-    /// Pushes `workingLayout` into every grid and the preview.
+    /// Pushes `workingLayout` into the preview drop zones and hidden grid.
     private func syncFromWorkingLayout() {
-        primaryGrid.setItems(workingLayout.primary)
-        sideGrid.setItems(workingLayout.side)
         hiddenGrid.setItems(workingLayout.hidden)
         preview.layout = workingLayout
         updatePreviewHeight()
     }
 
-    /// Pulls the current grid contents back into `workingLayout` and refreshes
-    /// the preview. Called after every drag-and-drop edit.
+    /// Pulls all three drop zones back into `workingLayout`. Called after every
+    /// drag-and-drop edit, with no second preview state to synchronize.
     private func collectWorkingLayout() {
         workingLayout = ToolbarLayout(
-            primary: primaryGrid.items,
-            side: sideGrid.items,
+            primary: preview.primaryItems,
+            side: preview.sideItems,
             hidden: hiddenGrid.items
         ).normalized()
         preview.layout = workingLayout
+        hiddenGrid.setItems(workingLayout.hidden)
         updatePreviewHeight()
         Defaults.toolbarLayout = workingLayout
     }
@@ -219,7 +164,7 @@ final class ToolbarSettingsPane: NSView {
 
     // MARK: - Actions
 
-    @objc private func resetTapped() {
+    func resetToDefault() {
         workingLayout = .default
         syncFromWorkingLayout()
         Defaults.toolbarLayout = workingLayout
@@ -230,56 +175,204 @@ final class ToolbarSettingsPane: NSView {
     }
 
     private func applyLocalizedStrings() {
-        primaryTitle.stringValue = L10n.toolbarSettingsPrimaryTitle
-        primaryHint.stringValue = L10n.toolbarSettingsPrimaryHint
-        sideTitle.stringValue = L10n.toolbarSettingsSideTitle
-        sideHint.stringValue = L10n.toolbarSettingsSideHint
-        hiddenTitle.stringValue = L10n.toolbarSettingsHiddenTitle
-        hiddenHint.stringValue = L10n.toolbarSettingsHiddenHint
-        footnote.stringValue = L10n.toolbarSettingsFootnote
-        resetButton.title = L10n.toolbarSettingsReset
-        primaryGrid.refreshTooltips()
-        sideGrid.refreshTooltips()
+        let tooltip = L10n.toolbarSettingsHiddenTitle
+        hiddenToolsButton.image = NSImage(
+            systemSymbolName: "square.grid.3x3",
+            accessibilityDescription: tooltip
+        )?.withSymbolConfiguration(
+            NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
+        )
+        hiddenToolsButton.toolTip = tooltip
+        hiddenToolsButton.setAccessibilityLabel(tooltip)
+        preview.primaryGrid.refreshTooltips()
+        preview.sideGrid.refreshTooltips()
         hiddenGrid.refreshTooltips()
     }
 
-    // MARK: - Shared builders
+    // MARK: - Hidden tools panel
 
-    private static func makeCard() -> NSView {
-        let card = NSView()
-        card.wantsLayer = true
-        card.layer?.cornerRadius = 12
-        card.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.04).cgColor
-        card.layer?.borderWidth = 1
-        card.layer?.borderColor = NSColor.white.withAlphaComponent(0.06).cgColor
-        card.translatesAutoresizingMaskIntoConstraints = false
-        return card
+    var isHiddenToolsPanelVisible: Bool {
+        hiddenToolsPanel?.isVisible == true
     }
 
-    private static func sectionTitleLabel() -> NSTextField {
-        let label = NSTextField(labelWithString: "")
-        label.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
-        label.textColor = NSColor.white.withAlphaComponent(0.92)
-        label.translatesAutoresizingMaskIntoConstraints = false
-        return label
-    }
-
-    private static func hintLabel() -> NSTextField {
-        let label = NSTextField(labelWithString: "")
-        label.font = NSFont.systemFont(ofSize: 11)
-        label.textColor = NSColor.white.withAlphaComponent(0.45)
-        label.translatesAutoresizingMaskIntoConstraints = false
-        return label
-    }
-
-    private static func styleButton(_ button: NSButton, title: String, prominent: Bool) {
-        button.title = title
-        button.bezelStyle = .rounded
-        button.controlSize = .large
-        button.translatesAutoresizingMaskIntoConstraints = false
-        button.setContentHuggingPriority(.required, for: .horizontal)
-        if prominent {
-            button.bezelColor = NSColor.controlAccentColor
+    @objc private func hiddenToolsButtonClicked() {
+        if isHiddenToolsPanelVisible {
+            dismissHiddenToolsPanel(restoreFocus: true)
+        } else {
+            showHiddenToolsPanel()
         }
+    }
+
+    func showHiddenToolsPanel() {
+        guard let parentWindow = window else { return }
+        dismissHiddenToolsPanel(restoreFocus: false)
+
+        let gridEdge = ToolbarSlotGridView.tile * 3 + ToolbarSlotGridView.gap * 2
+        let panelPadding: CGFloat = 14
+        let panelSize = NSSize(
+            width: gridEdge + panelPadding * 2,
+            height: gridEdge + panelPadding * 2
+        )
+        let panel = ToolbarHiddenToolsPanel(
+            contentRect: NSRect(origin: .zero, size: panelSize),
+            owner: self
+        )
+        panel.appearance = effectiveAppearance
+
+        let content = NSView(frame: NSRect(origin: .zero, size: panelSize))
+        content.wantsLayer = true
+        content.layer?.backgroundColor = NSColor(calibratedWhite: 0.145, alpha: 0.99).cgColor
+        content.layer?.cornerRadius = 10
+        content.layer?.cornerCurve = .continuous
+        content.layer?.borderColor = NSColor.white.withAlphaComponent(0.16).cgColor
+        content.layer?.borderWidth = 1
+        content.layer?.masksToBounds = true
+        panel.contentView = content
+
+        hiddenGrid.removeFromSuperview()
+        hiddenGrid.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(hiddenGrid)
+        NSLayoutConstraint.activate([
+            hiddenGrid.topAnchor.constraint(equalTo: content.topAnchor, constant: panelPadding),
+            hiddenGrid.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: panelPadding),
+            hiddenGrid.widthAnchor.constraint(equalToConstant: gridEdge),
+            hiddenGrid.heightAnchor.constraint(equalToConstant: gridEdge),
+        ])
+
+        hiddenToolsPanel = panel
+        positionHiddenToolsPanel()
+        installHiddenToolsEventMonitor()
+        parentWindow.addChildWindow(panel, ordered: .above)
+        panel.makeKeyAndOrderFront(nil)
+    }
+
+    func dismissHiddenToolsPanel(restoreFocus: Bool = true) {
+        removeHiddenToolsEventMonitor()
+        guard let panel = hiddenToolsPanel else { return }
+        hiddenToolsPanel = nil
+        panel.prepareToClose()
+        let parentWindow = panel.parent
+        parentWindow?.removeChildWindow(panel)
+        panel.orderOut(nil)
+        hiddenGrid.removeFromSuperview()
+        if restoreFocus {
+            parentWindow?.makeKey()
+            parentWindow?.makeFirstResponder(hiddenToolsButton)
+        }
+    }
+
+    private func positionHiddenToolsPanel() {
+        guard
+            let panel = hiddenToolsPanel,
+            let parentWindow = window,
+            !hiddenToolsButton.isHiddenOrHasHiddenAncestor
+        else { return }
+
+        let triggerFrame = parentWindow.convertToScreen(
+            hiddenToolsButton.convert(hiddenToolsButton.bounds, to: nil)
+        )
+        let panelSize = panel.frame.size
+        let visibleFrame = (parentWindow.screen ?? NSScreen.main)?.visibleFrame ?? triggerFrame
+        var origin = NSPoint(
+            x: triggerFrame.maxX - panelSize.width,
+            y: triggerFrame.maxY + 8
+        )
+        if origin.y + panelSize.height > visibleFrame.maxY - 8 {
+            origin.y = triggerFrame.minY - panelSize.height - 8
+        }
+        origin.x = min(
+            max(origin.x, visibleFrame.minX + 8),
+            visibleFrame.maxX - panelSize.width - 8
+        )
+        origin.y = max(origin.y, visibleFrame.minY + 8)
+        panel.setFrame(NSRect(origin: origin, size: panelSize), display: true)
+    }
+
+    private func installHiddenToolsEventMonitor() {
+        removeHiddenToolsEventMonitor()
+        hiddenToolsEventMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown, .keyDown]
+        ) { [weak self] event in
+            guard let self,
+                  let panel = self.hiddenToolsPanel,
+                  panel.isVisible
+            else {
+                return event
+            }
+
+            if event.type == .keyDown, event.keyCode == UInt16(kVK_Escape) {
+                self.dismissHiddenToolsPanel()
+                return nil
+            }
+            guard event.type == .leftMouseDown || event.type == .rightMouseDown else {
+                return event
+            }
+
+            let clickPoint = NSEvent.mouseLocation
+            if panel.frame.contains(clickPoint) {
+                return event
+            }
+            let triggerFrame = self.window.map {
+                $0.convertToScreen(
+                    self.hiddenToolsButton.convert(self.hiddenToolsButton.bounds, to: nil)
+                )
+            }
+            if triggerFrame?.contains(clickPoint) == true || Self.isToolbarTileEvent(event) {
+                return event
+            }
+
+            self.dismissHiddenToolsPanel(restoreFocus: false)
+            return event
+        }
+    }
+
+    private func removeHiddenToolsEventMonitor() {
+        guard let hiddenToolsEventMonitor else { return }
+        NSEvent.removeMonitor(hiddenToolsEventMonitor)
+        self.hiddenToolsEventMonitor = nil
+    }
+
+    private static func isToolbarTileEvent(_ event: NSEvent) -> Bool {
+        guard let contentView = event.window?.contentView else { return false }
+        let point = contentView.convert(event.locationInWindow, from: nil)
+        var hitView: NSView? = contentView.hitTest(point)
+        while let view = hitView {
+            if view is ToolbarItemTile {
+                return true
+            }
+            hitView = view.superview
+        }
+        return false
+    }
+}
+
+private final class ToolbarHiddenToolsPanel: NSPanel {
+    private weak var owner: ToolbarSettingsPane?
+
+    init(contentRect: NSRect, owner: ToolbarSettingsPane) {
+        self.owner = owner
+        super.init(
+            contentRect: contentRect,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        isOpaque = false
+        backgroundColor = .clear
+        hasShadow = true
+        level = .popUpMenu
+        isReleasedWhenClosed = false
+        animationBehavior = .utilityWindow
+        collectionBehavior = [.transient, .fullScreenAuxiliary]
+    }
+
+    override var canBecomeKey: Bool { true }
+
+    override func cancelOperation(_ sender: Any?) {
+        owner?.dismissHiddenToolsPanel()
+    }
+
+    func prepareToClose() {
+        owner = nil
     }
 }

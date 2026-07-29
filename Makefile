@@ -3,7 +3,7 @@ SHELL := /bin/bash
 STANDARDS_ROOT ?= /Users/crp/Projects/Codex 开发规范
 RELEASE_PROVENANCE ?=
 
-.PHONY: check test verify sandbox-check sandbox-test sandbox-build icons icon-check version-check version-test standards-check release-check prepare-formal-release release-tag release-formal verify-artifact install-release verify-installed publish-release refresh-standards
+.PHONY: check test verify sandbox-check sandbox-test sandbox-build icons icon-check version-check version-test standards-check release-check prepare-formal-release release-tag release-formal verify-artifact install-release verify-installed publish-release publish-update-mirrors refresh-standards
 
 check:
 	bash scripts/compile-check.sh
@@ -70,6 +70,10 @@ verify-installed:
 publish-release:
 	@test -n "$(RELEASE_PROVENANCE)" || { echo "RELEASE_PROVENANCE is required" >&2; exit 64; }
 	STANDARDS_ROOT="$(STANDARDS_ROOT)" bash scripts/publish-release.sh "$(RELEASE_PROVENANCE)"
+
+publish-update-mirrors:
+	@test -n "$(RELEASE_PROVENANCE)" || { echo "RELEASE_PROVENANCE is required" >&2; exit 64; }
+	bash scripts/publish-update-mirrors.sh "$(RELEASE_PROVENANCE)"
 
 refresh-standards:
 	python3 scripts/release_tool.py refresh-standards

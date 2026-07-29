@@ -26,23 +26,23 @@ extension Notification.Name {
     static let updateStateDidChange = Notification.Name("aulycShot.updateStateDidChange")
 }
 
-/// Checks GitHub Releases for a newer aulycShot version and, when asked, downloads
-/// and installs it in place.
+/// Checks the public GitHub/Gitee update mirrors for a newer formal aulycShot
+/// release and, when asked, downloads and installs it in place.
 ///
-/// The release zip is signed with aulycShot's reusable self-signed certificate
-/// (see release.yml), so an in-place swap keeps a stable code-signing identity
-/// and the user's TCC permissions survive the update. `UpdateInstaller` does
-/// the download/unzip/swap; this type owns the state machine and the GitHub
-/// API parsing.
+/// Both mirrors publish the same manifest and notarized DMG. `UpdateInstaller`
+/// owns download/hash/signature/install verification; this type owns the UI
+/// state machine and mirror failover.
 final class UpdateChecker {
     static let shared = UpdateChecker()
 
-    private let repo = "aulyc/aulycShot"
     private let throttleKey = "lastUpdateCheckAt"
     private let skippedVersionKey = "skippedUpdateVersion"
     private let shortcutTriggerDayKey = "automaticUpdateCheckShortcutTriggerDay"
     private let shortcutTriggerCountKey = "automaticUpdateCheckShortcutTriggerCount"
     private let automaticCheckShortcutTriggerCount = 1
+    private lazy var manifestLoader = UpdateManifestLoader {
+        "aulycShot/\(self.currentVersion)"
+    }
 
     private(set) var state: UpdateState = .idle {
         didSet {
@@ -50,12 +50,11 @@ final class UpdateChecker {
         }
     }
 
-    /// Details of the latest release, populated by a successful check. Kept
-    /// outside `UpdateState` so the enum stays trivially `Equatable`.
+    /// Details of the latest release, populated by a successful check.
     private(set) var latestVersion: String?
-    private(set) var latestZipURL: URL?
-    private(set) var latestSHA256URL: URL?
     private(set) var latestPageURL: URL?
+    private(set) var latestManifestSourceURL: URL?
+    private var latestManifest: UpdateManifest?
 
     private init() {}
 
@@ -79,8 +78,8 @@ final class UpdateChecker {
     }
 
     /// Silent automatic check tied to real usage rather than app launch. The
-    /// first screenshot-shortcut trigger of each local day checks GitHub unless
-    /// a check already ran today.
+    /// first screenshot-shortcut trigger of each local day checks the mirrors
+    /// unless a check already ran today.
     func checkFromScreenshotShortcutIfDue() {
         let today = Self.dayKey(for: Date())
         let defaults = UserDefaults.standard
@@ -120,55 +119,36 @@ final class UpdateChecker {
         }
         setState(.checking)
 
-        guard let url = URL(string: "https://api.github.com/repos/\(repo)/releases/latest") else {
-            finish(.failed, completion: completion)
-            return
-        }
+        manifestLoader.load { [weak self] result in
+            guard let self else { return }
 
-        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        // GitHub rejects API requests that arrive without a User-Agent.
-        request.setValue("aulycShot/\(currentVersion)", forHTTPHeaderField: "User-Agent")
-
-        URLSession.shared.dataTask(with: request) { [weak self] data, response, _ in
-            guard let self = self else { return }
-
-            // Record the attempt regardless of outcome so a failing network
-            // doesn't retry on every screenshot shortcut trigger today.
             UserDefaults.standard.set(Date(), forKey: self.throttleKey)
-
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200,
-                  let data = data,
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let tag = json["tag_name"] as? String
-            else {
+            switch result {
+            case .failure:
                 self.finish(.failed, completion: completion)
-                return
+            case .success(let loaded):
+                let manifest = loaded.manifest
+                guard Self.isVersion(manifest.version, newerThan: self.currentVersion) else {
+                    self.latestManifest = nil
+                    self.latestVersion = nil
+                    self.latestPageURL = nil
+                    self.latestManifestSourceURL = loaded.sourceURL
+                    self.finish(.upToDate, completion: completion)
+                    return
+                }
+
+                self.latestManifest = manifest
+                self.latestVersion = manifest.version
+                self.latestPageURL = manifest.releasePageURL
+                self.latestManifestSourceURL = loaded.sourceURL
+
+                if !manual, manifest.version == self.skippedVersion {
+                    self.finish(.upToDate, completion: completion)
+                } else {
+                    self.finish(.available(version: manifest.version), completion: completion)
+                }
             }
-
-            let latest = Self.normalizeVersion(tag)
-            let assets = json["assets"] as? [[String: Any]] ?? []
-            let pageURL = (json["html_url"] as? String).flatMap(URL.init)
-                ?? URL(string: "https://github.com/\(self.repo)/releases/latest")!
-
-            guard Self.isVersion(latest, newerThan: self.currentVersion) else {
-                self.finish(.upToDate, completion: completion)
-                return
-            }
-
-            self.latestVersion = latest
-            self.latestPageURL = pageURL
-            self.latestZipURL = Self.assetURL(in: assets) { $0.hasSuffix(".zip") }
-            self.latestSHA256URL = Self.assetURL(in: assets) { $0.hasSuffix(".zip.sha256") }
-
-            // A background check stays quiet about a version the user skipped;
-            // a manual check always reports it.
-            if !manual, latest == self.skippedVersion {
-                self.finish(.upToDate, completion: completion)
-            } else {
-                self.finish(.available(version: latest), completion: completion)
-            }
-        }.resume()
+        }
     }
 
     /// Marks the latest release as skipped so future background checks ignore
@@ -184,14 +164,17 @@ final class UpdateChecker {
     /// step fails — the running app is left untouched. On success the app
     /// terminates and the detached helper reopens the new build.
     func downloadAndInstall(onFailure: (() -> Void)? = nil) {
-        guard case .available(let version) = state else { return }
-
-        // No installable asset (e.g. a release still publishing) — fall back to
-        // the release page so the user can grab it manually.
-        guard let zipURL = latestZipURL else {
-            if let page = latestPageURL { NSWorkspace.shared.open(page) }
+        let version: String
+        switch state {
+        case .available(let availableVersion):
+            version = availableVersion
+        case .failed:
+            guard let knownVersion = latestVersion else { return }
+            version = knownVersion
+        default:
             return
         }
+        guard let manifest = latestManifest, manifest.version == version else { return }
 
         // Clear anything an earlier interrupted update left behind so temp
         // artifacts never pile up across runs.
@@ -204,69 +187,41 @@ final class UpdateChecker {
             onFailure?()
         }
 
-        fetchExpectedHash { [weak self] expectedHash in
-            guard let self = self else { return }
-            var lastPercent = -1
-            UpdateInstaller.shared.downloadZip(
-                from: zipURL,
-                progress: { fraction in
-                    // Throttle to whole-percent steps so the menu/About pane
-                    // don't rebuild on every byte.
-                    let percent = Int(fraction * 100)
-                    guard percent != lastPercent else { return }
-                    lastPercent = percent
-                    self.setState(.downloading(version: version, fraction: fraction))
-                },
-                completion: { result in
-                    switch result {
-                    case .failure:
-                        fail()
-                    case .success(let zipPath):
-                        self.setState(.installing(version: version, phase: .verifying))
-                        DispatchQueue.global(qos: .userInitiated).async {
-                            do {
-                                try UpdateInstaller.install(
-                                    zipAt: zipPath,
-                                    expectedSHA256: expectedHash,
-                                    phase: { phase in
-                                        self.setState(.installing(version: version,
-                                                                  phase: phase))
-                                    }
-                                )
-                                DispatchQueue.main.async { NSApp.terminate(nil) }
-                            } catch {
-                                DispatchQueue.main.async { fail() }
-                            }
+        var lastPercent = -1
+        UpdateInstaller.shared.downloadDMG(
+            from: manifest.orderedDownloadURLs,
+            expectedSHA256: manifest.artifact.sha256,
+            progress: { fraction in
+                // Throttle to whole-percent steps so the menu/About pane
+                // don't rebuild on every byte.
+                let percent = Int(fraction * 100)
+                guard percent != lastPercent else { return }
+                lastPercent = percent
+                self.setState(.downloading(version: version, fraction: fraction))
+            },
+            completion: { result in
+                switch result {
+                case .failure:
+                    fail()
+                case .success(let dmgPath):
+                    self.setState(.installing(version: version, phase: .verifying))
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        do {
+                            try UpdateInstaller.install(
+                                dmgAt: dmgPath,
+                                manifest: manifest,
+                                phase: { phase in
+                                    self.setState(.installing(version: version, phase: phase))
+                                }
+                            )
+                            DispatchQueue.main.async { NSApp.terminate(nil) }
+                        } catch {
+                            DispatchQueue.main.async { fail() }
                         }
                     }
                 }
-            )
-        }
-    }
-
-    /// Fetches the `.sha256` companion asset so the download can be verified.
-    /// Best-effort: a missing or unreadable checksum yields nil and the install
-    /// proceeds without verification rather than failing outright.
-    private func fetchExpectedHash(_ completion: @escaping (String?) -> Void) {
-        guard let url = latestSHA256URL else {
-            completion(nil)
-            return
-        }
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 15
-        request.setValue("aulycShot/\(currentVersion)", forHTTPHeaderField: "User-Agent")
-        URLSession.shared.dataTask(with: request) { data, response, _ in
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200,
-                  let data = data,
-                  let text = String(data: data, encoding: .utf8)
-            else {
-                completion(nil)
-                return
             }
-            // The file holds "<hash>  <filename>"; take the first token.
-            let hash = text.split(whereSeparator: { " \t\n".contains($0) }).first
-            completion(hash.map(String.init))
-        }.resume()
+        )
     }
 
     private func finish(_ newState: UpdateState, completion: ((UpdateState) -> Void)?) {
@@ -282,21 +237,6 @@ final class UpdateChecker {
         } else {
             DispatchQueue.main.async { self.state = newState }
         }
-    }
-
-    /// Returns the download URL of the first release asset whose name matches.
-    private static func assetURL(
-        in assets: [[String: Any]],
-        where matches: (String) -> Bool
-    ) -> URL? {
-        for asset in assets {
-            guard let name = asset["name"] as? String, matches(name),
-                  let urlString = asset["browser_download_url"] as? String,
-                  let url = URL(string: urlString)
-            else { continue }
-            return url
-        }
-        return nil
     }
 
     /// Strips a leading `release-v` / `v` from a tag — aulycShot tags releases as

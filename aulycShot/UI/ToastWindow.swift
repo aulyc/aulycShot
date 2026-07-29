@@ -1,5 +1,25 @@
 import AppKit
 
+struct ToastPresentation: Equatable {
+    let visibleDuration: TimeInterval
+    let fadeInDuration: TimeInterval
+    let fadeOutDuration: TimeInterval
+
+    static func standard(duration: TimeInterval) -> ToastPresentation {
+        ToastPresentation(
+            visibleDuration: duration,
+            fadeInDuration: 0.2,
+            fadeOutDuration: 0.3
+        )
+    }
+
+    static let screenshotSuccess = ToastPresentation(
+        visibleDuration: 1,
+        fadeInDuration: 0,
+        fadeOutDuration: 0
+    )
+}
+
 class ToastWindow: NSPanel {
     private static var current: ToastWindow?
 
@@ -25,6 +45,36 @@ class ToastWindow: NSPanel {
         centerAnchor: NSPoint? = nil,
         duration: TimeInterval = 1.5
     ) {
+        present(
+            message: message,
+            on: screen,
+            topAnchor: topAnchor,
+            centerAnchor: centerAnchor,
+            presentation: .standard(duration: duration)
+        )
+    }
+
+    /// Shows screenshot copy/save success immediately for exactly one second.
+    static func showScreenshotSuccess(
+        message: String = L10n.copiedToClipboard,
+        on screen: NSScreen? = nil
+    ) {
+        present(
+            message: message,
+            on: screen,
+            topAnchor: nil,
+            centerAnchor: nil,
+            presentation: .screenshotSuccess
+        )
+    }
+
+    private static func present(
+        message: String,
+        on screen: NSScreen?,
+        topAnchor: NSPoint?,
+        centerAnchor: NSPoint?,
+        presentation: ToastPresentation
+    ) {
         current?.orderOut(nil)
 
         let toast = ToastWindow(message: message)
@@ -44,22 +94,29 @@ class ToastWindow: NSPanel {
             toast.setFrameOrigin(NSPoint(x: x, y: y))
         }
 
-        toast.alphaValue = 0
+        toast.alphaValue = presentation.fadeInDuration > 0 ? 0 : 1
         toast.orderFrontRegardless()
 
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.2
-            toast.animator().alphaValue = 1.0
+        if presentation.fadeInDuration > 0 {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = presentation.fadeInDuration
+                toast.animator().alphaValue = 1.0
+            }
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + duration) {
-            NSAnimationContext.runAnimationGroup({ ctx in
-                ctx.duration = 0.3
-                toast.animator().alphaValue = 0.0
-            }, completionHandler: {
+        DispatchQueue.main.asyncAfter(deadline: .now() + presentation.visibleDuration) {
+            if presentation.fadeOutDuration > 0 {
+                NSAnimationContext.runAnimationGroup({ ctx in
+                    ctx.duration = presentation.fadeOutDuration
+                    toast.animator().alphaValue = 0.0
+                }, completionHandler: {
+                    toast.orderOut(nil)
+                    if current === toast { current = nil }
+                })
+            } else {
                 toast.orderOut(nil)
                 if current === toast { current = nil }
-            })
+            }
         }
     }
 

@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from urllib.parse import urlparse
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -394,6 +395,97 @@ def command_release_notes(args: argparse.Namespace) -> None:
     print(args.output)
 
 
+def validated_update_url(value: str, *, host: str, file_name: str | None = None) -> str:
+    parsed = urlparse(value)
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname != host
+        or parsed.port is not None
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ReleaseError(f"update URL must use HTTPS on {host}")
+    if file_name is not None and Path(parsed.path).name != file_name:
+        raise ReleaseError(f"update URL does not identify {file_name}")
+    return value
+
+
+def command_write_update_manifest(args: argparse.Namespace) -> None:
+    provenance, dmg = validate_provenance(args.provenance.resolve())
+    github_url = validated_update_url(
+        args.github_url,
+        host="github.com",
+        file_name=dmg.name,
+    )
+    gitee_url = validated_update_url(args.gitee_url, host="gitee.com")
+    page_url = args.release_page_url or (
+        f"https://github.com/aulyc/aulycShot-releases/releases/tag/{provenance['tag']}"
+    )
+    validated_update_url(page_url, host="github.com")
+
+    expected_github_path = (
+        f"/aulyc/aulycShot-releases/releases/download/{provenance['tag']}/{dmg.name}"
+    )
+    if urlparse(github_url).path != expected_github_path:
+        raise ReleaseError("GitHub update URL must use the configured public mirror")
+    expected_gitee_path = (
+        f"/aulyc/aulycShot-releases/releases/download/{provenance['tag']}/{dmg.name}"
+    )
+    if urlparse(gitee_url).path != expected_gitee_path:
+        raise ReleaseError("Gitee update URL must use the configured public mirror")
+    expected_page_path = (
+        f"/aulyc/aulycShot-releases/releases/tag/{provenance['tag']}"
+    )
+    if urlparse(page_url).path != expected_page_path:
+        raise ReleaseError("release page URL must use the configured GitHub mirror")
+
+    required_strings = (
+        "releaseProfile",
+        "releaseChannel",
+        "version",
+        "tag",
+        "commit",
+        "architecture",
+        "bundleIdentifier",
+        "teamIdentifier",
+        "minimumSystemVersion",
+    )
+    if any(not isinstance(provenance.get(field), str) for field in required_strings):
+        raise ReleaseError("release provenance is missing update identity fields")
+    if (
+        provenance["teamIdentifier"] != "M9M7M2ARFD"
+        or provenance["minimumSystemVersion"] != "14.0"
+    ):
+        raise ReleaseError("release provenance has an unexpected update identity")
+
+    manifest = {
+        "schemaVersion": 1,
+        "releaseProfile": provenance["releaseProfile"],
+        "releaseChannel": provenance["releaseChannel"],
+        "version": provenance["version"],
+        "buildNumber": provenance["buildNumber"],
+        "tag": provenance["tag"],
+        "commit": provenance["commit"],
+        "architecture": provenance["architecture"],
+        "bundleIdentifier": provenance["bundleIdentifier"],
+        "teamIdentifier": provenance["teamIdentifier"],
+        "minimumSystemVersion": provenance["minimumSystemVersion"],
+        "releasePageURL": page_url,
+        "artifact": {
+            "file": dmg.name,
+            "sha256": provenance["artifacts"][0]["sha256"],
+            "downloads": [
+                {"source": "github", "url": github_url},
+                {"source": "gitee", "url": gitee_url},
+            ],
+        },
+    }
+    atomic_write_json(args.output.resolve(), manifest)
+    print(args.output.resolve())
+
+
 def command_refresh_standards(_: argparse.Namespace) -> None:
     adoption = load_provenance(ADOPTION)
     tracked = adoption.get("trackedFiles")
@@ -448,6 +540,14 @@ def make_parser() -> argparse.ArgumentParser:
     release_notes.add_argument("--version", required=True)
     release_notes.add_argument("--output", required=True, type=Path)
     release_notes.set_defaults(func=command_release_notes)
+
+    update_manifest = subparsers.add_parser("write-update-manifest")
+    update_manifest.add_argument("--provenance", required=True, type=Path)
+    update_manifest.add_argument("--github-url", required=True)
+    update_manifest.add_argument("--gitee-url", required=True)
+    update_manifest.add_argument("--release-page-url")
+    update_manifest.add_argument("--output", required=True, type=Path)
+    update_manifest.set_defaults(func=command_write_update_manifest)
 
     refresh = subparsers.add_parser("refresh-standards")
     refresh.set_defaults(func=command_refresh_standards)
