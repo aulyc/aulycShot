@@ -87,6 +87,38 @@ class GiteeReleaseTests(unittest.TestCase):
         self.assertEqual(release_id, 42)
         self.assertFalse(created)
 
+    def test_empty_success_response_for_missing_release_creates_it(self):
+        client = object.__new__(gitee_release.GiteeClient)
+        client.token = "not-a-real-token"
+        client.request_json = mock.Mock(
+            side_effect=[
+                (200, None),
+                (
+                    201,
+                    {
+                        "id": 42,
+                        "tag_name": "1.8.0",
+                        "name": "aulycShot 1.8.0",
+                        "body": "Release notes\n",
+                        "prerelease": False,
+                    },
+                ),
+            ]
+        )
+
+        release_id, created = client.ensure_release(
+            "aulyc",
+            "aulycShot-releases",
+            "1.8.0",
+            "aulycShot 1.8.0",
+            "Release notes\n",
+        )
+
+        self.assertEqual(release_id, 42)
+        self.assertTrue(created)
+        self.assertEqual(client.request_json.call_count, 2)
+        self.assertEqual(client.request_json.call_args_list[1].args[0], "POST")
+
     def test_existing_attachment_is_reused_after_hash_readback(self):
         with tempfile.TemporaryDirectory() as temporary_name:
             artifact = Path(temporary_name) / "aulycShot.dmg"
@@ -176,6 +208,42 @@ class GiteeReleaseTests(unittest.TestCase):
 
             self.assertEqual(calls[1][0], "PUT")
             self.assertEqual(calls[1][2]["sha"], "abc123")
+            self.assertEqual(calls[1][2]["branch"], "main")
+
+    def test_empty_success_response_for_missing_manifest_creates_it(self):
+        with tempfile.TemporaryDirectory() as temporary_name:
+            source = Path(temporary_name) / "latest.json"
+            source.write_text("{}\n", encoding="utf-8")
+            client = object.__new__(gitee_release.GiteeClient)
+            client.token = "not-a-real-token"
+            calls = []
+            get_count = 0
+
+            def request(method, path, payload=None, allowed_statuses=None):
+                nonlocal get_count
+                calls.append((method, path, payload))
+                if method == "GET":
+                    get_count += 1
+                    if get_count == 2:
+                        return 200, {
+                            "sha": "def456",
+                            "content": base64.b64encode(source.read_bytes()).decode("ascii"),
+                        }
+                    return 200, []
+                return 201, {}
+
+            client.request_json = request
+            client.put_file(
+                "aulyc",
+                "aulycShot-releases",
+                "latest.json",
+                "main",
+                source,
+                "chore: publish 1.8.0 update manifest",
+            )
+
+            self.assertEqual(calls[1][0], "POST")
+            self.assertNotIn("sha", calls[1][2])
             self.assertEqual(calls[1][2]["branch"], "main")
 
 

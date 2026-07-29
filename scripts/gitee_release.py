@@ -141,7 +141,9 @@ class GiteeClient:
             f"/repos/{quote(owner)}/{quote(repo)}/releases/tags/{encoded_tag}",
             allowed_statuses={200, 404},
         )
-        if status == 200:
+        # Gitee returns HTTP 200 with an empty body when the tag has no release.
+        # Treat that response as a miss and continue with release creation.
+        if status == 200 and existing is not None:
             if not isinstance(existing, dict) or not isinstance(existing.get("id"), int):
                 raise GiteeError(f"Gitee mirror release {tag} has no integer id")
             if (
@@ -357,7 +359,10 @@ class GiteeClient:
             "content": base64.b64encode(source.read_bytes()).decode("ascii"),
             "message": message,
         }
-        if status == 200:
+        # Missing content can also be reported as HTTP 200 with an empty body
+        # or an empty array.
+        content_missing = status == 404 or current is None or current == []
+        if not content_missing:
             if not isinstance(current, dict) or not isinstance(current.get("sha"), str):
                 raise GiteeError(f"Gitee content response has no sha for {path}")
             payload["sha"] = current["sha"]
