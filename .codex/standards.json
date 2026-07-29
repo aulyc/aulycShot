@@ -209,7 +209,7 @@
     },
     {
       "path": "docs/RELEASE.md",
-      "sha256": "82f84bda2ad608f2af858111fc057be1b4079c7af27b1e5d16120734ed4d8b4d"
+      "sha256": "feb72a2f1fe86a47f3b3a44903d85cc62e097ade3f2876f534d2142dab03595b"
     },
     {
       "path": "design/icon-assets.generated.json",
@@ -249,7 +249,7 @@
     },
     {
       "path": "scripts/bundle.sh",
-      "sha256": "8e6aa5a1c6e836769a50747bf241c3c7a4a54678cf3ce89c03dea81263edc97f"
+      "sha256": "ac02bbfdb51a354c5d5e401eb2d629fc2427ccea9edacd1f19cf7750335c679e"
     },
     {
       "path": "scripts/gitee_release.py",
@@ -289,7 +289,7 @@
     },
     {
       "path": "scripts/formal-release.sh",
-      "sha256": "f7aaa50726dba9a45aa7163db660d01e3d72b2faa9b35eb09d87e35abd53a930"
+      "sha256": "8eca75aae5a6d62e204d346dd6a8075dae68e7d2b44b4b51f15a3e49d310ad0c"
     },
     {
       "path": "scripts/verify-formal-artifact.sh",
@@ -325,7 +325,7 @@
     },
     {
       "path": "Tests/test_release_tool.py",
-      "sha256": "2d1073657b63a75fc4fd68bf9034bef87699c3ea42eeffb3ea531ff6ad41ee9e"
+      "sha256": "4df37905dd87c8a95bb404eea85d67696f7a513a1ec84529e6b0f388583b3f90"
     }
   ]
 }

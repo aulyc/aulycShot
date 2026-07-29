@@ -126,9 +126,10 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEFAULT_SIGN_IDENTITY="Developer ID Application: nan ma (M9M7M2ARFD)"
 SIGN_IDENTITY="${SIGN_IDENTITY:-$DEFAULT_SIGN_IDENTITY}"
 REQUIRE_SIGNING="${REQUIRE_SIGNING:-0}"
+APPLE_TIMESTAMP_URL="${APPLE_TIMESTAMP_URL:-http://timestamp.apple.com/ts01}"
 sign_bundles() {
     local identity="$1"
-    local timestamp_option="--timestamp"
+    local timestamp_option="--timestamp=$APPLE_TIMESTAMP_URL"
     if [ "$identity" = "-" ]; then
         timestamp_option="--timestamp=none"
     fi

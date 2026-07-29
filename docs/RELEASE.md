@@ -77,10 +77,11 @@ make release-formal \
 ```
 
 脚本从 annotated tag 创建隔离 worktree，构建 arm64 Release App，先签 share
-extension 再签 App，启用 timestamp 和 Hardened Runtime，生成并签名 DMG，等待
-Apple notarization `Accepted`，执行 staple、`stapler validate`、DMG/App Gatekeeper
-验证，再从挂载 DMG 的 App 验证运行时资源布局并生成 release provenance。隔离
-源码在构建前后都必须 clean。
+extension 再签 App，使用 Apple 官方 `http://timestamp.apple.com/ts01` 服务写入
+可信 timestamp 并启用 Hardened Runtime，生成并签名 DMG，等待 Apple notarization
+`Accepted`，执行 staple、`stapler validate`、DMG/App Gatekeeper 验证，再从挂载
+DMG 的 App 验证运行时资源布局并生成 release provenance。隔离源码在构建前后都
+必须 clean。
 
 产物位于 `dist/`：
 
