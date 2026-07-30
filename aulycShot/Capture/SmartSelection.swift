@@ -38,6 +38,7 @@ struct SmartSelectionCandidate: Equatable {
 struct SmartSelectionHoverState {
     private(set) var candidates: [SmartSelectionCandidate] = []
     private(set) var currentIndex = 0
+    private(set) var hasManuallyCycledCandidate = false
 
     var currentCandidate: SmartSelectionCandidate? {
         guard candidates.indices.contains(currentIndex) else { return nil }
@@ -68,29 +69,50 @@ struct SmartSelectionHoverState {
             count: candidates.count,
             reverse: reverse
         )
+        hasManuallyCycledCandidate = true
+    }
+
+    mutating func resetManualCycle() {
+        hasManuallyCycledCandidate = false
     }
 
     mutating func clear() {
         candidates.removeAll()
         currentIndex = 0
+        hasManuallyCycledCandidate = false
     }
 }
 
 enum SmartSelectionPolicy {
-    static let minimumElementDimension: CGFloat = 8
+    static let minimumRegionWidth: CGFloat = 120
+    static let minimumRegionHeight: CGFloat = 80
+    static let minimumRegionAreaRatio: CGFloat = 0.01
+    static let maximumRegionAreaRatio: CGFloat = 0.9
+
+    private static let regionAccessibilityRoles: Set<String> = [
+        "AXBrowser",
+        "AXDialog",
+        "AXGroup",
+        "AXList",
+        "AXMenu",
+        "AXOutline",
+        "AXPopover",
+        "AXScrollArea",
+        "AXSheet",
+        "AXSplitGroup",
+        "AXTabGroup",
+        "AXTable",
+        "AXToolbar",
+        "AXWebArea",
+    ]
 
     static func isMeaningfulAccessibilityRole(_ role: String?) -> Bool {
-        guard let role, !role.isEmpty else { return false }
-        switch role {
-        case "AXApplication", "AXWindow", "AXSystemWide", "AXUnknown":
-            return false
-        default:
-            return true
-        }
+        guard let role else { return false }
+        return regionAccessibilityRoles.contains(role)
     }
 
     static func orderedCandidates(
-        element: SmartSelectionCandidate?,
+        elements: [SmartSelectionCandidate],
         window: SmartSelectionCandidate?,
         screen: SmartSelectionCandidate,
         at point: CGPoint
@@ -98,12 +120,15 @@ enum SmartSelectionPolicy {
         guard isUsable(screen), screen.frame.contains(point) else { return [] }
 
         var candidates: [SmartSelectionCandidate] = []
+        let referenceFrame = window?.frame ?? screen.frame
 
-        if let element,
-           isUsableElement(element),
-           element.frame.contains(point),
-           element.frame.intersects(screen.frame),
-           window.map({ !approximatelyEqual(element.frame, $0.frame) }) ?? true {
+        if let element = preferredRegionCandidate(
+            from: elements,
+            referenceFrame: referenceFrame,
+            windowFrame: window?.frame,
+            screenFrame: screen.frame,
+            at: point
+        ) {
             candidates.append(element)
         }
 
@@ -145,10 +170,50 @@ enum SmartSelectionPolicy {
         return borderRect
     }
 
-    private static func isUsableElement(_ candidate: SmartSelectionCandidate) -> Bool {
-        candidate.frame.width >= minimumElementDimension
-            && candidate.frame.height >= minimumElementDimension
-            && isUsable(candidate)
+    private static func preferredRegionCandidate(
+        from elements: [SmartSelectionCandidate],
+        referenceFrame: CGRect,
+        windowFrame: CGRect?,
+        screenFrame: CGRect,
+        at point: CGPoint
+    ) -> SmartSelectionCandidate? {
+        var preferred: SmartSelectionCandidate?
+
+        for element in elements {
+            guard isUsableRegion(element, relativeTo: referenceFrame),
+                  element.frame.contains(point),
+                  element.frame.intersects(screenFrame),
+                  windowFrame.map({ !approximatelyEqual(element.frame, $0) }) ?? true
+            else { continue }
+
+            if let current = preferred,
+               current.frame.width * current.frame.height >= element.frame.width * element.frame.height {
+                continue
+            }
+            preferred = element
+        }
+
+        return preferred
+    }
+
+    private static func isUsableRegion(
+        _ candidate: SmartSelectionCandidate,
+        relativeTo referenceFrame: CGRect
+    ) -> Bool {
+        guard isMeaningfulAccessibilityRole(candidate.role),
+              candidate.frame.width >= minimumRegionWidth,
+              candidate.frame.height >= minimumRegionHeight,
+              isUsable(candidate),
+              referenceFrame.width.isFinite,
+              referenceFrame.height.isFinite
+        else { return false }
+
+        let referenceArea = referenceFrame.width * referenceFrame.height
+        guard referenceArea.isFinite, referenceArea > 1 else { return false }
+
+        let areaRatio = candidate.frame.width * candidate.frame.height / referenceArea
+        return areaRatio >= minimumRegionAreaRatio
+            && areaRatio <= maximumRegionAreaRatio
     }
 
     private static func isUsable(_ candidate: SmartSelectionCandidate) -> Bool {

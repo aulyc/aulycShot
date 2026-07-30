@@ -560,6 +560,9 @@ class SelectionView: NSView {
         let primaryHeight = NSScreen.screens[0].frame.height
         let cgPoint = CGPoint(x: screenPoint.x, y: primaryHeight - screenPoint.y)
         let pointerMoved = lastHoverCGPoint != cgPoint
+        if pointerMoved {
+            hoverState.resetManualCycle()
+        }
         let screenFrame = CGDisplayBounds(displayID)
         var baseCandidates = detector.baseCandidates(
             at: cgPoint,
@@ -590,7 +593,10 @@ class SelectionView: NSView {
                   !self.selectionLocked,
                   self.lastHoverCGPoint == cgPoint
             else { return }
-            self.applyHoverCandidates(candidates, preservingCurrent: true)
+            self.applyHoverCandidates(
+                candidates,
+                preservingCurrent: self.hoverState.hasManuallyCycledCandidate
+            )
         }
     }
 

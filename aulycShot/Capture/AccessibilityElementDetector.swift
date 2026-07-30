@@ -5,20 +5,20 @@ final class AccessibilityElementDetector {
     private let ownPID = ProcessInfo.processInfo.processIdentifier
     private let fallbackBundleIdentifiers = ["com.apple.finder", "com.apple.dock"]
 
-    func elementCandidate(
+    func elementCandidates(
         at point: CGPoint,
         preferredPID: pid_t?,
         screenFrame: CGRect
-    ) -> SmartSelectionCandidate? {
-        guard AXIsProcessTrusted() else { return nil }
+    ) -> [SmartSelectionCandidate] {
+        guard AXIsProcessTrusted() else { return [] }
 
         for pid in candidatePIDs(preferredPID: preferredPID) where pid != ownPID {
-            guard let candidate = candidate(at: point, in: pid, screenFrame: screenFrame) else {
-                continue
+            let candidates = candidates(at: point, in: pid, screenFrame: screenFrame)
+            if !candidates.isEmpty {
+                return candidates
             }
-            return candidate
         }
-        return nil
+        return []
     }
 
     private func candidatePIDs(preferredPID: pid_t?) -> [pid_t] {
@@ -39,11 +39,11 @@ final class AccessibilityElementDetector {
         return pids
     }
 
-    private func candidate(
+    private func candidates(
         at point: CGPoint,
         in pid: pid_t,
         screenFrame: CGRect
-    ) -> SmartSelectionCandidate? {
+    ) -> [SmartSelectionCandidate] {
         let application = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(application, 0.08)
 
@@ -54,28 +54,32 @@ final class AccessibilityElementDetector {
             Float(point.y),
             &hitElement
         )
-        guard error == .success, let hitElement else { return nil }
+        guard error == .success, let hitElement else { return [] }
 
+        var candidates: [SmartSelectionCandidate] = []
         var current: AXUIElement? = hitElement
         for _ in 0..<8 {
             guard let element = current else { break }
             let role = stringAttribute(kAXRoleAttribute as CFString, from: element)
+            if role == "AXWindow" || role == "AXApplication" || role == "AXSystemWide" {
+                break
+            }
             if SmartSelectionPolicy.isMeaningfulAccessibilityRole(role),
                let frame = frame(of: element),
-               frame.width >= SmartSelectionPolicy.minimumElementDimension,
-               frame.height >= SmartSelectionPolicy.minimumElementDimension,
+               frame.width >= SmartSelectionPolicy.minimumRegionWidth,
+               frame.height >= SmartSelectionPolicy.minimumRegionHeight,
                frame.contains(point),
                frame.intersects(screenFrame) {
-                return SmartSelectionCandidate(
+                candidates.append(SmartSelectionCandidate(
                     kind: .element,
                     frame: frame.intersection(screenFrame),
                     ownerPID: pid,
                     role: role
-                )
+                ))
             }
             current = elementAttribute(kAXParentAttribute as CFString, from: element)
         }
-        return nil
+        return candidates
     }
 
     private func frame(of element: AXUIElement) -> CGRect? {

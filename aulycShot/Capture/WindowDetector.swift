@@ -117,7 +117,7 @@ class WindowDetector {
             frame: screenFrame
         )
         return SmartSelectionPolicy.orderedCandidates(
-            element: nil,
+            elements: [],
             window: windowCandidate,
             screen: screenCandidate,
             at: cgPoint
@@ -149,7 +149,7 @@ class WindowDetector {
 
         accessibilityQueue.asyncAfter(deadline: .now() + .milliseconds(24)) { [weak self] in
             guard let self, self.isCurrentCandidateRequest(generation) else { return }
-            let elementCandidate = self.accessibilityDetector.elementCandidate(
+            let elementCandidates = self.accessibilityDetector.elementCandidates(
                 at: cgPoint,
                 preferredPID: preferredPID,
                 screenFrame: screenFrame
@@ -157,7 +157,7 @@ class WindowDetector {
             guard self.isCurrentCandidateRequest(generation) else { return }
 
             let candidates = SmartSelectionPolicy.orderedCandidates(
-                element: elementCandidate,
+                elements: elementCandidates,
                 window: windowCandidate,
                 screen: screenCandidate,
                 at: cgPoint
