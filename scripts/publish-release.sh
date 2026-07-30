@@ -1,41 +1,31 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-STANDARDS_ROOT="${STANDARDS_ROOT:-/Users/crp/Projects/Codex 开发规范}"
-PROVENANCE="$(cd "$(dirname "${1:?usage: publish-release.sh <provenance>}")" && pwd)/$(basename "$1")"
-cd "$ROOT"
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+standards_root="${STANDARDS_ROOT:-${AULYC_STANDARDS_ROOT:-/Users/crp/Projects/Codex 开发规范}}"
+provenance="$(cd "$(dirname "${1:?usage: publish-release.sh <provenance>}")" && pwd)/$(basename "$1")"
+cd "${root}"
 
-bash scripts/verify-formal-artifact.sh "$PROVENANCE"
-bash scripts/verify-installed.sh "$PROVENANCE"
-VERSION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["version"])' "$PROVENANCE")"
-DMG_NAME="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["artifacts"][0]["file"])' "$PROVENANCE")"
-DMG="$(dirname "$PROVENANCE")/$DMG_NAME"
+bash scripts/verify-formal-artifact.sh "${provenance}"
+bash scripts/verify-installed.sh "${provenance}"
+version="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["version"])' "${provenance}")"
 
-python3 "$STANDARDS_ROOT/scripts/formal_release_git.py" push \
-    --path "$ROOT" --tag "$VERSION" --provenance "$PROVENANCE"
+python3 "${standards_root}/scripts/formal_release_git.py" push \
+  --path "${root}" --tag "${version}" --provenance "${provenance}"
+provenance_sha="$(shasum -a 256 "${provenance}" | awk '{print $1}')"
+printf '%s  %s\n' "${provenance_sha}" "$(basename "${provenance}")" \
+  > "${provenance}.sha256"
+python3 "${standards_root}/scripts/formal_release_git.py" verify \
+  --path "${root}" --tag "${version}" --provenance "${provenance}"
 
-PROVENANCE_SHA="$(shasum -a 256 "$PROVENANCE" | awk '{print $1}')"
-printf '%s  %s\n' "$PROVENANCE_SHA" "$(basename "$PROVENANCE")" > "$PROVENANCE.sha256"
-python3 "$STANDARDS_ROOT/scripts/formal_release_git.py" verify \
-    --path "$ROOT" --tag "$VERSION" --provenance "$PROVENANCE"
-
-GITHUB_NOTES="$(dirname "$PROVENANCE")/aulycShot-$VERSION-release-notes.github.md"
-GITEE_NOTES="$(dirname "$PROVENANCE")/aulycShot-$VERSION-release-notes.gitee.md"
+notes_zh_cn="$(dirname "${provenance}")/aulycShot-${version}-release-notes.zh-CN.md"
+notes_en="$(dirname "${provenance}")/aulycShot-${version}-release-notes.en.md"
 python3 scripts/release_tool.py release-notes \
-    --version "$VERSION" --channel github --output "$GITHUB_NOTES"
+  --version "${version}" --channel gitee --output "${notes_zh_cn}"
 python3 scripts/release_tool.py release-notes \
-    --version "$VERSION" --channel gitee --output "$GITEE_NOTES"
-if gh release view "$VERSION" --repo aulyc/aulycShot >/dev/null 2>&1; then
-    echo "error: GitHub Release $VERSION already exists" >&2
-    exit 1
-fi
-gh release create "$VERSION" \
-    --repo aulyc/aulycShot \
-    --verify-tag \
-    --title "aulycShot $VERSION" \
-    --notes-file "$GITHUB_NOTES" \
-    "$DMG" "$DMG.sha256" "$PROVENANCE" "$PROVENANCE.sha256"
-gh release view "$VERSION" --repo aulyc/aulycShot --json tagName,isDraft,isPrerelease,url
-bash scripts/publish-update-mirrors.sh "$PROVENANCE" "$GITHUB_NOTES" "$GITEE_NOTES"
-echo "Published private canonical GitHub Release and public GitHub/Gitee update mirrors for $VERSION"
+  --version "${version}" --channel english --output "${notes_en}"
+
+AULYC_STANDARDS_ROOT="${standards_root}" \
+  bash scripts/publish-update-mirrors.sh \
+    "${provenance}" "${notes_zh_cn}" "${notes_en}"
+echo "Published the private source refs and verified both public release mirrors for ${version}"

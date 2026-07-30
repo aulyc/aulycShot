@@ -81,9 +81,10 @@ This script builds the app bundle, kills any running instance, launches the new 
 ## Versioning and Release Profile
 
 - Release profile: `macos-arm64-app` 1.0.0
-- Distribution: Developer ID DMG published canonically to the private GitHub
-  repository `aulyc/aulycShot`, then mirrored byte-for-byte to the public
-  `aulyc/aulycShot-releases` repositories on GitHub and Gitee
+- Distribution: private GitHub repository `aulyc/aulycShot` remains the sole
+  source authority; the same Developer ID DMG is published through the
+  optional `aulyc-dual-mirror-v1` public `aulyc/aulycShot-releases`
+  repositories on GitHub and Gitee
 - Architecture: Apple Silicon `arm64` only. Release gates require both the App
   and share extension to contain exactly the `arm64` slice
 - Authoritative version and build source: `aulycShot/App/Info.plist`
@@ -145,22 +146,37 @@ This script builds the app bundle, kills any running instance, launches the new 
   App has been installed and verified
 - `make publish-release RELEASE_PROVENANCE=/absolute/path/...release-provenance.json`
   uses the central gate for one atomic, non-force branch and annotated-tag push,
-  remote ref readback and provenance finalization, then creates a GitHub Release
-  with `--verify-tag`, followed by the public GitHub/Gitee update mirrors
+  remote ref readback and provenance finalization, then delegates public
+  GitHub/Gitee publication and readback to the central dual-mirror tool
 - The canonical GitHub source repository remains private. Public mirror
   repositories contain only formal artifacts, checksums, provenance, release
   notes, and the shared update manifest; they are not additional source
   authorities
-- Both mirrors must receive the same already-notarized DMG bytes. The manifest
-  binds version, build, Commit, Bundle ID, Team ID, architecture and SHA-256,
-  and download order remains GitHub then Gitee
-- Canonical and mirror GitHub Release descriptions must use the same bilingual
-  Chinese-first/English-second notes; the Gitee Release description must use
-  the matching Simplified Chinese notes
-- `GITEE_ACCESS_TOKEN` is a host credential used only by
-  `scripts/gitee_release.py`; it must never be printed or written into the
-  repository, product metadata, logs or provenance
+- Both mirrors must receive the same already-notarized DMG, checksum,
+  provenance, provenance checksum and `latest.json`. The manifest binds
+  version, build, Commit, Bundle ID, architecture, artifact/provenance
+  SHA-256, and fixed GitHub-then-Gitee download order; Team ID and minimum
+  system are independently checked against the downloaded App/provenance.
+- Public GitHub Release descriptions are Chinese-first/English-second; the
+  Gitee Release description uses the matching Simplified Chinese notes.
+- `GITEE_ACCESS_TOKEN` is a host credential read only by the central client; it
+  must never be printed or written into the repository, product metadata,
+  plans, state, logs or provenance.
 - Publishing must not dispatch Homebrew or rebuild a separate Gitee artifact
+
+## Dual-mirror release policy
+
+- Explicit policy: `aulyc-dual-mirror-v1` `1.1.0`; the Release Profile remains
+  `macos-arm64-app`.
+- Project adapter: `scripts/dual-mirror-release.sh` only binds project ID
+  `aulycshot`; `scripts/publish-update-mirrors.sh` composes the central
+  `prepare`, `preflight`, `publish`, and `verify` phases.
+- Full mapping and retry contract: `docs/DUAL_MIRROR_RELEASE.md`.
+- The updater loads the central `latest.json` Schema, downloads and verifies
+  the release provenance before the DMG, then verifies the installed App.
+- Only an explicitly authorized `publish` may write remote state. One-sided
+  failure records partial/failed state and retries the same immutable plan;
+  never push source to Gitee or overwrite an old release.
 
 ## Data Credentials and Compatibility Identities
 

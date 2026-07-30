@@ -10,10 +10,11 @@ import CryptoKit
 final class UpdateInstaller: NSObject {
     static let shared = UpdateInstaller()
 
-    enum InstallError: Error {
+    enum InstallError: Error, Equatable {
         case download
         case checksumMismatch
         case invalidManifest
+        case invalidProvenance
         case mountFailed
         case bundleNotFound
         case identityMismatch
@@ -27,6 +28,7 @@ final class UpdateInstaller: NSObject {
     private var downloadURLs: [URL] = []
     private var downloadIndex = 0
     private var expectedSHA256 = ""
+    private var downloadedFileExtension = ""
     private var activeTaskIdentifier: Int?
     private var handledTaskIdentifiers = Set<Int>()
     private var delivered = false
@@ -42,6 +44,36 @@ final class UpdateInstaller: NSObject {
         progress: @escaping (Double) -> Void,
         completion: @escaping (Result<URL, Error>) -> Void
     ) {
+        downloadVerifiedFile(
+            from: urls,
+            expectedSHA256: expectedSHA256,
+            fileExtension: "dmg",
+            progress: progress,
+            completion: completion
+        )
+    }
+
+    func downloadProvenance(
+        from urls: [URL],
+        expectedSHA256: String,
+        completion: @escaping (Result<URL, Error>) -> Void
+    ) {
+        downloadVerifiedFile(
+            from: urls,
+            expectedSHA256: expectedSHA256,
+            fileExtension: "json",
+            progress: { _ in },
+            completion: completion
+        )
+    }
+
+    private func downloadVerifiedFile(
+        from urls: [URL],
+        expectedSHA256: String,
+        fileExtension: String,
+        progress: @escaping (Double) -> Void,
+        completion: @escaping (Result<URL, Error>) -> Void
+    ) {
         guard !urls.isEmpty else {
             DispatchQueue.main.async { completion(.failure(InstallError.download)) }
             return
@@ -50,6 +82,7 @@ final class UpdateInstaller: NSObject {
         downloadURLs = urls
         downloadIndex = 0
         self.expectedSHA256 = expectedSHA256
+        downloadedFileExtension = fileExtension
         progressHandler = progress
         finishHandler = completion
         activeTaskIdentifier = nil
@@ -109,6 +142,7 @@ final class UpdateInstaller: NSObject {
     /// the UI can show "verifying / extracting / installing" in turn.
     static func install(
         dmgAt dmgURL: URL,
+        provenanceAt provenanceURL: URL,
         manifest: UpdateManifest,
         phase: (InstallPhase) -> Void
     ) throws {
@@ -117,6 +151,7 @@ final class UpdateInstaller: NSObject {
         } catch {
             throw InstallError.invalidManifest
         }
+        try verifyProvenance(at: provenanceURL, manifest: manifest)
 
         let fm = FileManager.default
         var scratchDir: URL?
@@ -132,6 +167,7 @@ final class UpdateInstaller: NSObject {
                 )
             }
             try? fm.removeItem(at: dmgURL)
+            try? fm.removeItem(at: provenanceURL)
             if let dir = scratchDir, !handedOff { try? fm.removeItem(at: dir) }
         }
 
@@ -240,7 +276,8 @@ final class UpdateInstaller: NSObject {
               info["CFBundleIdentifier"] as? String == manifest.bundleIdentifier,
               info["CFBundleShortVersionString"] as? String == manifest.version,
               String(describing: info["CFBundleVersion"] ?? "") == String(manifest.buildNumber),
-              info["LSMinimumSystemVersion"] as? String == manifest.minimumSystemVersion,
+              info["LSMinimumSystemVersion"] as? String
+                == UpdateManifest.expectedMinimumSystemVersion,
               info["AulycShotGitCommit"] as? String == manifest.commit,
               info["AulycShotReleaseChannel"] as? String == "formal",
               info["AulycShotReleaseTag"] as? String == manifest.tag,
@@ -267,10 +304,13 @@ final class UpdateInstaller: NSObject {
             ["--verify", "--deep", "--strict", "--verbose=2", app.path],
             throwing: .signatureInvalid
         )
-        try verifySignatureDetails(at: app, expectedTeamIdentifier: manifest.teamIdentifier)
+        try verifySignatureDetails(
+            at: app,
+            expectedTeamIdentifier: UpdateManifest.expectedTeamIdentifier
+        )
         try verifySignatureDetails(
             at: extensionBundle,
-            expectedTeamIdentifier: manifest.teamIdentifier
+            expectedTeamIdentifier: UpdateManifest.expectedTeamIdentifier
         )
 
         guard try capturedOutput(
@@ -308,6 +348,44 @@ final class UpdateInstaller: NSObject {
               details.contains("(runtime)")
         else {
             throw InstallError.signatureInvalid
+        }
+    }
+
+    static func verifyProvenance(
+        at url: URL,
+        manifest: UpdateManifest
+    ) throws {
+        guard let data = try? Data(contentsOf: url),
+              let raw = try? JSONSerialization.jsonObject(with: data),
+              let value = raw as? [String: Any],
+              value["releaseProfile"] as? String == manifest.releaseProfile,
+              value["releaseChannel"] as? String == manifest.releaseChannel,
+              value["version"] as? String == manifest.version,
+              value["buildNumber"] as? Int == manifest.buildNumber,
+              value["tag"] as? String == manifest.tag,
+              value["commit"] as? String == manifest.commit,
+              value["dirty"] as? Bool == false,
+              value["bundleIdentifier"] as? String == manifest.bundleIdentifier,
+              value["architecture"] as? String == manifest.architecture,
+              value["sourceRepository"] as? String == "aulyc/aulycShot",
+              value["sourceRemoteCommit"] as? String == manifest.commit,
+              value["sourceRemoteTagCommit"] as? String == manifest.commit,
+              value["sourceRemoteVerifiedAt"] is String,
+              let artifacts = value["artifacts"] as? [[String: Any]],
+              artifacts.contains(where: {
+                  $0["file"] as? String == manifest.artifact.file
+                      && $0["sha256"] as? String == manifest.artifact.sha256
+              })
+        else {
+            throw InstallError.invalidProvenance
+        }
+        if let team = value["teamIdentifier"] as? String,
+           team != UpdateManifest.expectedTeamIdentifier {
+            throw InstallError.invalidProvenance
+        }
+        if let minimumSystemVersion = value["minimumSystemVersion"] as? String,
+           minimumSystemVersion != UpdateManifest.expectedMinimumSystemVersion {
+            throw InstallError.invalidProvenance
         }
     }
 
@@ -384,7 +462,10 @@ extension UpdateInstaller: URLSessionDownloadDelegate {
         totalBytesWritten: Int64,
         totalBytesExpectedToWrite: Int64
     ) {
-        guard totalBytesExpectedToWrite > 0 else { return }
+        guard let activeSession = self.session,
+              session === activeSession,
+              totalBytesExpectedToWrite > 0
+        else { return }
         let fraction = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
         let clamped = min(max(fraction, 0), 1)
         DispatchQueue.main.async { self.progressHandler?(clamped) }
@@ -395,7 +476,11 @@ extension UpdateInstaller: URLSessionDownloadDelegate {
         downloadTask: URLSessionDownloadTask,
         didFinishDownloadingTo location: URL
     ) {
-        guard downloadTask.taskIdentifier == activeTaskIdentifier, !delivered else { return }
+        guard let activeSession = self.session,
+              session === activeSession,
+              downloadTask.taskIdentifier == activeTaskIdentifier,
+              !delivered
+        else { return }
         handledTaskIdentifiers.insert(downloadTask.taskIdentifier)
 
         if let http = downloadTask.response as? HTTPURLResponse, http.statusCode != 200 {
@@ -404,7 +489,9 @@ extension UpdateInstaller: URLSessionDownloadDelegate {
         }
 
         let dest = FileManager.default.temporaryDirectory
-            .appendingPathComponent("aulycShot-update-\(UUID().uuidString).dmg")
+            .appendingPathComponent(
+                "aulycShot-update-\(UUID().uuidString).\(downloadedFileExtension)"
+            )
         do {
             try FileManager.default.moveItem(at: location, to: dest)
             guard try Self.sha256(of: dest) == expectedSHA256 else {
@@ -424,7 +511,9 @@ extension UpdateInstaller: URLSessionDownloadDelegate {
         task: URLSessionTask,
         didCompleteWithError error: Error?
     ) {
-        guard task.taskIdentifier == activeTaskIdentifier,
+        guard let activeSession = self.session,
+              session === activeSession,
+              task.taskIdentifier == activeTaskIdentifier,
               !handledTaskIdentifiers.contains(task.taskIdentifier),
               !delivered
         else { return }

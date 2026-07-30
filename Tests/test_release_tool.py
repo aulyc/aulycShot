@@ -139,7 +139,18 @@ class ReleaseToolTests(unittest.TestCase):
         self.assertEqual(notes, "### 修复\n\n- 之前的版本\n")
         self.assertNotIn("Previous", notes)
 
-    def test_publish_scripts_route_bilingual_and_chinese_notes_by_platform(self):
+    def test_english_release_notes_are_english_only(self):
+        output = self.root / "english-notes.md"
+
+        release_tool.command_release_notes(
+            argparse.Namespace(version="1.6.12", channel="english", output=output)
+        )
+
+        notes = output.read_text(encoding="utf-8")
+        self.assertEqual(notes, "### Fixed\n\n- Previous\n")
+        self.assertNotIn("之前的版本", notes)
+
+    def test_publish_scripts_delegate_channel_formatting_to_central_tool(self):
         canonical = (PROJECT_ROOT / "scripts" / "publish-release.sh").read_text(
             encoding="utf-8"
         )
@@ -147,11 +158,12 @@ class ReleaseToolTests(unittest.TestCase):
             encoding="utf-8"
         )
 
-        self.assertIn("--channel github --output \"$GITHUB_NOTES\"", canonical)
-        self.assertIn("--channel gitee --output \"$GITEE_NOTES\"", canonical)
-        self.assertIn("--notes-file \"$GITHUB_NOTES\"", canonical)
-        self.assertIn("--notes-file \"$GITHUB_NOTES\"", mirrors)
-        self.assertIn("--notes \"$GITEE_NOTES\"", mirrors)
+        self.assertIn('--channel gitee --output "${notes_zh_cn}"', canonical)
+        self.assertIn('--channel english --output "${notes_en}"', canonical)
+        self.assertIn("scripts/dual-mirror-release.sh prepare", mirrors)
+        self.assertIn("scripts/dual-mirror-release.sh preflight", mirrors)
+        self.assertIn("scripts/dual-mirror-release.sh publish", mirrors)
+        self.assertIn("scripts/dual-mirror-release.sh verify", mirrors)
 
     def test_prepare_rejects_version_or_build_rollback(self):
         with self.assertRaisesRegex(release_tool.ReleaseError, "target version must be greater"):
@@ -241,105 +253,6 @@ class ReleaseToolTests(unittest.TestCase):
 
         with self.assertRaisesRegex(release_tool.ReleaseError, "field architecture"):
             release_tool.validate_provenance(provenance)
-
-    def test_write_update_manifest_binds_same_artifact_to_both_mirrors(self):
-        dmg = self.root / "aulycShot-1.6.13-build.495-arm64.dmg"
-        dmg.write_bytes(b"formal artifact")
-        value = self.valid_provenance(dmg)
-        value.update(
-            {
-                "teamIdentifier": "M9M7M2ARFD",
-                "minimumSystemVersion": "14.0",
-            }
-        )
-        provenance = self.root / "release-provenance.json"
-        provenance.write_text(json.dumps(value), encoding="utf-8")
-        output = self.root / "latest.json"
-        github_url = (
-            "https://github.com/aulyc/aulycShot-releases/releases/download/"
-            "1.6.13/aulycShot-1.6.13-build.495-arm64.dmg"
-        )
-        gitee_url = (
-            "https://gitee.com/aulyc/aulycShot-releases/releases/download/"
-            "1.6.13/aulycShot-1.6.13-build.495-arm64.dmg"
-        )
-
-        release_tool.command_write_update_manifest(
-            argparse.Namespace(
-                provenance=provenance,
-                github_url=github_url,
-                gitee_url=gitee_url,
-                release_page_url=None,
-                output=output,
-            )
-        )
-
-        manifest = json.loads(output.read_text(encoding="utf-8"))
-        self.assertEqual(manifest["version"], "1.6.13")
-        self.assertEqual(manifest["buildNumber"], 495)
-        self.assertEqual(manifest["artifact"]["file"], dmg.name)
-        self.assertEqual(
-            [item["source"] for item in manifest["artifact"]["downloads"]],
-            ["github", "gitee"],
-        )
-        self.assertEqual(
-            {item["url"] for item in manifest["artifact"]["downloads"]},
-            {github_url, gitee_url},
-        )
-
-    def test_write_update_manifest_rejects_non_github_primary_url(self):
-        dmg = self.root / "aulycShot-1.6.13-build.495-arm64.dmg"
-        dmg.write_bytes(b"formal artifact")
-        value = self.valid_provenance(dmg)
-        value.update(
-            {
-                "teamIdentifier": "M9M7M2ARFD",
-                "minimumSystemVersion": "14.0",
-            }
-        )
-        provenance = self.root / "release-provenance.json"
-        provenance.write_text(json.dumps(value), encoding="utf-8")
-
-        with self.assertRaisesRegex(release_tool.ReleaseError, "github.com"):
-            release_tool.command_write_update_manifest(
-                argparse.Namespace(
-                    provenance=provenance,
-                    github_url="https://gitee.com/not-primary.dmg",
-                    gitee_url="https://gitee.com/fallback.dmg",
-                    release_page_url=None,
-                    output=self.root / "latest.json",
-                )
-            )
-
-    def test_write_update_manifest_rejects_another_github_repository(self):
-        dmg = self.root / "aulycShot-1.6.13-build.495-arm64.dmg"
-        dmg.write_bytes(b"formal artifact")
-        value = self.valid_provenance(dmg)
-        value.update(
-            {
-                "teamIdentifier": "M9M7M2ARFD",
-                "minimumSystemVersion": "14.0",
-            }
-        )
-        provenance = self.root / "release-provenance.json"
-        provenance.write_text(json.dumps(value), encoding="utf-8")
-
-        with self.assertRaisesRegex(release_tool.ReleaseError, "configured public mirror"):
-            release_tool.command_write_update_manifest(
-                argparse.Namespace(
-                    provenance=provenance,
-                    github_url=(
-                        "https://github.com/other/project/releases/download/"
-                        "1.6.13/aulycShot-1.6.13-build.495-arm64.dmg"
-                    ),
-                    gitee_url=(
-                        "https://gitee.com/aulyc/aulycShot-releases/releases/download/"
-                        "1.6.13/aulycShot-1.6.13-build.495-arm64.dmg"
-                    ),
-                    release_page_url=None,
-                    output=self.root / "latest.json",
-                )
-            )
 
     def test_refresh_standards_hashes_only_declared_files(self):
         controlled = self.root / "Makefile"

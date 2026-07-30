@@ -3,16 +3,31 @@ import XCTest
 @testable import aulycShot
 
 final class UpdateManifestTests: XCTestCase {
-    func testValidManifestKeepsGitHubBeforeGiteeRegardlessOfJSONOrder() throws {
-        let manifest = try UpdateManifest.decodeValidated(
-            from: manifestData(downloadOrder: [.gitee, .github])
-        )
+    func testValidCentralManifestKeepsGitHubBeforeGitee() throws {
+        let manifest = try UpdateManifest.decodeValidated(from: manifestData())
 
         XCTAssertEqual(manifest.version, "1.7.4")
         XCTAssertEqual(
             manifest.orderedDownloadURLs.map(\.host),
             ["github.com", "gitee.com"]
         )
+        XCTAssertEqual(
+            manifest.orderedProvenanceURLs.map(\.host),
+            ["github.com", "gitee.com"]
+        )
+    }
+
+    func testManifestRejectsReversedDownloadOrder() {
+        XCTAssertThrowsError(
+            try UpdateManifest.decodeValidated(
+                from: manifestData(downloadOrder: [.gitee, .github])
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? UpdateManifest.ValidationError,
+                .invalidDownloadSources
+            )
+        }
     }
 
     func testManifestRejectsHTTPDownload() {
@@ -36,9 +51,11 @@ final class UpdateManifestTests: XCTestCase {
         }
     }
 
-    func testManifestRejectsWrongDeveloperTeam() {
+    func testManifestRejectsWrongPolicy() {
         XCTAssertThrowsError(
-            try UpdateManifest.decodeValidated(from: manifestData(teamIdentifier: "OTHERTEAM"))
+            try UpdateManifest.decodeValidated(
+                from: manifestData(policy: "another-policy")
+            )
         ) { error in
             XCTAssertEqual(
                 error as? UpdateManifest.ValidationError,
@@ -136,6 +153,51 @@ final class UpdateManifestTests: XCTestCase {
         )
     }
 
+    func testInstallerRequiresProvenanceToBindSourceAndArtifact() throws {
+        let manifest = try UpdateManifest.decodeValidated(from: manifestData())
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent("aulycShot-update-provenance-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: file) }
+        var value: [String: Any] = [
+            "releaseProfile": manifest.releaseProfile,
+            "releaseChannel": manifest.releaseChannel,
+            "version": manifest.version,
+            "buildNumber": manifest.buildNumber,
+            "tag": manifest.tag,
+            "commit": manifest.commit,
+            "dirty": false,
+            "bundleIdentifier": manifest.bundleIdentifier,
+            "architecture": manifest.architecture,
+            "teamIdentifier": UpdateManifest.expectedTeamIdentifier,
+            "minimumSystemVersion": UpdateManifest.expectedMinimumSystemVersion,
+            "sourceRepository": "aulyc/aulycShot",
+            "sourceRemoteCommit": manifest.commit,
+            "sourceRemoteTagCommit": manifest.commit,
+            "sourceRemoteVerifiedAt": "2026-07-30T00:00:00Z",
+            "artifacts": [
+                [
+                    "file": manifest.artifact.file,
+                    "sha256": manifest.artifact.sha256,
+                ],
+            ],
+        ]
+        try JSONSerialization.data(withJSONObject: value).write(to: file)
+        XCTAssertNoThrow(
+            try UpdateInstaller.verifyProvenance(at: file, manifest: manifest)
+        )
+
+        value["sourceRemoteTagCommit"] = String(repeating: "d", count: 40)
+        try JSONSerialization.data(withJSONObject: value).write(to: file)
+        XCTAssertThrowsError(
+            try UpdateInstaller.verifyProvenance(at: file, manifest: manifest)
+        ) { error in
+            XCTAssertEqual(
+                error as? UpdateInstaller.InstallError,
+                .invalidProvenance
+            )
+        }
+    }
+
     override func tearDown() {
         UpdateManifestURLProtocol.handler = nil
         super.tearDown()
@@ -144,7 +206,7 @@ final class UpdateManifestTests: XCTestCase {
     private func manifestData(
         downloadOrder: [UpdateManifest.Source] = [.github, .gitee],
         githubURL: String = "https://github.com/aulyc/aulycShot-releases/releases/download/1.7.4/aulycShot-1.7.4-build.502-arm64.dmg",
-        teamIdentifier: String = UpdateManifest.expectedTeamIdentifier
+        policy: String = "aulyc-dual-mirror-v1"
     ) -> Data {
         let giteeURL = (
             "https://gitee.com/aulyc/aulycShot-releases/releases/download/"
@@ -156,8 +218,18 @@ final class UpdateManifestTests: XCTestCase {
                 "url": source == .github ? githubURL : giteeURL,
             ]
         }
+        let provenanceFile = "aulycShot-1.7.4-build.502-arm64.release-provenance.json"
+        let provenanceDownloads = downloadOrder.map { source -> [String: String] in
+            let host = source == .github ? "github.com" : "gitee.com"
+            return [
+                "source": source.rawValue,
+                "url": "https://\(host)/aulyc/aulycShot-releases/releases/download/1.7.4/\(provenanceFile)",
+            ]
+        }
         let value: [String: Any] = [
+            "$schema": "urn:codex-engineering-standards:dual-mirror-latest:1",
             "schemaVersion": 1,
+            "policy": policy,
             "releaseProfile": "macos-arm64-app",
             "releaseChannel": "formal",
             "version": "1.7.4",
@@ -166,13 +238,17 @@ final class UpdateManifestTests: XCTestCase {
             "commit": String(repeating: "a", count: 40),
             "architecture": "arm64",
             "bundleIdentifier": UpdateManifest.expectedBundleIdentifier,
-            "teamIdentifier": teamIdentifier,
-            "minimumSystemVersion": "14.0",
+            "pluginIdentifier": NSNull(),
             "releasePageURL": "https://github.com/aulyc/aulycShot-releases/releases/tag/1.7.4",
             "artifact": [
                 "file": "aulycShot-1.7.4-build.502-arm64.dmg",
                 "sha256": String(repeating: "b", count: 64),
                 "downloads": downloads,
+            ],
+            "provenance": [
+                "file": provenanceFile,
+                "sha256": String(repeating: "c", count: 64),
+                "downloads": provenanceDownloads,
             ],
         ]
         return try! JSONSerialization.data(withJSONObject: value, options: [.sortedKeys])

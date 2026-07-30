@@ -9,14 +9,19 @@
       "type": "macos-arm64-app"
     }
   ],
-  "coreVersion": "2.0.1",
+  "coreVersion": "2.1.0",
   "exceptions": [],
   "projectId": "aulycshot",
+  "releasePolicies": [
+    {
+      "id": "aulyc-dual-mirror-v1",
+      "version": "1.1.0"
+    }
+  ],
   "releaseSignals": {
     "ciPaths": [
       ".github/workflows/ci.yml",
       "Tests/aulycShotTests/UpdateManifestTests.swift",
-      "Tests/test_gitee_release.py",
       "Tests/test_icon_assets.py",
       "Tests/test_release_tool.py"
     ],
@@ -26,6 +31,7 @@
       "CHANGELOG.md",
       "CHANGELOG.zh-CN.md",
       "README.md",
+      "docs/DUAL_MIRROR_RELEASE.md",
       "docs/ICON_ASSETS.md",
       "docs/RELEASE.md",
       "design/icon-assets.generated.json",
@@ -39,7 +45,7 @@
       "aulycShot/Utilities/UpdateInstaller.swift",
       "aulycShot/Utilities/UpdateManifest.swift",
       "scripts/bundle.sh",
-      "scripts/gitee_release.py",
+      "scripts/dual-mirror-release.sh",
       "scripts/generate-icon.sh",
       "scripts/icon_assets.py",
       "scripts/inject-build-metadata.sh",
@@ -55,7 +61,6 @@
       "scripts/publish-release.sh",
       "scripts/publish-update-mirrors.sh",
       "Tests/aulycShotTests/UpdateManifestTests.swift",
-      "Tests/test_gitee_release.py",
       "Tests/test_icon_assets.py",
       "Tests/test_release_tool.py"
     ],
@@ -151,6 +156,46 @@
     },
     {
       "evidence": [
+        "AGENTS.md#dual-mirror-release-policy",
+        "docs/DUAL_MIRROR_RELEASE.md"
+      ],
+      "ruleId": "REL-015"
+    },
+    {
+      "evidence": ["docs/DUAL_MIRROR_RELEASE.md"],
+      "ruleId": "DMR-001"
+    },
+    {
+      "evidence": ["docs/DUAL_MIRROR_RELEASE.md", "scripts/dual-mirror-release.sh"],
+      "ruleId": "DMR-002"
+    },
+    {
+      "evidence": [
+        "AGENTS.md#dual-mirror-release-policy",
+        "aulycShot/Utilities/UpdateManifest.swift",
+        "aulycShot/Utilities/UpdateChecker.swift",
+        "aulycShot/Utilities/UpdateInstaller.swift"
+      ],
+      "ruleId": "DMR-003"
+    },
+    {
+      "evidence": ["docs/DUAL_MIRROR_RELEASE.md"],
+      "ruleId": "DMR-004"
+    },
+    {
+      "evidence": ["AGENTS.md#data-credentials-and-compatibility-identities", "scripts/dual-mirror-release.sh"],
+      "ruleId": "DMR-005"
+    },
+    {
+      "evidence": ["docs/DUAL_MIRROR_RELEASE.md", "scripts/dual-mirror-release.sh"],
+      "ruleId": "DMR-006"
+    },
+    {
+      "evidence": ["AGENTS.md#dual-mirror-release-policy", "scripts/dual-mirror-release.sh"],
+      "ruleId": "DMR-007"
+    },
+    {
+      "evidence": [
         "AGENTS.md#versioning-and-release-profile"
       ],
       "ruleId": "MAC-001"
@@ -198,7 +243,7 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "a9cabf884d326970a149db6d9b45fdbec50346f9c63cfb76326383da5ca52d1f"
+      "sha256": "43720d0b0dd412f0e350bd62e7781ad00b65aff4c6f4bfc0bc3f44bcb4e775fd"
     },
     {
       "path": "README.md",
@@ -210,7 +255,7 @@
     },
     {
       "path": "docs/RELEASE.md",
-      "sha256": "a13768d807455453ae9ee24306d01ee848ecb4e266ab8f85f694f515188f4cca"
+      "sha256": "82d0d0051f8f9c136574579a1b11c612cf1e78f4143d2cc6578d30b2d8424b22"
     },
     {
       "path": "design/icon-assets.generated.json",
@@ -238,23 +283,19 @@
     },
     {
       "path": "aulycShot/Utilities/UpdateChecker.swift",
-      "sha256": "0d5df08708c7b3909e47165f4d29621087696b7357194daf77d6590f66a21caf"
+      "sha256": "f04704df99b0ae1666b8c0fb0187506e748cb0655524252964986bca5362c333"
     },
     {
       "path": "aulycShot/Utilities/UpdateInstaller.swift",
-      "sha256": "9c2d3769472d36655ed0a41cf1051d8903edb85e71a40ec234b31fdb63311862"
+      "sha256": "b34c714b003a738b8074906be2f7ec08097c48ff95972deb02e8529ef5302df3"
     },
     {
       "path": "aulycShot/Utilities/UpdateManifest.swift",
-      "sha256": "4fd0ec8b428d0cbaf3d7cc8b40084fc9aacdb75fb73eea2f8e58434bc5a361f6"
+      "sha256": "ac4d743a3f4516f21b45aa42c781b489b1d38eec4f013dbb077012b397046233"
     },
     {
       "path": "scripts/bundle.sh",
       "sha256": "ac02bbfdb51a354c5d5e401eb2d629fc2427ccea9edacd1f19cf7750335c679e"
-    },
-    {
-      "path": "scripts/gitee_release.py",
-      "sha256": "e6629f535a8ad6abba9f005ed5992710bfbff718b3e13fca815a69d98eb3a6e4"
     },
     {
       "path": "scripts/generate-icon.sh",
@@ -274,7 +315,7 @@
     },
     {
       "path": "scripts/release_tool.py",
-      "sha256": "db9691439e07b7d7e24ad6ea499fcb00231f79d38ffaab89eabf0e38143ec0c0"
+      "sha256": "1e5d28e95a72321b89237556e282734cca8e397c9a1cac4d60b61c0014137b7d"
     },
     {
       "path": "scripts/prepare-formal-release.sh",
@@ -306,19 +347,15 @@
     },
     {
       "path": "scripts/publish-release.sh",
-      "sha256": "148f253423ccf5834911cb29696de27b35877a279963bcd9db31f2d7af3a88ec"
+      "sha256": "c0c9ce1d133609a535aae9aa1b4640bf3682dfcbb573317c4db6f86ad4b4e8f4"
     },
     {
       "path": "scripts/publish-update-mirrors.sh",
-      "sha256": "bd7c8ecac9c853ba61cdf772897009d0691f6bed4b23b57b42e699c0c819a134"
+      "sha256": "d41d30dee36c168600a4a3062504ba99bdfacf0f5c9142a1aa347d511abe9fae"
     },
     {
       "path": "Tests/aulycShotTests/UpdateManifestTests.swift",
-      "sha256": "bf536b7d16c3e6c67d72c091f3569d815870dbe97ec0ee9d23e48cf01aba6365"
-    },
-    {
-      "path": "Tests/test_gitee_release.py",
-      "sha256": "e97d5e4b617db1e70399372f4c9cb6b26adc645157df0c95a4ab1c0b47875717"
+      "sha256": "f54cef0c7aa252558bc9521cebd94e4608c305ef5238d3a8bb5fc9df470ace89"
     },
     {
       "path": "Tests/test_icon_assets.py",
@@ -326,7 +363,15 @@
     },
     {
       "path": "Tests/test_release_tool.py",
-      "sha256": "8faa9179a6123f4c6ab0b4b08ecaff201f12795be4568e76e067f7a9993a16dd"
+      "sha256": "546966eb4c93386d2bf7aea9a6d66be8a7f0e656b1834064208d022504f74d96"
+    },
+    {
+      "path": "docs/DUAL_MIRROR_RELEASE.md",
+      "sha256": "22e205f68e152fe7d311e4947f1dde6438490ed898eae81ed7f276b01315b3f9"
+    },
+    {
+      "path": "scripts/dual-mirror-release.sh",
+      "sha256": "735bf4098dbc9b468374640dbd0cf8e590b4f15d300c4eaefbf93147f393951d"
     }
   ]
 }

@@ -6,7 +6,7 @@
 |---|---|
 | Release Profile | `macos-arm64-app` 1.0.0 |
 | 架构 | Apple Silicon `arm64` only |
-| 分发渠道 | Developer ID DMG；私有 GitHub 权威发布；公开 GitHub/Gitee 安装包镜像 |
+| 分发渠道 | 私有 GitHub 源码权威；`aulyc-dual-mirror-v1` 公开 GitHub/Gitee 正式产物镜像 |
 | GitHub | `aulyc/aulycShot` / `origin` / `main` |
 | 唯一版本源 | `aulycShot/App/Info.plist` |
 | App Bundle ID | `com.aulyc.aulycshot` |
@@ -17,7 +17,7 @@ App 和 share extension 都必须只包含 `arm64` slice，并共享相同的版
 Bundle ID、entitlements、Developer ID、Hardened Runtime 和公证信任。出现其他
 架构或缺少任一信任检查都会阻断发布。
 
-当前不发布测试版，也不触发 Homebrew。正式源码和权威 Release 仍位于私有 GitHub
+当前不发布测试版，也不触发 Homebrew。正式源码 branch/tag 只发布到私有 GitHub
 仓库；同一个已签名、公证的 DMG 会原样发布到 GitHub 和 Gitee 两个公开安装包镜像。
 两端保存完全一致的 `latest.json`，应用始终先访问 GitHub，失败后访问 Gitee。
 
@@ -134,21 +134,23 @@ make publish-release RELEASE_PROVENANCE=/absolute/path/aulycShot-....release-pro
 
 入口重新验证产物与已安装 App，调用中央 gate 原子推送 `main` 和 annotated tag，
 回读远端 branch 与 peeled tag Commit，补齐 provenance 的远端源码字段并刷新其
-SHA-256。只有远端标签已验证后，才以 `gh release create --verify-tag` 创建私有
-GitHub Release 并上传 DMG、checksums 和 provenance。
+SHA-256。只有远端标签和最终 provenance 已验证后，才进入中央双镜像
+`prepare -> preflight -> publish -> verify`。私有源码仓库不承担公开镜像角色。
 
-发布说明按平台生成：权威 GitHub Release 和公开 GitHub 镜像使用同一份双语
-Markdown，顺序固定为简体中文在前、英文在后；Gitee Release 只发布与中文版
-Changelog 对应的简体中文说明。生成入口为：
+发布说明按平台生成：中央工具把项目提供的中文和英文正文组合为公开 GitHub
+中文在前、英文在后的双语 Markdown；Gitee 只使用简体中文。项目原始正文生成
+入口为：
 
 ```bash
 python3 scripts/release_tool.py release-notes \
-  --version <version> --channel github --output <github-notes.md>
+  --version <version> --channel gitee --output <release-notes.zh-CN.md>
 python3 scripts/release_tool.py release-notes \
-  --version <version> --channel gitee --output <gitee-notes.md>
+  --version <version> --channel english --output <release-notes.en.md>
 ```
 
-随后 `scripts/publish-update-mirrors.sh` 将完全相同的四个文件发布到：
+随后 `scripts/publish-update-mirrors.sh` 只做项目验证和参数映射，并调用中央
+`scripts/dual_mirror_release.py`。两端发布完全相同的 DMG、DMG checksum、最终
+provenance、provenance checksum 和 `latest.json`：
 
 ```text
 GitHub  https://github.com/aulyc/aulycShot-releases
@@ -157,9 +159,10 @@ Gitee  https://gitee.com/aulyc/aulycShot-releases
 
 两个仓库都必须公开，但只保存正式安装包、校验和、provenance、按上述平台语言
 策略生成的发布说明和更新清单，不改变中央 registry 中唯一的私有 GitHub 源码
-绑定。GitHub 镜像由 `gh` 管理；Gitee 使用宿主机环境中的
-`GITEE_ACCESS_TOKEN` 调用官方 OpenAPI。令牌不能写入仓库、日志、App、
-provenance 或命令行参数。
+绑定。GitHub 镜像由中央客户端通过 `gh` 管理；Gitee 由同一中央客户端使用
+宿主机环境中的 `GITEE_ACCESS_TOKEN` 调用官方 OpenAPI。项目不再保存自己的
+Gitee API 客户端。令牌不能写入仓库、日志、计划、状态、App、provenance 或
+命令行参数。
 
 镜像上传完成后，发布脚本生成同一份 `latest.json` 并分别写入两个仓库的 `main`：
 
@@ -168,20 +171,23 @@ https://raw.githubusercontent.com/aulyc/aulycShot-releases/main/latest.json
 https://gitee.com/aulyc/aulycShot-releases/raw/main/latest.json
 ```
 
-清单绑定正式版本、build、tag、Commit、arm64、Bundle ID、Team ID、最低系统、
-DMG 文件名和 SHA-256，并同时列出 GitHub、Gitee 下载地址。应用先读取 GitHub
-清单，只有连接失败、非 200 或清单无效时才读取 Gitee；下载阶段同样先 GitHub
-后 Gitee。任一镜像下载的 DMG 哈希不匹配都会拒绝，解包后的 App 还必须通过
-Developer ID、Team ID、Bundle ID、版本/build、Commit、Hardened Runtime、
-arm64-only、嵌套扩展签名和 Gatekeeper 验证。
+清单绑定正式版本、build、tag、Commit、arm64、Bundle ID、DMG SHA-256、
+provenance SHA-256，并分别列出 GitHub、Gitee 下载地址。应用先读取 GitHub
+清单，只有连接失败、非 200 或清单无效时才读取 Gitee；随后先下载并验证
+provenance，再按同一顺序下载 DMG。任一镜像的 SHA-256 不匹配都会拒绝；
+provenance 必须再次绑定私有源码仓库、远端 Commit/tag 和同一 DMG，解包后的
+App 还必须通过 Developer ID、固定 Team ID、Bundle ID、最低系统、版本/build、
+Commit、Hardened Runtime、arm64-only、嵌套扩展签名和 Gatekeeper 验证。
 
-若权威 Release 已成功而镜像步骤需要单独重试，使用：
+若源码 branch/tag 已成功而镜像步骤需要单独重试，使用：
 
 ```bash
 make publish-update-mirrors RELEASE_PROVENANCE=/absolute/path/aulycShot-....release-provenance.json
 ```
 
-公开镜像不得从不同源码重建产物，也不得覆盖已发布版本。
+公开镜像不得从不同源码重建产物，也不得覆盖已发布版本。中央 staging 保存在
+`dist/dual-mirror-<version>/`，其中 `dual-mirror-state.json` 用于无凭据、
+不可覆盖的安全重试。
 
 ## 发布阻断条件
 

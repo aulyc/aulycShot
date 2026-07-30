@@ -42,8 +42,10 @@ struct UpdateManifest: Decodable, Equatable {
 
     static let expectedBundleIdentifier = "com.aulyc.aulycshot"
     static let expectedTeamIdentifier = "M9M7M2ARFD"
+    static let expectedMinimumSystemVersion = "14.0"
 
     let schemaVersion: Int
+    let policy: String
     let releaseProfile: String
     let releaseChannel: String
     let version: String
@@ -52,10 +54,10 @@ struct UpdateManifest: Decodable, Equatable {
     let commit: String
     let architecture: String
     let bundleIdentifier: String
-    let teamIdentifier: String
-    let minimumSystemVersion: String
+    let pluginIdentifier: String?
     let releasePageURL: URL
     let artifact: Artifact
+    let provenance: Artifact
 
     static func decodeValidated(from data: Data) throws -> UpdateManifest {
         let manifest = try JSONDecoder().decode(UpdateManifest.self, from: data)
@@ -67,12 +69,12 @@ struct UpdateManifest: Decodable, Equatable {
         guard schemaVersion == 1 else {
             throw ValidationError.unsupportedSchema
         }
-        guard releaseProfile == "macos-arm64-app",
+        guard policy == "aulyc-dual-mirror-v1",
+              releaseProfile == "macos-arm64-app",
               releaseChannel == "formal",
               architecture == "arm64",
               bundleIdentifier == Self.expectedBundleIdentifier,
-              teamIdentifier == Self.expectedTeamIdentifier,
-              minimumSystemVersion == "14.0",
+              pluginIdentifier == nil,
               tag == version
         else {
             throw ValidationError.unexpectedReleaseIdentity
@@ -90,49 +92,38 @@ struct UpdateManifest: Decodable, Equatable {
             throw ValidationError.invalidCommit
         }
         guard artifact.file.hasSuffix(".dmg"),
-              artifact.sha256.range(
-                of: #"^[0-9a-f]{64}$"#,
-                options: .regularExpression
-              ) != nil
+              provenance.file.hasSuffix(".release-provenance.json"),
+              Self.isSHA256(artifact.sha256),
+              Self.isSHA256(provenance.sha256)
         else {
             throw ValidationError.invalidArtifact
-        }
-
-        let sources = artifact.downloads.map(\.source)
-        guard artifact.downloads.count == Source.allCases.count,
-              Set(sources).count == Source.allCases.count,
-              Set(sources) == Set(Source.allCases)
-        else {
-            throw ValidationError.invalidDownloadSources
         }
 
         guard isSecureReleasePage(releasePageURL) else {
             throw ValidationError.insecureURL
         }
-        for download in artifact.downloads {
-            guard download.url.scheme == "https",
-                  download.url.host?.lowercased() == download.source.expectedHost,
-                  Self.isExpectedDownloadURL(
-                    download.url,
-                    source: download.source,
-                    tag: tag,
-                    artifactFile: artifact.file
-                  )
-            else {
-                throw ValidationError.insecureURL
-            }
-        }
+        try validateDownloads(artifact)
+        try validateDownloads(provenance)
     }
 
     var orderedDownloadURLs: [URL] {
-        Source.allCases.compactMap { expectedSource in
-            artifact.downloads.first(where: { $0.source == expectedSource })?.url
-        }
+        artifact.downloads.map(\.url)
+    }
+
+    var orderedProvenanceURLs: [URL] {
+        provenance.downloads.map(\.url)
     }
 
     private static func isStableVersion(_ value: String) -> Bool {
         value.range(
             of: #"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$"#,
+            options: .regularExpression
+        ) != nil
+    }
+
+    private static func isSHA256(_ value: String) -> Bool {
+        value.range(
+            of: #"^[0-9a-f]{64}$"#,
             options: .regularExpression
         ) != nil
     }
@@ -159,6 +150,25 @@ struct UpdateManifest: Decodable, Equatable {
         case .gitee:
             return url.path
                 == "/aulyc/aulycShot-releases/releases/download/\(tag)/\(artifactFile)"
+        }
+    }
+
+    private func validateDownloads(_ downloadable: Artifact) throws {
+        guard downloadable.downloads.map(\.source) == Source.allCases else {
+            throw ValidationError.invalidDownloadSources
+        }
+        for download in downloadable.downloads {
+            guard download.url.scheme == "https",
+                  download.url.host?.lowercased() == download.source.expectedHost,
+                  Self.isExpectedDownloadURL(
+                    download.url,
+                    source: download.source,
+                    tag: tag,
+                    artifactFile: downloadable.file
+                  )
+            else {
+                throw ValidationError.insecureURL
+            }
         }
     }
 }

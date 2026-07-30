@@ -187,41 +187,62 @@ final class UpdateChecker {
             onFailure?()
         }
 
-        var lastPercent = -1
-        UpdateInstaller.shared.downloadDMG(
-            from: manifest.orderedDownloadURLs,
-            expectedSHA256: manifest.artifact.sha256,
-            progress: { fraction in
-                // Throttle to whole-percent steps so the menu/About pane
-                // don't rebuild on every byte.
-                let percent = Int(fraction * 100)
-                guard percent != lastPercent else { return }
-                lastPercent = percent
-                self.setState(.downloading(version: version, fraction: fraction))
-            },
-            completion: { result in
-                switch result {
-                case .failure:
-                    fail()
-                case .success(let dmgPath):
-                    self.setState(.installing(version: version, phase: .verifying))
-                    DispatchQueue.global(qos: .userInitiated).async {
-                        do {
-                            try UpdateInstaller.install(
-                                dmgAt: dmgPath,
-                                manifest: manifest,
-                                phase: { phase in
-                                    self.setState(.installing(version: version, phase: phase))
-                                }
+        UpdateInstaller.shared.downloadProvenance(
+            from: manifest.orderedProvenanceURLs,
+            expectedSHA256: manifest.provenance.sha256
+        ) { provenanceResult in
+            switch provenanceResult {
+            case .failure:
+                fail()
+            case .success(let provenancePath):
+                var lastPercent = -1
+                UpdateInstaller.shared.downloadDMG(
+                    from: manifest.orderedDownloadURLs,
+                    expectedSHA256: manifest.artifact.sha256,
+                    progress: { fraction in
+                        // Throttle to whole-percent steps so the menu/About
+                        // pane does not rebuild on every byte.
+                        let percent = Int(fraction * 100)
+                        guard percent != lastPercent else { return }
+                        lastPercent = percent
+                        self.setState(
+                            .downloading(version: version, fraction: fraction)
+                        )
+                    },
+                    completion: { result in
+                        switch result {
+                        case .failure:
+                            try? FileManager.default.removeItem(at: provenancePath)
+                            fail()
+                        case .success(let dmgPath):
+                            self.setState(
+                                .installing(version: version, phase: .verifying)
                             )
-                            DispatchQueue.main.async { NSApp.terminate(nil) }
-                        } catch {
-                            DispatchQueue.main.async { fail() }
+                            DispatchQueue.global(qos: .userInitiated).async {
+                                do {
+                                    try UpdateInstaller.install(
+                                        dmgAt: dmgPath,
+                                        provenanceAt: provenancePath,
+                                        manifest: manifest,
+                                        phase: { phase in
+                                            self.setState(
+                                                .installing(
+                                                    version: version,
+                                                    phase: phase
+                                                )
+                                            )
+                                        }
+                                    )
+                                    DispatchQueue.main.async { NSApp.terminate(nil) }
+                                } catch {
+                                    DispatchQueue.main.async { fail() }
+                                }
+                            }
                         }
                     }
-                }
+                )
             }
-        )
+        }
     }
 
     private func finish(_ newState: UpdateState, completion: ((UpdateState) -> Void)?) {
