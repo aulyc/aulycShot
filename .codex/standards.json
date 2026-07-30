@@ -4,18 +4,24 @@
   "artifacts": [
     {
       "id": "aulycshot-macos-app",
+      "operations": {
+        "formalRelease": "release-only",
+        "formalReleaseInstall": "release-and-live-target",
+        "testRelease": "not-supported",
+        "testReleaseInstall": "not-supported"
+      },
       "profile": "macos-arm64-app",
-      "profileVersion": "1.0.0",
+      "profileVersion": "2.0.0",
       "type": "macos-arm64-app"
     }
   ],
-  "coreVersion": "2.1.0",
+  "coreVersion": "3.0.0",
   "exceptions": [],
   "projectId": "aulycshot",
   "releasePolicies": [
     {
       "id": "aulyc-dual-mirror-v1",
-      "version": "1.1.0"
+      "version": "1.2.0"
     }
   ],
   "releaseSignals": {
@@ -162,11 +168,23 @@
       "ruleId": "REL-015"
     },
     {
-      "evidence": ["docs/DUAL_MIRROR_RELEASE.md"],
+      "evidence": [
+        "AGENTS.md#release-gates",
+        "docs/RELEASE.md#产物和安装后验证"
+      ],
+      "ruleId": "REL-016"
+    },
+    {
+      "evidence": [
+        "docs/DUAL_MIRROR_RELEASE.md"
+      ],
       "ruleId": "DMR-001"
     },
     {
-      "evidence": ["docs/DUAL_MIRROR_RELEASE.md", "scripts/dual-mirror-release.sh"],
+      "evidence": [
+        "docs/DUAL_MIRROR_RELEASE.md",
+        "scripts/dual-mirror-release.sh"
+      ],
       "ruleId": "DMR-002"
     },
     {
@@ -179,20 +197,38 @@
       "ruleId": "DMR-003"
     },
     {
-      "evidence": ["docs/DUAL_MIRROR_RELEASE.md"],
+      "evidence": [
+        "docs/DUAL_MIRROR_RELEASE.md"
+      ],
       "ruleId": "DMR-004"
     },
     {
-      "evidence": ["AGENTS.md#data-credentials-and-compatibility-identities", "scripts/dual-mirror-release.sh"],
+      "evidence": [
+        "AGENTS.md#data-credentials-and-compatibility-identities",
+        "scripts/dual-mirror-release.sh"
+      ],
       "ruleId": "DMR-005"
     },
     {
-      "evidence": ["docs/DUAL_MIRROR_RELEASE.md", "scripts/dual-mirror-release.sh"],
+      "evidence": [
+        "docs/DUAL_MIRROR_RELEASE.md",
+        "scripts/dual-mirror-release.sh"
+      ],
       "ruleId": "DMR-006"
     },
     {
-      "evidence": ["AGENTS.md#dual-mirror-release-policy", "scripts/dual-mirror-release.sh"],
+      "evidence": [
+        "AGENTS.md#dual-mirror-release-policy",
+        "scripts/dual-mirror-release.sh"
+      ],
       "ruleId": "DMR-007"
+    },
+    {
+      "evidence": [
+        "AGENTS.md#release-gates",
+        "docs/DUAL_MIRROR_RELEASE.md"
+      ],
+      "ruleId": "DMR-008"
     },
     {
       "evidence": [
@@ -229,6 +265,13 @@
         "docs/RELEASE.md#产物和安装后验证"
       ],
       "ruleId": "MAC-006"
+    },
+    {
+      "evidence": [
+        "docs/RELEASE.md#产物和安装后验证",
+        "scripts/verify-formal-artifact.sh"
+      ],
+      "ruleId": "MAC-007"
     }
   ],
   "schemaVersion": 1,
@@ -243,7 +286,7 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "43720d0b0dd412f0e350bd62e7781ad00b65aff4c6f4bfc0bc3f44bcb4e775fd"
+      "sha256": "8644236e51cd2be210289d6eeb63fcd773fe3d3600b1d74ebf68d9bfc5f5d2e8"
     },
     {
       "path": "README.md",
@@ -255,7 +298,7 @@
     },
     {
       "path": "docs/RELEASE.md",
-      "sha256": "82d0d0051f8f9c136574579a1b11c612cf1e78f4143d2cc6578d30b2d8424b22"
+      "sha256": "a014d7d30801d1aa6c578e25b1932bbaba53c1fef0957d05db9b6889c1436d4f"
     },
     {
       "path": "design/icon-assets.generated.json",
@@ -347,7 +390,7 @@
     },
     {
       "path": "scripts/publish-release.sh",
-      "sha256": "c0c9ce1d133609a535aae9aa1b4640bf3682dfcbb573317c4db6f86ad4b4e8f4"
+      "sha256": "e5926c52dfda8ef77db24783912eda5c9433d7cfa8b877323e301635887c24ca"
     },
     {
       "path": "scripts/publish-update-mirrors.sh",
@@ -363,11 +406,11 @@
     },
     {
       "path": "Tests/test_release_tool.py",
-      "sha256": "546966eb4c93386d2bf7aea9a6d66be8a7f0e656b1834064208d022504f74d96"
+      "sha256": "ee1af699e2d1aa43634f4ff3d6fb80ea9c3dd72bd96a5e3fb4c0f17225127e6a"
     },
     {
       "path": "docs/DUAL_MIRROR_RELEASE.md",
-      "sha256": "22e205f68e152fe7d311e4947f1dde6438490ed898eae81ed7f276b01315b3f9"
+      "sha256": "6b3113119049af4c0e84132d975783429dd5059594e19bb6e117eb729c7da64c"
     },
     {
       "path": "scripts/dual-mirror-release.sh",

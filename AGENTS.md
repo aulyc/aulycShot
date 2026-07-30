@@ -134,16 +134,22 @@ This script builds the app bundle, kills any running instance, launches the new 
   Runtime and only the `arm64` slice. The signed DMG requires Apple
   notarization `Accepted`, stapling, `stapler validate` and Gatekeeper
 - Release provenance is `*.release-provenance.json`, records `dirty: false`,
-  and is independently checked against Git, the real DMG, mounted App and
-  installed App
+  and is independently checked against Git, the real DMG and mounted App.
+  Installed-App checks run only for an explicitly requested installation.
+- `正式发版` and `完整发版` build, publish and read back the formal release but
+  never write `/Applications`. `正式发版安装` performs that release first and
+  then runs `make install-release` for its exact provenance. `安装正式版`
+  installs an existing verified formal provenance without creating a release.
+  Test release operations are not supported. Pure release reports
+  `installationStatus: not-requested`.
 
 ## GitHub Source Publication
 
 - Central binding: `aulyc/aulycShot`, remote `origin`, branch `main`
 - Preflight runs before release metadata changes through
   `scripts/prepare-formal-release.sh`
-- Publish only after the exact-tag artifact has been notarized and the formal
-  App has been installed and verified
+- Publish after the exact-tag artifact has been notarized and independently
+  verified from the DMG; installation is not a publication prerequisite
 - `make publish-release RELEASE_PROVENANCE=/absolute/path/...release-provenance.json`
   uses the central gate for one atomic, non-force branch and annotated-tag push,
   remote ref readback and provenance finalization, then delegates public
@@ -166,7 +172,7 @@ This script builds the app bundle, kills any running instance, launches the new 
 
 ## Dual-mirror release policy
 
-- Explicit policy: `aulyc-dual-mirror-v1` `1.1.0`; the Release Profile remains
+- Explicit policy: `aulyc-dual-mirror-v1` `1.2.0`; the Release Profile remains
   `macos-arm64-app`.
 - Project adapter: `scripts/dual-mirror-release.sh` only binds project ID
   `aulycshot`; `scripts/publish-update-mirrors.sh` composes the central

@@ -107,11 +107,17 @@ ID、staple、Gatekeeper、DMG 和 App 可执行文件 SHA-256。它与 `Info.pl
 make verify-artifact RELEASE_PROVENANCE=/absolute/path/aulycShot-....release-provenance.json
 ```
 
+这是正式发版的产物门禁，不写入 `/Applications`。`正式发版`和`完整发版`只执行
+构建、发布、双端回读和一致性校验，安装状态报告为 `not-requested`。
+
 正式安装并验证：
 
 ```bash
 make install-release RELEASE_PROVENANCE=/absolute/path/aulycShot-....release-provenance.json
 ```
+
+只有用户明确要求“正式发版安装”或“安装正式版”时才执行安装；前者安装本次发布
+的精确 provenance，后者只安装既有已验证发布，不创建新版本、标签或 Release。
 
 安装入口先复核产物，再安全替换 `/Applications/aulycShot.app`，失败时回滚旧 App，
 不删除设置、历史、截图、Keychain 或隐私数据。随后核对版本、build、Commit、tag、
@@ -126,13 +132,14 @@ make verify-installed RELEASE_PROVENANCE=/absolute/path/aulycShot-....release-pr
 
 ## 正式 GitHub 源码发布
 
-安装验证后执行：
+产物验证后执行：
 
 ```bash
 make publish-release RELEASE_PROVENANCE=/absolute/path/aulycShot-....release-provenance.json
 ```
 
-入口重新验证产物与已安装 App，调用中央 gate 原子推送 `main` 和 annotated tag，
+入口重新验证 DMG 与挂载 App，不检查或修改已安装 App；随后调用中央 gate 原子
+推送 `main` 和 annotated tag，
 回读远端 branch 与 peeled tag Commit，补齐 provenance 的远端源码字段并刷新其
 SHA-256。只有远端标签和最终 provenance 已验证后，才进入中央双镜像
 `prepare -> preflight -> publish -> verify`。私有源码仓库不承担公开镜像角色。

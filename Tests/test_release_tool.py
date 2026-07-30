@@ -160,6 +160,9 @@ class ReleaseToolTests(unittest.TestCase):
 
         self.assertIn('--channel gitee --output "${notes_zh_cn}"', canonical)
         self.assertIn('--channel english --output "${notes_en}"', canonical)
+        self.assertIn("scripts/verify-formal-artifact.sh", canonical)
+        self.assertNotIn("scripts/verify-installed.sh", canonical)
+        self.assertNotIn("scripts/install-release.sh", canonical)
         self.assertIn("scripts/dual-mirror-release.sh prepare", mirrors)
         self.assertIn("scripts/dual-mirror-release.sh preflight", mirrors)
         self.assertIn("scripts/dual-mirror-release.sh publish", mirrors)

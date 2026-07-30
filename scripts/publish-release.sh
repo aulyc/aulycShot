@@ -7,7 +7,6 @@ provenance="$(cd "$(dirname "${1:?usage: publish-release.sh <provenance>}")" && 
 cd "${root}"
 
 bash scripts/verify-formal-artifact.sh "${provenance}"
-bash scripts/verify-installed.sh "${provenance}"
 version="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["version"])' "${provenance}")"
 
 python3 "${standards_root}/scripts/formal_release_git.py" push \

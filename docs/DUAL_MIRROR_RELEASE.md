@@ -1,6 +1,6 @@
 # 双发布源接入
 
-本项目显式采用中央可选策略 `aulyc-dual-mirror-v1` `1.1.0`，Release Profile
+本项目显式采用中央可选策略 `aulyc-dual-mirror-v1` `1.2.0`，Release Profile
 仍是 `macos-arm64-app`。私有 GitHub 仓库 `aulyc/aulycShot` 是唯一源码权威；
 不得向 Gitee 推送源码。
 
@@ -10,10 +10,11 @@ DMG checksum、最终 provenance、provenance checksum 和 `latest.json`。
 
 应用内更新器固定先读取 GitHub manifest，失败后读取 Gitee；无论来源均验证
 版本、正整数 build、Commit、Bundle ID、arm64、DMG SHA-256、provenance
-SHA-256、Developer ID、公证、安装身份和 installed-runtime。Gitee 只改变传输
-来源，不降低验证要求。
+SHA-256、Developer ID、公证和发布产物身份。installed-runtime 只在明确请求
+安装时验证；Gitee 只改变传输来源，不降低验证要求。
 
-项目现有流程仍负责 DMG、最终 provenance、Changelog、签名、公证和安装验证。
+项目现有流程仍负责 DMG、最终 provenance、Changelog、签名、公证和发布产物
+验证。
 源码 branch/tag 已推送并回写最终 provenance 后：
 
 ```bash
@@ -35,3 +36,7 @@ bash scripts/dual-mirror-release.sh verify \
 
 `prepare` 只生成项目内 staging；`preflight` 只读；只有明确授权的 `publish`
 写远端。任一端失败都保留无凭据状态并只允许同计划向前重试；禁止覆盖旧版本。
+
+纯正式发版不会写入 `/Applications`，完成时报告
+`installationStatus: not-requested`。只有“正式发版安装”在双端发布完整成功后
+执行项目安装入口。
