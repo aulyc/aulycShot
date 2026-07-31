@@ -199,9 +199,12 @@
 "aboutWebsiteURL" = "https://www.aulyc.com";
 "aboutRelatedLinksTitle" = "相关链接";
 "aboutAcknowledgementsTitle" = "致谢";
-"aboutAcknowledgementFirst" = "1. 感谢 Linux.do 社区在测试、反馈和讨论中的支持";
-"aboutAcknowledgementSecond" = "2. 感谢所有提交需求、问题和改进建议的用户";
-"aboutAcknowledgementThird" = "3. 感谢开源社区与开发工具提供的灵感和帮助";
+"aboutAcknowledgementFirst" = "1. 感谢伟大的 AI 时代，让更多想法得以更快成为现实";
+"aboutAcknowledgementSecond" = "2. 致敬 Codex 与 Claude，在创作与开发中持续并肩协作";
+"aboutAcknowledgementThird" = "3. 感谢 Linux.do 社区在测试、反馈与讨论中的支持";
+"aboutAcknowledgementFourth" = "4. 感谢每一位提交需求、报告问题和提出改进建议的用户";
+"aboutAcknowledgementFifth" = "5. 感谢开源社区与开发工具带来的启发和帮助";
+"aboutAcknowledgementSixth" = "6. 感谢 aulyc 一路以来的坚持与灵感";
 "aboutCopyright" = "Copyright © 2026 aulyc. All rights reserved";
 "aboutLicense" = "开源协议";
 "aboutVersion" = "版本 %@ · build %@";

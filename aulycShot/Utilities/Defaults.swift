@@ -318,6 +318,9 @@ enum L10n {
     static var aboutAcknowledgementFirst: String { s("aboutAcknowledgementFirst") }
     static var aboutAcknowledgementSecond: String { s("aboutAcknowledgementSecond") }
     static var aboutAcknowledgementThird: String { s("aboutAcknowledgementThird") }
+    static var aboutAcknowledgementFourth: String { s("aboutAcknowledgementFourth") }
+    static var aboutAcknowledgementFifth: String { s("aboutAcknowledgementFifth") }
+    static var aboutAcknowledgementSixth: String { s("aboutAcknowledgementSixth") }
     static var aboutCopyright: String { s("aboutCopyright") }
     static var aboutSourceCode: String { s("aboutSourceCode") }
     static var aboutStarOnGitHub: String { s("aboutStarOnGitHub") }

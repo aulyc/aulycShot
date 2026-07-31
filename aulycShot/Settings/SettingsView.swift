@@ -1311,6 +1311,9 @@ class SettingsView: NSView {
             L10n.aboutAcknowledgementFirst,
             L10n.aboutAcknowledgementSecond,
             L10n.aboutAcknowledgementThird,
+            L10n.aboutAcknowledgementFourth,
+            L10n.aboutAcknowledgementFifth,
+            L10n.aboutAcknowledgementSixth,
         ] {
             let label = aboutBodyLabel(acknowledgement)
             stack.addArrangedSubview(label)
