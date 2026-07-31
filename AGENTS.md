@@ -80,7 +80,7 @@ This script builds the app bundle, kills any running instance, launches the new 
 
 ## Versioning and Release Profile
 
-- Release profile: `macos-arm64-app` 1.0.0
+- Release profile: `macos-arm64-app` 2.0.0
 - Distribution: private GitHub repository `aulyc/aulycShot` remains the sole
   source authority; the same Developer ID DMG is published through the
   optional `aulyc-dual-mirror-v1` public `aulyc/aulycShot-releases`

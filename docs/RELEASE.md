@@ -4,7 +4,7 @@
 
 | 字段 | 值 |
 |---|---|
-| Release Profile | `macos-arm64-app` 1.0.0 |
+| Release Profile | `macos-arm64-app` 2.0.0 |
 | 架构 | Apple Silicon `arm64` only |
 | 分发渠道 | 私有 GitHub 源码权威；`aulyc-dual-mirror-v1` 公开 GitHub/Gitee 正式产物镜像 |
 | GitHub | `aulyc/aulycShot` / `origin` / `main` |

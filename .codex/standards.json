@@ -286,7 +286,7 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "8644236e51cd2be210289d6eeb63fcd773fe3d3600b1d74ebf68d9bfc5f5d2e8"
+      "sha256": "9b33750e0a77d369335208e9eb57581fb4327df945c40e74e89915b023af0e2c"
     },
     {
       "path": "README.md",
@@ -298,7 +298,7 @@
     },
     {
       "path": "docs/RELEASE.md",
-      "sha256": "a014d7d30801d1aa6c578e25b1932bbaba53c1fef0957d05db9b6889c1436d4f"
+      "sha256": "91779198ac1af8b53d231988481506cbf371061348407ad0b90b938b57bcb27a"
     },
     {
       "path": "design/icon-assets.generated.json",
