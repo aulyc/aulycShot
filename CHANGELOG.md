@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.4] - 2026-08-01
+
 ### Changed
 
 - Use a narrower update panel with a smaller title for a more compact system-style presentation
