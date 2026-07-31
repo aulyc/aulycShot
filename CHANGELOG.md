@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.5] - 2026-08-01
+
 ### Changed
 
 - Expand the About acknowledgements to include the age of AI, Codex, Claude, and aulyc while retaining thanks to the community, users, and open-source ecosystem
