@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.1] - 2026-07-31
+
 ### Changed
 
 - Verify the release provenance before downloading an update package, then validate its version, build, commit, application identity, architecture, checksums, and Developer ID signature before replacement
