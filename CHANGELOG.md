@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Verify the release provenance before downloading an update package, then validate its version, build, commit, application identity, architecture, checksums, and Developer ID signature before replacement
+
+### Fixed
+
+- Prefer windows and larger structural regions during smart selection while ignoring individual controls and other leaf elements that caused accidental tiny captures
+
 ## [1.8.0] - 2026-07-29
 
 ### Added
