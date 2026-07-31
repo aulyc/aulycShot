@@ -71,6 +71,40 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def load_json_object(path: Path, description: str) -> dict:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ReleaseError(f"invalid {description}: {exc}") from exc
+    if not isinstance(value, dict):
+        raise ReleaseError(f"{description} must be a JSON object")
+    return value
+
+
+def release_profile_identity() -> tuple[str, str]:
+    adoption = load_json_object(ADOPTION, "standards adoption")
+    artifacts = adoption.get("artifacts")
+    if not isinstance(artifacts, list):
+        raise ReleaseError("artifacts is missing from .codex/standards.json")
+
+    matching = [
+        artifact
+        for artifact in artifacts
+        if isinstance(artifact, dict)
+        and artifact.get("type") == "macos-arm64-app"
+    ]
+    if len(matching) != 1:
+        raise ReleaseError("expected exactly one macos-arm64-app standards artifact")
+
+    profile = matching[0].get("profile")
+    profile_version = matching[0].get("profileVersion")
+    if profile != "macos-arm64-app":
+        raise ReleaseError("unexpected release profile in .codex/standards.json")
+    if not isinstance(profile_version, str) or not SEMVER.fullmatch(profile_version):
+        raise ReleaseError("release profile version must be SemVer")
+    return profile, profile_version
+
+
 def read_plist(path: Path) -> dict:
     try:
         with path.open("rb") as handle:
@@ -281,11 +315,12 @@ def command_write_provenance(args: argparse.Namespace) -> None:
         raise ReleaseError("app version or release tag does not match the formal tag")
     if identity["commit"] != commit or identity["releaseChannel"] != "formal" or identity["dirty"] is not False:
         raise ReleaseError("embedded formal source identity is invalid")
+    release_profile, release_profile_version = release_profile_identity()
     provenance = {
         "schemaVersion": 1,
         "project": "aulycShot",
-        "releaseProfile": "macos-arm64-app",
-        "releaseProfileVersion": "1.0.0",
+        "releaseProfile": release_profile,
+        "releaseProfileVersion": release_profile_version,
         "releaseChannel": "formal",
         "version": identity["version"],
         "buildNumber": identity["build"],
@@ -313,19 +348,15 @@ def command_write_provenance(args: argparse.Namespace) -> None:
 
 
 def load_provenance(path: Path) -> dict:
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise ReleaseError(f"invalid release provenance: {exc}") from exc
-    if not isinstance(value, dict):
-        raise ReleaseError("release provenance must be a JSON object")
-    return value
+    return load_json_object(path, "release provenance")
 
 
 def validate_provenance(path: Path) -> tuple[dict, Path]:
     value = load_provenance(path)
+    release_profile, release_profile_version = release_profile_identity()
     required = {
-        "releaseProfile": "macos-arm64-app",
+        "releaseProfile": release_profile,
+        "releaseProfileVersion": release_profile_version,
         "releaseChannel": "formal",
         "dirty": False,
         "architecture": "arm64",

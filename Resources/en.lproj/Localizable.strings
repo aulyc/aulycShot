@@ -252,7 +252,7 @@
 "updateAvailableTitle" = "Version v%@ is available";
 "updateAvailableBody" = "aulycShot will download and install the latest version, then relaunch automatically";
 "updateUpToDateTitle" = "You're up to date";
-"updateUpToDateBody" = "aulycShot v%@ is the latest version";
+"updateUpToDateBody" = "Current version v%@";
 "updateFailedTitle" = "Update check failed";
 "updateFailedBody" = "Could not reach GitHub. Check your connection and try again";
 "updateInstallFailedTitle" = "Update failed";

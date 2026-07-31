@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Use a dedicated modeless update panel without AppKit's internal help, suppression, or blank button controls, and remove repetitive up-to-date copy
+- Read the Release Profile version from project adoption when writing formal provenance and reject missing or mismatched version metadata
+
 ## [1.8.2] - 2026-07-31
 
 ### Fixed

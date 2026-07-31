@@ -215,17 +215,21 @@ class StatusBarController: NSObject {
         case .available(let version):
             presentUpdateAvailableAlert(version: version)
         case .upToDate:
-            let alert = NSAlert()
-            alert.messageText = L10n.updateUpToDateTitle
-            alert.informativeText = L10n.updateUpToDateBody(UpdateChecker.shared.currentVersion)
-            alert.addButton(withTitle: L10n.updateOKButton)
-            UpdateAlertPresenter.shared.present(alert)
+            UpdateAlertPresenter.shared.present(
+                UpdateAlertPresentation(
+                    title: L10n.updateUpToDateTitle,
+                    message: L10n.updateUpToDateBody(UpdateChecker.shared.currentVersion),
+                    buttonTitles: [L10n.updateOKButton]
+                )
+            )
         case .failed:
-            let alert = NSAlert()
-            alert.messageText = L10n.updateFailedTitle
-            alert.informativeText = L10n.updateFailedBody
-            alert.addButton(withTitle: L10n.updateOKButton)
-            UpdateAlertPresenter.shared.present(alert)
+            UpdateAlertPresenter.shared.present(
+                UpdateAlertPresentation(
+                    title: L10n.updateFailedTitle,
+                    message: L10n.updateFailedBody,
+                    buttonTitles: [L10n.updateOKButton]
+                )
+            )
         case .idle, .checking, .downloading, .installing, .installFailed:
             // Either a check was already in flight, or an install is being
             // driven elsewhere — nothing to report here.
@@ -236,13 +240,17 @@ class StatusBarController: NSObject {
     /// Prompts the user to install a newer release. The download/install runs
     /// in the background; on success the app relaunches itself.
     static func presentUpdateAvailableAlert(version: String) {
-        let alert = NSAlert()
-        alert.messageText = L10n.updateAvailableTitle(version)
-        alert.informativeText = L10n.updateAvailableBody
-        alert.addButton(withTitle: L10n.updateInstallNowButton)
-        alert.addButton(withTitle: L10n.updateSkipButton)
-        alert.addButton(withTitle: L10n.updateLaterButton)
-        UpdateAlertPresenter.shared.present(alert) { response in
+        UpdateAlertPresenter.shared.present(
+            UpdateAlertPresentation(
+                title: L10n.updateAvailableTitle(version),
+                message: L10n.updateAvailableBody,
+                buttonTitles: [
+                    L10n.updateInstallNowButton,
+                    L10n.updateSkipButton,
+                    L10n.updateLaterButton,
+                ]
+            )
+        ) { response in
             switch response {
             case .alertFirstButtonReturn:
                 UpdateChecker.shared.downloadAndInstall(onFailure: presentInstallFailedAlert)
@@ -275,12 +283,13 @@ class StatusBarController: NSObject {
     /// manual fallback.
     static func presentInstallFailedAlert() {
         UpdateProgressWindow.dismiss()
-        let alert = NSAlert()
-        alert.messageText = L10n.updateInstallFailedTitle
-        alert.informativeText = L10n.updateInstallFailedBody
-        alert.addButton(withTitle: L10n.updateOpenPageButton)
-        alert.addButton(withTitle: L10n.updateOKButton)
-        UpdateAlertPresenter.shared.present(alert) { response in
+        UpdateAlertPresenter.shared.present(
+            UpdateAlertPresentation(
+                title: L10n.updateInstallFailedTitle,
+                message: L10n.updateInstallFailedBody,
+                buttonTitles: [L10n.updateOpenPageButton, L10n.updateOKButton]
+            )
+        ) { response in
             if response == .alertFirstButtonReturn,
                let url = UpdateChecker.shared.latestPageURL {
                 NSWorkspace.shared.open(url)

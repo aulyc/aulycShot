@@ -298,7 +298,7 @@
     },
     {
       "path": "docs/RELEASE.md",
-      "sha256": "91779198ac1af8b53d231988481506cbf371061348407ad0b90b938b57bcb27a"
+      "sha256": "8a161123667858a91d0ab83a2dadcf72589b793ddff976a59e821b9f1e488ee6"
     },
     {
       "path": "design/icon-assets.generated.json",
@@ -358,7 +358,7 @@
     },
     {
       "path": "scripts/release_tool.py",
-      "sha256": "1e5d28e95a72321b89237556e282734cca8e397c9a1cac4d60b61c0014137b7d"
+      "sha256": "b82ddd4ee7b9387a691471a4138b40e841dbb9a6dc352b963e8dc9bec63e3ded"
     },
     {
       "path": "scripts/prepare-formal-release.sh",
@@ -406,7 +406,7 @@
     },
     {
       "path": "Tests/test_release_tool.py",
-      "sha256": "ee1af699e2d1aa43634f4ff3d6fb80ea9c3dd72bd96a5e3fb4c0f17225127e6a"
+      "sha256": "d5ce29625c44ef51c8728d533500f0529e66153176765085a5b920294b226063"
     },
     {
       "path": "docs/DUAL_MIRROR_RELEASE.md",

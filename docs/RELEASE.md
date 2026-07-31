@@ -94,10 +94,12 @@ aulycShot-<version>-build.<build>-arm64.release-provenance.json
 aulycShot-<version>-build.<build>-arm64.release-provenance.json.sha256
 ```
 
-provenance 记录 Profile、channel、版本、build、tag、Commit、`dirty: false`、arm64
-架构、Bundle ID、Team ID、最低系统、Developer ID、Hardened Runtime、公证提交
-ID、staple、Gatekeeper、DMG 和 App 可执行文件 SHA-256。它与 `Info.plist` 是不同
-边界，不能互相替代。
+provenance 记录 Profile、Profile 版本、channel、版本、build、tag、Commit、
+`dirty: false`、arm64 架构、Bundle ID、Team ID、最低系统、Developer ID、
+Hardened Runtime、公证提交 ID、staple、Gatekeeper、DMG 和 App 可执行文件
+SHA-256。Profile ID 和版本必须从 `.codex/standards.json` 的当前 macOS 产物声明
+读取；生成、复核、安装和发布入口都会拒绝缺失或不一致的 Profile 版本。它与
+`Info.plist` 是不同边界，不能互相替代。
 
 ## 产物和安装后验证
 
@@ -205,7 +207,8 @@ make publish-update-mirrors RELEASE_PROVENANCE=/absolute/path/aulycShot-....rele
 - Swift 构建、测试、arm64 候选或精确标签隔离构建失败
 - App 或 share extension 不是 arm64-only，或缺少 Developer ID、timestamp、Hardened Runtime
 - DMG 签名、公证、staple、Gatekeeper 或 SHA-256 任一步失败
-- provenance 与 Git、DMG、挂载 App、已安装 App 或远端回读不一致
+- provenance 的 Profile ID/版本与 `.codex/standards.json` 不一致，或 provenance
+  与 Git、DMG、挂载 App、已安装 App、远端回读不一致
 - 目标版本、标签、GitHub Release 或任一正式产物已经存在
 - 任一公开镜像缺失、不是 public、已有冲突版本、DMG 回读哈希不一致，或两个
   `latest.json` 不能证明内容相同

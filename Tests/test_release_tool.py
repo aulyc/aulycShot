@@ -6,6 +6,7 @@ import re
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "release_tool.py"
@@ -28,6 +29,21 @@ class ReleaseToolTests(unittest.TestCase):
         self.info.parent.mkdir(parents=True)
         self.extension_info.parent.mkdir(parents=True)
         self.adoption.parent.mkdir(parents=True)
+        self.adoption.write_text(
+            json.dumps(
+                {
+                    "artifacts": [
+                        {
+                            "id": "aulycshot-macos-app",
+                            "type": "macos-arm64-app",
+                            "profile": "macos-arm64-app",
+                            "profileVersion": "2.0.0",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
         self.write_plist(
             self.info,
             {
@@ -80,6 +96,87 @@ class ReleaseToolTests(unittest.TestCase):
 
     def test_version_identity_accepts_authoritative_version_and_build(self):
         self.assertEqual(release_tool.version_identity(), ("1.6.12", 494))
+
+    def test_release_profile_identity_comes_from_project_adoption(self):
+        self.assertEqual(
+            release_tool.release_profile_identity(),
+            ("macos-arm64-app", "2.0.0"),
+        )
+
+    def test_release_profile_identity_rejects_missing_profile_version(self):
+        self.adoption.write_text(
+            json.dumps(
+                {
+                    "artifacts": [
+                        {
+                            "id": "aulycshot-macos-app",
+                            "type": "macos-arm64-app",
+                            "profile": "macos-arm64-app",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with self.assertRaisesRegex(release_tool.ReleaseError, "profile version must be SemVer"):
+            release_tool.release_profile_identity()
+
+    def test_write_provenance_uses_declared_release_profile_version(self):
+        source_root = self.root / "source"
+        app = self.root / "aulycShot.app"
+        dmg = self.root / "aulycShot.dmg"
+        output = self.root / "release-provenance.json"
+        source_root.mkdir()
+        app.mkdir()
+        dmg.write_bytes(b"formal artifact")
+        commit = "a" * 40
+
+        def fake_git(_root, *arguments):
+            if arguments == ("status", "--porcelain=v1", "--untracked-files=all"):
+                return ""
+            if arguments == ("rev-parse", "HEAD"):
+                return commit
+            if arguments == ("rev-parse", "--verify", "refs/tags/1.6.13^{tag}"):
+                return "b" * 40
+            if arguments == ("rev-list", "-n", "1", "refs/tags/1.6.13"):
+                return commit
+            self.fail(f"unexpected git arguments: {arguments}")
+
+        identity = {
+            "version": "1.6.13",
+            "build": 495,
+            "bundleIdentifier": "com.aulyc.aulycshot",
+            "minimumSystemVersion": "14.0",
+            "commit": commit,
+            "releaseChannel": "formal",
+            "tag": "1.6.13",
+            "dirty": False,
+            "architectures": ["arm64"],
+            "teamIdentifier": "M9M7M2ARFD",
+            "signatureAuthority": "Developer ID Application: Example (M9M7M2ARFD)",
+            "executableSha256": "c" * 64,
+        }
+
+        with mock.patch.object(release_tool, "git", side_effect=fake_git), mock.patch.object(
+            release_tool,
+            "app_identity",
+            return_value=identity,
+        ):
+            release_tool.command_write_provenance(
+                argparse.Namespace(
+                    source_root=source_root,
+                    app=app,
+                    dmg=dmg,
+                    output=output,
+                    tag="1.6.13",
+                    submission_id="notary-submission",
+                )
+            )
+
+        provenance = json.loads(output.read_text(encoding="utf-8"))
+        self.assertEqual(provenance["releaseProfile"], "macos-arm64-app")
+        self.assertEqual(provenance["releaseProfileVersion"], "2.0.0")
 
     def test_version_identity_rejects_noncanonical_build(self):
         value = release_tool.read_plist(self.info)
@@ -208,6 +305,7 @@ class ReleaseToolTests(unittest.TestCase):
     def valid_provenance(self, dmg):
         return {
             "releaseProfile": "macos-arm64-app",
+            "releaseProfileVersion": "2.0.0",
             "releaseChannel": "formal",
             "dirty": False,
             "architecture": "arm64",
@@ -234,6 +332,34 @@ class ReleaseToolTests(unittest.TestCase):
 
         self.assertEqual(value["version"], "1.6.13")
         self.assertEqual(resolved_dmg, dmg)
+
+    def test_validate_provenance_rejects_stale_profile_version(self):
+        dmg = self.root / "aulycShot.dmg"
+        dmg.write_bytes(b"formal artifact")
+        value = self.valid_provenance(dmg)
+        value["releaseProfileVersion"] = "1.0.0"
+        provenance = self.root / "release-provenance.json"
+        provenance.write_text(json.dumps(value), encoding="utf-8")
+
+        with self.assertRaisesRegex(
+            release_tool.ReleaseError,
+            "release provenance field releaseProfileVersion is invalid",
+        ):
+            release_tool.validate_provenance(provenance)
+
+    def test_validate_provenance_rejects_missing_profile_version(self):
+        dmg = self.root / "aulycShot.dmg"
+        dmg.write_bytes(b"formal artifact")
+        value = self.valid_provenance(dmg)
+        del value["releaseProfileVersion"]
+        provenance = self.root / "release-provenance.json"
+        provenance.write_text(json.dumps(value), encoding="utf-8")
+
+        with self.assertRaisesRegex(
+            release_tool.ReleaseError,
+            "release provenance field releaseProfileVersion is invalid",
+        ):
+            release_tool.validate_provenance(provenance)
 
     def test_validate_provenance_rejects_tampered_dmg(self):
         dmg = self.root / "aulycShot.dmg"

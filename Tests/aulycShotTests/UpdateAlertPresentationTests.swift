@@ -3,30 +3,78 @@ import XCTest
 @testable import aulycShot
 
 final class UpdateAlertPresentationTests: XCTestCase {
-    func testUpdateAlertIsVisibleWithoutStartingApplicationModalSession() throws {
+    func testUpdatePanelContainsOnlyRequestedControlsAndIsNonmodal() throws {
         if ProcessInfo.processInfo.environment["AULYC_SKIP_WINDOW_SERVER_TESTS"] == "1" {
             throw XCTSkip("Requires an interactive WindowServer session")
         }
 
-        let alert = NSAlert()
-        alert.messageText = "Update failed"
-        let button = alert.addButton(withTitle: "OK")
         var receivedResponse: NSApplication.ModalResponse?
+        let panel = try XCTUnwrap(
+            UpdateAlertPresenter.shared.present(
+                UpdateAlertPresentation(
+                    title: "You're up to date",
+                    message: "Current version v1.8.2",
+                    buttonTitles: ["OK"]
+                )
+            ) { response in
+                receivedResponse = response
+            }
+        )
 
-        UpdateAlertPresenter.shared.present(alert) { response in
-            receivedResponse = response
-        }
-
-        XCTAssertTrue(alert.window.isVisible)
+        XCTAssertTrue(panel.isVisible)
         XCTAssertNil(NSApp.modalWindow)
+        XCTAssertEqual(panel.sharingType, .readWrite)
+        XCTAssertEqual(panel.actionButtons.map(\.title), ["OK"])
+        XCTAssertNil(panel.standardWindowButton(.closeButton))
+        XCTAssertNil(panel.standardWindowButton(.miniaturizeButton))
+        XCTAssertNil(panel.standardWindowButton(.zoomButton))
 
-        button.performClick(nil)
+        let contentView = try XCTUnwrap(panel.contentView)
+        contentView.layoutSubtreeIfNeeded()
+        let contentButtons = contentView.descendantButtons
+        XCTAssertEqual(contentButtons.map(\.title), ["OK"])
+        XCTAssertFalse(contentButtons.contains(where: { $0.title.isEmpty }))
+        XCTAssertFalse(contentView.hasAmbiguousLayout)
+        XCTAssertGreaterThan(panel.actionButtons[0].frame.width, 300)
+        XCTAssertEqual(panel.actionButtons[0].frame.height, 36, accuracy: 0.5)
+
+        panel.actionButtons[0].performClick(nil)
 
         XCTAssertEqual(receivedResponse, .alertFirstButtonReturn)
-        XCTAssertFalse(alert.window.isVisible)
+        XCTAssertFalse(panel.isVisible)
     }
 
-    func testStatusBarUpdateAlertsDoNotUseBlockingRunModal() throws {
+    func testUpdatePanelReturnsTheSelectedActionWithoutCreatingBlankButtons() throws {
+        if ProcessInfo.processInfo.environment["AULYC_SKIP_WINDOW_SERVER_TESTS"] == "1" {
+            throw XCTSkip("Requires an interactive WindowServer session")
+        }
+
+        var receivedResponse: NSApplication.ModalResponse?
+        let panel = try XCTUnwrap(
+            UpdateAlertPresenter.shared.present(
+                UpdateAlertPresentation(
+                    title: "Version v1.8.3 is available",
+                    message: "Install the latest version",
+                    buttonTitles: ["Update Now", "Skip This Version", "Later"]
+                )
+            ) { response in
+                receivedResponse = response
+            }
+        )
+
+        XCTAssertEqual(
+            panel.actionButtons.map(\.title),
+            ["Update Now", "Skip This Version", "Later"]
+        )
+        XCTAssertFalse(panel.actionButtons.contains { $0.title.isEmpty })
+
+        panel.actionButtons[1].performClick(nil)
+
+        XCTAssertEqual(receivedResponse, .alertSecondButtonReturn)
+        XCTAssertFalse(panel.isVisible)
+    }
+
+    func testStatusBarUpdateAlertsUseDedicatedPanelInsteadOfNSAlert() throws {
         let repositoryRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -35,7 +83,38 @@ final class UpdateAlertPresentationTests: XCTestCase {
             .appendingPathComponent("aulycShot/UI/StatusBarController.swift")
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
-        XCTAssertFalse(source.contains("alert.runModal()"))
-        XCTAssertTrue(source.contains("UpdateAlertPresenter.shared.present(alert)"))
+        XCTAssertFalse(source.contains("NSAlert()"))
+        XCTAssertTrue(source.contains("UpdateAlertPresentation("))
+        XCTAssertTrue(source.contains("UpdateAlertPresenter.shared.present("))
+    }
+
+    func testUpToDateCopyDoesNotRepeatLatestVersionMeaning() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let chinese = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Resources/zh-Hans.lproj/Localizable.strings"),
+            encoding: .utf8
+        )
+        let english = try String(
+            contentsOf: repositoryRoot
+                .appendingPathComponent("Resources/en.lproj/Localizable.strings"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(chinese.contains("\"updateUpToDateTitle\" = \"已是最新版本\""))
+        XCTAssertTrue(chinese.contains("\"updateUpToDateBody\" = \"当前版本 v%@\""))
+        XCTAssertTrue(english.contains("\"updateUpToDateTitle\" = \"You're up to date\""))
+        XCTAssertTrue(english.contains("\"updateUpToDateBody\" = \"Current version v%@\""))
+    }
+}
+
+private extension NSView {
+    var descendantButtons: [NSButton] {
+        subviews.flatMap { view in
+            (view as? NSButton).map { [$0] } ?? view.descendantButtons
+        }
     }
 }
