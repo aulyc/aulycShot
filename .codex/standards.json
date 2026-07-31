@@ -334,7 +334,7 @@
     },
     {
       "path": "aulycShot/Utilities/UpdateManifest.swift",
-      "sha256": "ac4d743a3f4516f21b45aa42c781b489b1d38eec4f013dbb077012b397046233"
+      "sha256": "e4b2a7806e237931393f1514570c99f0c182af7915cbee8d31a69b04f39c7f0b"
     },
     {
       "path": "scripts/bundle.sh",
@@ -398,7 +398,7 @@
     },
     {
       "path": "Tests/aulycShotTests/UpdateManifestTests.swift",
-      "sha256": "f54cef0c7aa252558bc9521cebd94e4608c305ef5238d3a8bb5fc9df470ace89"
+      "sha256": "83f9c62e25ab99a13d0c04abaacd4b491f4aa1472c9c9383f4224f8a0a8eaf53"
     },
     {
       "path": "Tests/test_icon_assets.py",

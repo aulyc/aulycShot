@@ -219,15 +219,13 @@ class StatusBarController: NSObject {
             alert.messageText = L10n.updateUpToDateTitle
             alert.informativeText = L10n.updateUpToDateBody(UpdateChecker.shared.currentVersion)
             alert.addButton(withTitle: L10n.updateOKButton)
-            NSApp.activate(ignoringOtherApps: true)
-            alert.runModal()
+            UpdateAlertPresenter.shared.present(alert)
         case .failed:
             let alert = NSAlert()
             alert.messageText = L10n.updateFailedTitle
             alert.informativeText = L10n.updateFailedBody
             alert.addButton(withTitle: L10n.updateOKButton)
-            NSApp.activate(ignoringOtherApps: true)
-            alert.runModal()
+            UpdateAlertPresenter.shared.present(alert)
         case .idle, .checking, .downloading, .installing, .installFailed:
             // Either a check was already in flight, or an install is being
             // driven elsewhere — nothing to report here.
@@ -244,14 +242,15 @@ class StatusBarController: NSObject {
         alert.addButton(withTitle: L10n.updateInstallNowButton)
         alert.addButton(withTitle: L10n.updateSkipButton)
         alert.addButton(withTitle: L10n.updateLaterButton)
-        NSApp.activate(ignoringOtherApps: true)
-        switch alert.runModal() {
-        case .alertFirstButtonReturn:
-            UpdateChecker.shared.downloadAndInstall(onFailure: presentInstallFailedAlert)
-        case .alertSecondButtonReturn:
-            UpdateChecker.shared.skipVersion()
-        default:
-            break
+        UpdateAlertPresenter.shared.present(alert) { response in
+            switch response {
+            case .alertFirstButtonReturn:
+                UpdateChecker.shared.downloadAndInstall(onFailure: presentInstallFailedAlert)
+            case .alertSecondButtonReturn:
+                UpdateChecker.shared.skipVersion()
+            default:
+                break
+            }
         }
     }
 
@@ -281,10 +280,11 @@ class StatusBarController: NSObject {
         alert.informativeText = L10n.updateInstallFailedBody
         alert.addButton(withTitle: L10n.updateOpenPageButton)
         alert.addButton(withTitle: L10n.updateOKButton)
-        NSApp.activate(ignoringOtherApps: true)
-        if alert.runModal() == .alertFirstButtonReturn,
-           let url = UpdateChecker.shared.latestPageURL {
-            NSWorkspace.shared.open(url)
+        UpdateAlertPresenter.shared.present(alert) { response in
+            if response == .alertFirstButtonReturn,
+               let url = UpdateChecker.shared.latestPageURL {
+                NSWorkspace.shared.open(url)
+            }
         }
     }
 

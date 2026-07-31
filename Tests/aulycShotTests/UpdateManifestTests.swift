@@ -3,6 +3,38 @@ import XCTest
 @testable import aulycShot
 
 final class UpdateManifestTests: XCTestCase {
+    func testCentralManifestKeepsLegacyMacIdentityFields() throws {
+        let data = manifestData()
+        let current = try UpdateManifest.decodeValidated(from: data)
+        let legacy = try JSONDecoder().decode(LegacyMacUpdateManifest.self, from: data)
+
+        XCTAssertEqual(current.teamIdentifier, UpdateManifest.expectedTeamIdentifier)
+        XCTAssertEqual(
+            current.minimumSystemVersion,
+            UpdateManifest.expectedMinimumSystemVersion
+        )
+        XCTAssertEqual(legacy.teamIdentifier, UpdateManifest.expectedTeamIdentifier)
+        XCTAssertEqual(
+            legacy.minimumSystemVersion,
+            UpdateManifest.expectedMinimumSystemVersion
+        )
+        XCTAssertEqual(legacy.version, current.version)
+        XCTAssertEqual(legacy.artifact.downloads.map(\.source), [.github, .gitee])
+    }
+
+    func testManifestRejectsWrongLegacyMacIdentity() {
+        XCTAssertThrowsError(
+            try UpdateManifest.decodeValidated(
+                from: manifestData(teamIdentifier: "OTHERTEAM")
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? UpdateManifest.ValidationError,
+                .unexpectedReleaseIdentity
+            )
+        }
+    }
+
     func testValidCentralManifestKeepsGitHubBeforeGitee() throws {
         let manifest = try UpdateManifest.decodeValidated(from: manifestData())
 
@@ -206,7 +238,9 @@ final class UpdateManifestTests: XCTestCase {
     private func manifestData(
         downloadOrder: [UpdateManifest.Source] = [.github, .gitee],
         githubURL: String = "https://github.com/aulyc/aulycShot-releases/releases/download/1.7.4/aulycShot-1.7.4-build.502-arm64.dmg",
-        policy: String = "aulyc-dual-mirror-v1"
+        policy: String = "aulyc-dual-mirror-v1",
+        teamIdentifier: String = UpdateManifest.expectedTeamIdentifier,
+        minimumSystemVersion: String = UpdateManifest.expectedMinimumSystemVersion
     ) -> Data {
         let giteeURL = (
             "https://gitee.com/aulyc/aulycShot-releases/releases/download/"
@@ -239,6 +273,8 @@ final class UpdateManifestTests: XCTestCase {
             "architecture": "arm64",
             "bundleIdentifier": UpdateManifest.expectedBundleIdentifier,
             "pluginIdentifier": NSNull(),
+            "teamIdentifier": teamIdentifier,
+            "minimumSystemVersion": minimumSystemVersion,
             "releasePageURL": "https://github.com/aulyc/aulycShot-releases/releases/tag/1.7.4",
             "artifact": [
                 "file": "aulycShot-1.7.4-build.502-arm64.dmg",
@@ -253,6 +289,38 @@ final class UpdateManifestTests: XCTestCase {
         ]
         return try! JSONSerialization.data(withJSONObject: value, options: [.sortedKeys])
     }
+}
+
+private struct LegacyMacUpdateManifest: Decodable {
+    enum Source: String, Decodable {
+        case github
+        case gitee
+    }
+
+    struct Download: Decodable {
+        let source: Source
+        let url: URL
+    }
+
+    struct Artifact: Decodable {
+        let file: String
+        let sha256: String
+        let downloads: [Download]
+    }
+
+    let schemaVersion: Int
+    let releaseProfile: String
+    let releaseChannel: String
+    let version: String
+    let buildNumber: Int
+    let tag: String
+    let commit: String
+    let architecture: String
+    let bundleIdentifier: String
+    let teamIdentifier: String
+    let minimumSystemVersion: String
+    let releasePageURL: URL
+    let artifact: Artifact
 }
 
 private final class UpdateManifestURLProtocol: URLProtocol {

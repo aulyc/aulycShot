@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Restore update checks for older app versions by retaining the Team ID and minimum macOS version in newly published update manifests
+- Keep update result and installation alerts nonblocking so screenshot shortcuts remain available while an alert is visible
+
 ## [1.8.1] - 2026-07-31
 
 ### Changed

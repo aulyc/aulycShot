@@ -55,6 +55,8 @@ struct UpdateManifest: Decodable, Equatable {
     let architecture: String
     let bundleIdentifier: String
     let pluginIdentifier: String?
+    let teamIdentifier: String?
+    let minimumSystemVersion: String?
     let releasePageURL: URL
     let artifact: Artifact
     let provenance: Artifact
@@ -75,6 +77,9 @@ struct UpdateManifest: Decodable, Equatable {
               architecture == "arm64",
               bundleIdentifier == Self.expectedBundleIdentifier,
               pluginIdentifier == nil,
+              teamIdentifier == nil || teamIdentifier == Self.expectedTeamIdentifier,
+              minimumSystemVersion == nil
+                || minimumSystemVersion == Self.expectedMinimumSystemVersion,
               tag == version
         else {
             throw ValidationError.unexpectedReleaseIdentity
