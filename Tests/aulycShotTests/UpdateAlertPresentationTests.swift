@@ -35,8 +35,14 @@ final class UpdateAlertPresentationTests: XCTestCase {
         XCTAssertEqual(contentButtons.map(\.title), ["OK"])
         XCTAssertFalse(contentButtons.contains(where: { $0.title.isEmpty }))
         XCTAssertFalse(contentView.hasAmbiguousLayout)
-        XCTAssertGreaterThan(panel.actionButtons[0].frame.width, 300)
+        XCTAssertEqual(panel.frame.width, 340, accuracy: 0.5)
+        XCTAssertEqual(panel.actionButtons[0].frame.width, 300, accuracy: 0.5)
         XCTAssertEqual(panel.actionButtons[0].frame.height, 36, accuracy: 0.5)
+        let titleLabel = try XCTUnwrap(
+            contentView.descendantTextFields.first { $0.stringValue == "You're up to date" }
+        )
+        let titleFont = try XCTUnwrap(titleLabel.font)
+        XCTAssertEqual(titleFont.pointSize, 17, accuracy: 0.5)
 
         panel.actionButtons[0].performClick(nil)
 
@@ -115,6 +121,12 @@ private extension NSView {
     var descendantButtons: [NSButton] {
         subviews.flatMap { view in
             (view as? NSButton).map { [$0] } ?? view.descendantButtons
+        }
+    }
+
+    var descendantTextFields: [NSTextField] {
+        subviews.flatMap { view in
+            (view as? NSTextField).map { [$0] } ?? view.descendantTextFields
         }
     }
 }

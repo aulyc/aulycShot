@@ -25,11 +25,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         registerShareHandoffObserver()
-        let startupPlan = AppStartupPlan.make(
-            launchAtLoginEnabled: LaunchAtLogin.isEnabled,
-            allRequiredPermissionsGranted: AppPermissions.allRequiredGranted,
-            hasPendingOpenImages: !pendingOpenImageURLs.isEmpty
-        )
+        let startupPlan = AppStartupPlan.silent
         if startupPlan.shouldCreateStatusBar {
             ensureStatusBarController()
         }

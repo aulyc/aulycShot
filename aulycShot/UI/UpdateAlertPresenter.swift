@@ -62,7 +62,7 @@ final class UpdateAlertPanel: NSPanel {
             return button
         }
 
-        let contentWidth: CGFloat = 400
+        let contentWidth: CGFloat = 340
         let buttonHeight: CGFloat = 36
         let buttonSpacing: CGFloat = 10
         let buttonsHeight = CGFloat(actionButtons.count) * buttonHeight
@@ -70,7 +70,7 @@ final class UpdateAlertPanel: NSPanel {
 
         let titleLabel = NSTextField(labelWithString: presentation.title)
         titleLabel.alignment = .center
-        titleLabel.font = .systemFont(ofSize: 20, weight: .semibold)
+        titleLabel.font = .systemFont(ofSize: 17, weight: .semibold)
         titleLabel.textColor = .labelColor
         titleLabel.maximumNumberOfLines = 2
         titleLabel.lineBreakMode = .byWordWrapping

@@ -3,18 +3,11 @@ struct AppStartupPlan: Equatable {
     let shouldInitializeApp: Bool
     let shouldShowStartupDialog: Bool
 
-    static func make(
-        launchAtLoginEnabled: Bool,
-        allRequiredPermissionsGranted: Bool,
-        hasPendingOpenImages: Bool
-    ) -> AppStartupPlan {
-        let shouldSkipStartupDialog = hasPendingOpenImages
-            || (launchAtLoginEnabled && allRequiredPermissionsGranted)
-
-        return AppStartupPlan(
-            shouldCreateStatusBar: true,
-            shouldInitializeApp: true,
-            shouldShowStartupDialog: !shouldSkipStartupDialog
-        )
-    }
+    /// Process launches stay in the menu bar. Settings are shown only after an
+    /// explicit user action or when a feature needs to explain missing access.
+    static let silent = AppStartupPlan(
+        shouldCreateStatusBar: true,
+        shouldInitializeApp: true,
+        shouldShowStartupDialog: false
+    )
 }

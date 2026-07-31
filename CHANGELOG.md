@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Use a narrower update panel with a smaller title for a more compact system-style presentation
+- Use plain minus and plus controls with tighter spacing around the pinned-image zoom percentage
+
+### Fixed
+
+- Keep ordinary and post-update launches in the menu bar without opening Settings automatically
+
 ## [1.8.3] - 2026-08-01
 
 ### Fixed

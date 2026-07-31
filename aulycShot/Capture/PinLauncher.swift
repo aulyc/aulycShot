@@ -2974,6 +2974,49 @@ private final class PinNavigatorView: NSView {
 
 // MARK: - Pin Toolbar
 
+struct PinToolbarZoomLayout: Equatable {
+    static let zoomOutSymbolName = "minus"
+    static let zoomInSymbolName = "plus"
+    static let buttonWidth: CGFloat = 24
+    static let labelWidth: CGFloat = 44
+
+    let zoomOutFrame: NSRect
+    let labelFrame: NSRect
+    let zoomInFrame: NSRect
+
+    static func make(
+        availableRect: NSRect,
+        buttonY: CGFloat,
+        buttonSide: CGFloat
+    ) -> PinToolbarZoomLayout {
+        let groupWidth = buttonWidth * 2 + labelWidth
+        let groupX = availableRect.minX + max(0, (availableRect.width - groupWidth) / 2)
+        let zoomOutFrame = NSRect(
+            x: groupX,
+            y: buttonY,
+            width: buttonWidth,
+            height: buttonSide
+        )
+        let labelFrame = NSRect(
+            x: zoomOutFrame.maxX,
+            y: buttonY + 5,
+            width: labelWidth,
+            height: buttonSide - 10
+        )
+        let zoomInFrame = NSRect(
+            x: labelFrame.maxX,
+            y: buttonY,
+            width: buttonWidth,
+            height: buttonSide
+        )
+        return PinToolbarZoomLayout(
+            zoomOutFrame: zoomOutFrame,
+            labelFrame: labelFrame,
+            zoomInFrame: zoomInFrame
+        )
+    }
+}
+
 private final class PinToolbarView: NSView {
     static let preferredWidth: CGFloat = 258
     static let minimumWidth: CGFloat = 220
@@ -2994,9 +3037,15 @@ private final class PinToolbarView: NSView {
     private let editButton = PinToolbarIconButton(symbolName: "pencil", accessibilityLabel: L10n.pinToolbarEdit)
     private let moveButton = PinToolbarMoveButton(symbolName: "arrow.up.and.down.and.arrow.left.and.right",
                                                   accessibilityLabel: "Move pinned image")
-    private let zoomOutButton = PinToolbarIconButton(symbolName: "minus.magnifyingglass", accessibilityLabel: "Zoom out")
+    private let zoomOutButton = PinToolbarIconButton(
+        symbolName: PinToolbarZoomLayout.zoomOutSymbolName,
+        accessibilityLabel: "Zoom out"
+    )
     private let zoomLabel = PinToolbarZoomButton()
-    private let zoomInButton = PinToolbarIconButton(symbolName: "plus.magnifyingglass", accessibilityLabel: "Zoom in")
+    private let zoomInButton = PinToolbarIconButton(
+        symbolName: PinToolbarZoomLayout.zoomInSymbolName,
+        accessibilityLabel: "Zoom in"
+    )
     private let closeButton = PinToolbarIconButton(symbolName: "xmark",
                                                    accessibilityLabel: "Close pinned image")
 
@@ -3064,14 +3113,14 @@ private final class PinToolbarView: NSView {
         )
         let centerX = closeButton.frame.maxX + gap
         let centerWidth = max(76, editButton.frame.minX - gap - centerX)
-        let stepWidth = min(24, max(20, centerWidth * 0.22))
-        let labelWidth = max(36, centerWidth - stepWidth * 2)
-
-        zoomOutButton.frame = NSRect(x: centerX, y: buttonY, width: stepWidth, height: buttonSide)
-        zoomLabel.frame = NSRect(x: zoomOutButton.frame.maxX, y: buttonY + 5,
-                                 width: labelWidth, height: buttonSide - 10)
-        zoomInButton.frame = NSRect(x: zoomLabel.frame.maxX, y: buttonY,
-                                    width: stepWidth, height: buttonSide)
+        let zoomLayout = PinToolbarZoomLayout.make(
+            availableRect: NSRect(x: centerX, y: 0, width: centerWidth, height: bounds.height),
+            buttonY: buttonY,
+            buttonSide: buttonSide
+        )
+        zoomOutButton.frame = zoomLayout.zoomOutFrame
+        zoomLabel.frame = zoomLayout.labelFrame
+        zoomInButton.frame = zoomLayout.zoomInFrame
     }
 
     override func draw(_ dirtyRect: NSRect) {
