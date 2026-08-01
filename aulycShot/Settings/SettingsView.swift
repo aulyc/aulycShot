@@ -74,6 +74,7 @@ class SettingsView: NSView {
     // Activation-state pickers
     private var menuBarStatePicker: NSPopUpButton!
     private var launchAtLoginStatePicker: NSPopUpButton!
+    private var automaticUpdateChecksStatePicker: NSPopUpButton!
     private var demoModeStatePicker: NSPopUpButton!
 
     // Picker & slider
@@ -143,6 +144,7 @@ class SettingsView: NSView {
     // Labels (kept for language switching)
     private var menuBarTitleLabel: NSTextField!
     private var launchAtLoginTitleLabel: NSTextField!
+    private var automaticUpdateChecksTitleLabel: NSTextField!
     private var demoModeTitleLabel: NSTextField!
     private var demoModeSubtitleLabel: NSTextField!
     private var langTitleLabel: NSTextField!
@@ -658,6 +660,19 @@ class SettingsView: NSView {
         launchAtLoginStatePicker = login.picker
         activationInner.addArrangedSubview(login.row)
         login.row.widthAnchor.constraint(equalTo: activationInner.widthAnchor).isActive = true
+        activationInner.addArrangedSubview(rowDivider())
+
+        let automaticUpdates = makeActivationRow(
+            title: L10n.automaticUpdateChecks,
+            subtitle: nil,
+            isOn: Defaults.automaticUpdateChecksEnabled,
+            identifier: "automatic-update-checks-state-picker",
+            action: #selector(automaticUpdateChecksStateChanged(_:))
+        )
+        automaticUpdateChecksTitleLabel = automaticUpdates.title
+        automaticUpdateChecksStatePicker = automaticUpdates.picker
+        activationInner.addArrangedSubview(automaticUpdates.row)
+        automaticUpdates.row.widthAnchor.constraint(equalTo: activationInner.widthAnchor).isActive = true
 
         stack.addArrangedSubview(activationCard)
         activationCard.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
@@ -2012,6 +2027,11 @@ class SettingsView: NSView {
         Defaults.demoMode = state.isEnabled
     }
 
+    @objc private func automaticUpdateChecksStateChanged(_ sender: NSPopUpButton) {
+        guard let state = selectedActivationState(from: sender) else { return }
+        Defaults.automaticUpdateChecksEnabled = state.isEnabled
+    }
+
     @objc private func menuBarStateChanged(_ sender: NSPopUpButton) {
         guard let state = selectedActivationState(from: sender) else { return }
         let visible = state.isEnabled
@@ -2953,10 +2973,15 @@ class SettingsView: NSView {
     @objc private func updateLocalization() {
         menuBarTitleLabel?.stringValue = L10n.showMenuBarIcon
         launchAtLoginTitleLabel?.stringValue = L10n.launchAtLogin
+        automaticUpdateChecksTitleLabel?.stringValue = L10n.automaticUpdateChecks
         demoModeTitleLabel?.stringValue = L10n.demoMode
         demoModeSubtitleLabel?.stringValue = L10n.demoModeHint
         refreshActivationPicker(menuBarStatePicker, isEnabled: Defaults.showMenuBar)
         refreshActivationPicker(launchAtLoginStatePicker, isEnabled: LaunchAtLogin.isEnabled)
+        refreshActivationPicker(
+            automaticUpdateChecksStatePicker,
+            isEnabled: Defaults.automaticUpdateChecksEnabled
+        )
         refreshActivationPicker(demoModeStatePicker, isEnabled: Defaults.demoMode)
         langTitleLabel?.stringValue = L10n.languageHeader
         screenshotOutputActionTitleLabel?.stringValue = L10n.screenshotOutputActionLabel

@@ -13,6 +13,7 @@ final class SettingsScreenshotQualityControlTests: XCTestCase {
         for identifier in [
             "menu-bar-state-picker",
             "launch-at-login-state-picker",
+            "automatic-update-checks-state-picker",
             "demo-mode-state-picker",
         ] {
             let picker = try XCTUnwrap(
@@ -29,6 +30,28 @@ final class SettingsScreenshotQualityControlTests: XCTestCase {
         }
 
         XCTAssertTrue(settingsView.descendants(of: NSSwitch.self).isEmpty)
+    }
+
+    func testAutomaticUpdateChecksDefaultToEnabledAndPersistUserChoice() {
+        let key = "automaticUpdateChecksEnabled"
+        let defaults = UserDefaults.standard
+        let originalValue = defaults.object(forKey: key)
+        defer {
+            if let originalValue {
+                defaults.set(originalValue, forKey: key)
+            } else {
+                defaults.removeObject(forKey: key)
+            }
+        }
+
+        defaults.removeObject(forKey: key)
+        XCTAssertTrue(Defaults.automaticUpdateChecksEnabled)
+
+        Defaults.automaticUpdateChecksEnabled = false
+        XCTAssertFalse(Defaults.automaticUpdateChecksEnabled)
+
+        Defaults.automaticUpdateChecksEnabled = true
+        XCTAssertTrue(Defaults.automaticUpdateChecksEnabled)
     }
 
     func testGeneralPaneContainsOneSharedScreenshotQualityPicker() {

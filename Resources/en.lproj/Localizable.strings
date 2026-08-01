@@ -15,6 +15,7 @@
 "permissionHelpOpenScreenRecording" = "Open Screen Recording";
 "permissionHelpDone" = "Done";
 "launchAtLogin" = "Launch at Login";
+"automaticUpdateChecks" = "Automatically Check for Updates";
 "demoMode" = "Demo Mode";
 "demoModeHint" = "Allow screen recorders to capture the selection overlay and editor";
 

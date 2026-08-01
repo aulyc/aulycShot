@@ -15,6 +15,7 @@
 "permissionHelpOpenScreenRecording" = "打开屏幕与系统音频录制";
 "permissionHelpDone" = "知道了";
 "launchAtLogin" = "开机自动启动";
+"automaticUpdateChecks" = "自动检查更新";
 "demoMode" = "演示模式";
 "demoModeHint" = "录屏软件可以录到选区遮罩与编辑器，仅影响外部录制";
 

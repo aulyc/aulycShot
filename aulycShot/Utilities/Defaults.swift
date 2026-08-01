@@ -73,6 +73,7 @@ enum L10n {
     static var permissionHelpOpenScreenRecording: String { s("permissionHelpOpenScreenRecording") }
     static var permissionHelpDone: String { s("permissionHelpDone") }
     static var launchAtLogin: String { s("launchAtLogin") }
+    static var automaticUpdateChecks: String { s("automaticUpdateChecks") }
     static var demoMode: String { s("demoMode") }
     static var demoModeHint: String { s("demoModeHint") }
     static var recordingSavePathLabel: String { s("recordingSavePathLabel") }
@@ -1099,6 +1100,18 @@ struct Defaults {
         }
         set {
             defaults.set(newValue, forKey: "showMenuBar")
+        }
+    }
+
+    static var automaticUpdateChecksEnabled: Bool {
+        get {
+            if defaults.object(forKey: "automaticUpdateChecksEnabled") == nil {
+                return true
+            }
+            return defaults.bool(forKey: "automaticUpdateChecksEnabled")
+        }
+        set {
+            defaults.set(newValue, forKey: "automaticUpdateChecksEnabled")
         }
     }
 
