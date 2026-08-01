@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.6] - 2026-08-02
+
 ### Added
 
 - Add an enabled-by-default automatic update check setting that can disable the daily silent check while keeping manual checks available
