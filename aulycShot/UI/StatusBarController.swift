@@ -1,5 +1,6 @@
 import AppKit
 
+@MainActor
 class StatusBarController: NSObject {
     private var statusItem: NSStatusItem
     private let onTakeScreenshot: () -> Void
@@ -27,19 +28,23 @@ class StatusBarController: NSObject {
             button.image = Self.statusBarIcon()
             button.imagePosition = .imageOnly
             button.imageScaling = .scaleProportionallyDown
+            button.setAccessibilityLabel("aulycShot")
+            button.setAccessibilityIdentifier("status-bar-button")
         }
 
         setupMenu()
 
         NotificationCenter.default.addObserver(forName: .languageDidChange, object: nil, queue: .main) { [weak self] _ in
-            self?.setupMenu()
+            Task { @MainActor [weak self] in self?.setupMenu() }
         }
         NotificationCenter.default.addObserver(forName: .hotkeyDidChange, object: nil, queue: .main) { [weak self] _ in
-            self?.setupMenu()
+            Task { @MainActor [weak self] in self?.setupMenu() }
         }
         NotificationCenter.default.addObserver(forName: .updateStateDidChange, object: nil, queue: .main) { [weak self] _ in
-            self?.setupMenu()
-            self?.syncUpdateProgressHUD()
+            Task { @MainActor [weak self] in
+                self?.setupMenu()
+                self?.syncUpdateProgressHUD()
+            }
         }
     }
 
@@ -253,7 +258,9 @@ class StatusBarController: NSObject {
         ) { response in
             switch response {
             case .alertFirstButtonReturn:
-                UpdateChecker.shared.downloadAndInstall(onFailure: presentInstallFailedAlert)
+                UpdateChecker.shared.downloadAndInstall {
+                    StatusBarController.presentInstallFailedAlert()
+                }
             case .alertSecondButtonReturn:
                 UpdateChecker.shared.skipVersion()
             default:

@@ -2,6 +2,7 @@ import AppKit
 
 /// Single-instance hover tooltip used by the editor toolbar
 /// Self-drawn to match the adaptive toolbar / cursor chip aesthetic
+@MainActor
 final class ToolTipWindow: NSPanel {
     private static var current: ToolTipWindow?
     private static var pendingWorkItem: DispatchWorkItem?
@@ -25,7 +26,9 @@ final class ToolTipWindow: NSPanel {
             object: nil,
             queue: .main
         ) { _ in
-            hide()
+            MainActor.assumeIsolated {
+                hide()
+            }
         }
         let work = DispatchWorkItem { [weak owner] in
             guard let owner,

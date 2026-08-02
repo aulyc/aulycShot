@@ -1,7 +1,37 @@
 import AppKit
 import Vision
 
-final class ScrollCapturer {
+/// AppKit images are immutable for the lifetime of these handoffs. The box
+/// crosses from the capture queue to the main actor, where the image is used.
+private struct ScrollCaptureImage: @unchecked Sendable {
+    let value: NSImage?
+
+    init(_ value: NSImage?) {
+        self.value = value
+    }
+}
+
+/// Protects the only callback that can be replaced while capture work is
+/// running. The callback itself is always invoked on the main actor.
+private final class PreviewHandlerStore: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedHandler: (@MainActor @Sendable (NSImage) -> Void)?
+
+    var handler: (@MainActor @Sendable (NSImage) -> Void)? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return storedHandler
+        }
+        set {
+            lock.lock()
+            storedHandler = newValue
+            lock.unlock()
+        }
+    }
+}
+
+final class ScrollCapturer: @unchecked Sendable {
     private struct ImageFormat {
         let bitsPerComponent: Int
         let bitsPerPixel: Int
@@ -16,7 +46,7 @@ final class ScrollCapturer {
 
     /// Result of a single capture attempt, used by auto-scroll to decide
     /// whether the page kept producing fresh content or has bottomed out.
-    enum FrameOutcome {
+    enum FrameOutcome: Sendable {
         /// A new frame with fresh content was stitched in.
         case appended
         /// The frame was a duplicate, too similar, or failed — no progress.
@@ -33,7 +63,10 @@ final class ScrollCapturer {
         }
     }
 
-    var onPreviewUpdated: ((NSImage) -> Void)?
+    var onPreviewUpdated: (@MainActor @Sendable (NSImage) -> Void)? {
+        get { previewHandler.handler }
+        set { previewHandler.handler = newValue }
+    }
 
     private let captureRect: CGRect
     private let screen: NSScreen
@@ -41,6 +74,7 @@ final class ScrollCapturer {
     /// from every captured frame so it never appears in the stitched image.
     private let excludedWindowNumbers: [CGWindowID]
     private let captureQueue = DispatchQueue(label: "aulycShot.scroll-capture", qos: .userInitiated)
+    private let previewHandler = PreviewHandlerStore()
     private let maxFrames = 100
     private let diagnosticID: String
     private let initialCaptureTimeout: TimeInterval = 3.0
@@ -118,51 +152,39 @@ final class ScrollCapturer {
         }
     }
 
-    func stopAndStitch(completion: @escaping (NSImage?) -> Void) {
+    func stopAndStitch(
+        completion: @escaping @MainActor @Sendable (NSImage?) -> Void
+    ) {
         log("stop-and-stitch-enter")
-        captureQueue.async {
-            var result: NSImage?
-
+        captureQueue.async { [self] in
             // One last frame so the final scrolled state is never missed.
-            let finalFrameOutcome = self.captureFrame(expectedShiftPoints: 0)
-            self.log(
+            let finalFrameOutcome = captureFrame(expectedShiftPoints: 0)
+            log(
                 "stop-and-stitch-final-frame",
                 metadata: ["outcome": finalFrameOutcome.diagnosticName]
             )
 
-            guard !self.frames.isEmpty else {
-                self.log("stop-and-stitch-no-frames")
+            let result: NSImage?
+            if frames.isEmpty {
+                log("stop-and-stitch-no-frames")
                 result = nil
-                self.log("stop-and-stitch-leave")
-                DispatchQueue.main.async {
-                    completion(result)
-                }
-                return
+            } else if frames.count == 1 {
+                log("stop-and-stitch-single-frame")
+                result = frames[0].image
+            } else {
+                log("final-stitch-begin")
+                result = stitchAcceptedFrames()
+                log(
+                    "final-stitch-end",
+                    metadata: [
+                        "result": result.map { Self.diagnosticSize($0.size) } ?? "nil",
+                    ]
+                )
             }
 
-            if self.frames.count == 1 {
-                self.log("stop-and-stitch-single-frame")
-                result = self.frames[0].image
-                self.log("stop-and-stitch-leave")
-                DispatchQueue.main.async {
-                    completion(result)
-                }
-                return
-            }
-
-            self.log("final-stitch-begin")
-            result = self.stitchAcceptedFrames()
-            self.log(
-                "final-stitch-end",
-                metadata: [
-                    "result": result.map { Self.diagnosticSize($0.size) } ?? "nil",
-                ]
-            )
-
-            self.log("stop-and-stitch-leave")
-            DispatchQueue.main.async {
-                completion(result)
-            }
+            log("stop-and-stitch-leave")
+            let output = ScrollCaptureImage(result)
+            Task { @MainActor in completion(output.value) }
         }
     }
 
@@ -479,9 +501,11 @@ final class ScrollCapturer {
                 "pixelHeight": previewHeightPixels,
             ]
         )
-        DispatchQueue.main.async { [weak self] in
-            guard self != nil else { return }
-            self?.onPreviewUpdated?(image)
+        guard let handler = previewHandler.handler else { return }
+        let output = ScrollCaptureImage(image)
+        Task { @MainActor in
+            guard let image = output.value else { return }
+            handler(image)
         }
     }
 

@@ -324,7 +324,11 @@ private struct LegacyMacUpdateManifest: Decodable {
 }
 
 private final class UpdateManifestURLProtocol: URLProtocol {
-    static var handler: ((URLRequest) throws -> (status: Int, data: Data, error: Error?))?
+    private static let handlerStore = UpdateManifestHandlerStore()
+    static var handler: ((URLRequest) throws -> (status: Int, data: Data, error: Error?))? {
+        get { handlerStore.handler }
+        set { handlerStore.handler = newValue }
+    }
 
     override class func canInit(with request: URLRequest) -> Bool {
         true
@@ -360,4 +364,22 @@ private final class UpdateManifestURLProtocol: URLProtocol {
     }
 
     override func stopLoading() {}
+}
+
+private final class UpdateManifestHandlerStore: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedHandler: ((URLRequest) throws -> (status: Int, data: Data, error: Error?))?
+
+    var handler: ((URLRequest) throws -> (status: Int, data: Data, error: Error?))? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return storedHandler
+        }
+        set {
+            lock.lock()
+            storedHandler = newValue
+            lock.unlock()
+        }
+    }
 }

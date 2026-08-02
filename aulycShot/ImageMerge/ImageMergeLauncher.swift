@@ -1,5 +1,6 @@
 import AppKit
 
+@MainActor
 final class ImageMergeLauncher {
     static let shared = ImageMergeLauncher()
 

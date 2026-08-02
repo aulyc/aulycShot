@@ -3,14 +3,14 @@ import ImageIO
 import UniformTypeIdentifiers
 import zlib
 
-struct EncodedImageOutput {
+struct EncodedImageOutput: @unchecked Sendable {
     let data: Data
     let fileExtension: String
     let contentType: String
     let pasteboardType: NSPasteboard.PasteboardType
 }
 
-struct EncodedClipboardImageOutput {
+struct EncodedClipboardImageOutput: Sendable {
     let primary: EncodedImageOutput
     let tiffData: Data?
 }
@@ -20,10 +20,11 @@ enum ImageOutputEncoder {
     private static let indexedPNGCompressionLevel: Int32 = 6
     private static let queue = DispatchQueue(label: "aulycShot.image-output-encoder", qos: .userInitiated)
 
+    @MainActor
     static func encodeAsync(
         image: NSImage,
         quality: ScreenshotImageQuality,
-        completion: @escaping (Result<EncodedImageOutput, Error>) -> Void
+        completion: @escaping @MainActor @Sendable (Result<EncodedImageOutput, Error>) -> Void
     ) {
         guard let source = ImageOutputSource(image: image) else {
             completion(.failure(ImageOutputEncodingError.missingImage))
@@ -34,16 +35,17 @@ enum ImageOutputEncoder {
             let result = Result {
                 try encode(source: source, quality: quality)
             }
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 completion(result)
             }
         }
     }
 
+    @MainActor
     static func encodeClipboardAsync(
         image: NSImage,
         quality: ScreenshotImageQuality,
-        completion: @escaping (Result<EncodedClipboardImageOutput, Error>) -> Void
+        completion: @escaping @MainActor @Sendable (Result<EncodedClipboardImageOutput, Error>) -> Void
     ) {
         guard let source = ImageOutputSource(image: image) else {
             completion(.failure(ImageOutputEncodingError.missingImage))
@@ -65,7 +67,7 @@ enum ImageOutputEncoder {
                 }
                 return EncodedClipboardImageOutput(primary: primary, tiffData: tiffData)
             }
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 completion(result)
             }
         }

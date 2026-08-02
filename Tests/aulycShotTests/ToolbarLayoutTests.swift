@@ -2,9 +2,12 @@ import AppKit
 import XCTest
 @testable import aulycShot
 
+@MainActor
 final class ToolbarLayoutTests: XCTestCase {
-    override func tearDown() {
-        ToolbarTooltipHoverGate.reset()
+    nonisolated override func tearDown() {
+        MainActor.assumeIsolated {
+            ToolbarTooltipHoverGate.reset()
+        }
         super.tearDown()
     }
 
@@ -44,6 +47,17 @@ final class ToolbarLayoutTests: XCTestCase {
     func testSaveRemainsInDefaultToolbarWithoutKeyboardShortcut() {
         XCTAssertTrue(ToolbarLayout.default.side.contains(.save))
         XCTAssertNil(ToolbarItemID.save.editorShortcutDisplay)
+    }
+
+    func testRuntimeToolbarButtonsExposeStableAccessibilityNames() throws {
+        let toolbar = ToolbarView(items: [.scrollCapture, .record], orientation: .vertical)
+        let buttons = toolbar.subviews.compactMap { $0 as? ToolButton }
+
+        XCTAssertEqual(buttons.count, 2)
+        XCTAssertEqual(buttons[0].identifier?.rawValue, "editor-toolbar-scrollCapture")
+        XCTAssertEqual(buttons[0].accessibilityLabel(), ToolbarItemID.scrollCapture.tooltip)
+        XCTAssertEqual(buttons[1].identifier?.rawValue, "editor-toolbar-record")
+        XCTAssertEqual(buttons[1].accessibilityLabel(), ToolbarItemID.record.tooltip)
     }
 
     func testToolbarLayoutPreviewUsesFixedHeight() {

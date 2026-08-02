@@ -20,15 +20,20 @@ struct ToastPresentation: Equatable {
     )
 }
 
+@MainActor
 class ToastWindow: NSPanel {
     private static var current: ToastWindow?
 
-    static var captureExcludedWindowNumbers: [CGWindowID] {
+    nonisolated static var captureExcludedWindowNumbers: [CGWindowID] {
         if Thread.isMainThread {
-            return captureExcludedWindowNumbersOnMain()
+            return MainActor.assumeIsolated {
+                captureExcludedWindowNumbersOnMain()
+            }
         }
         return DispatchQueue.main.sync {
-            captureExcludedWindowNumbersOnMain()
+            MainActor.assumeIsolated {
+                captureExcludedWindowNumbersOnMain()
+            }
         }
     }
 
@@ -110,8 +115,10 @@ class ToastWindow: NSPanel {
                     ctx.duration = presentation.fadeOutDuration
                     toast.animator().alphaValue = 0.0
                 }, completionHandler: {
-                    toast.orderOut(nil)
-                    if current === toast { current = nil }
+                    MainActor.assumeIsolated {
+                        toast.orderOut(nil)
+                        if current === toast { current = nil }
+                    }
                 })
             } else {
                 toast.orderOut(nil)
@@ -126,12 +133,16 @@ class ToastWindow: NSPanel {
     }
 
     @discardableResult
-    static func dismissForCaptureIfNeeded() -> Bool {
+    nonisolated static func dismissForCaptureIfNeeded() -> Bool {
         if Thread.isMainThread {
-            return dismissForCaptureIfNeededOnMain()
+            return MainActor.assumeIsolated {
+                dismissForCaptureIfNeededOnMain()
+            }
         }
         return DispatchQueue.main.sync {
-            dismissForCaptureIfNeededOnMain()
+            MainActor.assumeIsolated {
+                dismissForCaptureIfNeededOnMain()
+            }
         }
     }
 

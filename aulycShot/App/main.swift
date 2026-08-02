@@ -3,6 +3,7 @@ import Darwin
 
 // LSUIElement apps do not get the standard Edit menu automatically, but AppKit
 // text controls still rely on it for common key equivalents like Cmd+A/C/V/X.
+@MainActor
 private func installMinimalEditMenu(on app: NSApplication) {
     let mainMenu = NSMenu()
 
@@ -32,7 +33,9 @@ if let exitCode = AgentCommand.runIfRequested(arguments: Array(CommandLine.argum
 }
 
 let app = NSApplication.shared
-installMinimalEditMenu(on: app)
-let delegate = AppDelegate()
+let delegate = MainActor.assumeIsolated {
+    installMinimalEditMenu(on: app)
+    return AppDelegate()
+}
 app.delegate = delegate
 app.run()

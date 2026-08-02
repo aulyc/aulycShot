@@ -1,7 +1,7 @@
 import AppKit
 import CoreGraphics
 
-struct DetectedWindow {
+struct DetectedWindow: Sendable {
     let name: String
     let windowID: CGWindowID
     let ownerPID: pid_t
@@ -13,7 +13,7 @@ struct DetectedWindow {
     }
 }
 
-class WindowDetector {
+final class WindowDetector: @unchecked Sendable {
     private var windows: [DetectedWindow] = []
     private let ownPID = ProcessInfo.processInfo.processIdentifier
     private let accessibilityDetector = AccessibilityElementDetector()
@@ -128,7 +128,7 @@ class WindowDetector {
         at cgPoint: CGPoint,
         screenFrame: CGRect,
         displayID: CGDirectDisplayID,
-        completion: @escaping ([SmartSelectionCandidate]) -> Void
+        completion: @escaping @MainActor @Sendable ([SmartSelectionCandidate]) -> Void
     ) {
         guard screenFrame.contains(cgPoint), AXIsProcessTrusted() else { return }
 
@@ -162,7 +162,7 @@ class WindowDetector {
                 screen: screenCandidate,
                 at: cgPoint
             )
-            DispatchQueue.main.async { [weak self] in
+            Task { @MainActor [weak self] in
                 guard let self, self.isCurrentCandidateRequest(generation) else { return }
                 completion(candidates)
             }

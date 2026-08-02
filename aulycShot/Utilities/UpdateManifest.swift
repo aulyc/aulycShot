@@ -5,8 +5,8 @@ import Foundation
 /// GitHub and Gitee publish the exact same JSON document. The document may be
 /// fetched from either host, but the ordered download list always keeps GitHub
 /// first and Gitee second.
-struct UpdateManifest: Decodable, Equatable {
-    enum Source: String, CaseIterable, Decodable {
+struct UpdateManifest: Decodable, Equatable, Sendable {
+    enum Source: String, CaseIterable, Decodable, Sendable {
         case github
         case gitee
 
@@ -18,18 +18,18 @@ struct UpdateManifest: Decodable, Equatable {
         }
     }
 
-    struct Download: Decodable, Equatable {
+    struct Download: Decodable, Equatable, Sendable {
         let source: Source
         let url: URL
     }
 
-    struct Artifact: Decodable, Equatable {
+    struct Artifact: Decodable, Equatable, Sendable {
         let file: String
         let sha256: String
         let downloads: [Download]
     }
 
-    enum ValidationError: Error, Equatable {
+    enum ValidationError: Error, Equatable, Sendable {
         case unsupportedSchema
         case unexpectedReleaseIdentity
         case invalidVersion
@@ -183,8 +183,8 @@ struct UpdateManifest: Decodable, Equatable {
 /// A transport error, non-200 response, or invalid document advances to the
 /// next mirror. A valid response is authoritative even when it reports that
 /// the running app is already current.
-final class UpdateManifestLoader {
-    struct LoadedManifest {
+final class UpdateManifestLoader: @unchecked Sendable {
+    struct LoadedManifest: Sendable {
         let manifest: UpdateManifest
         let sourceURL: URL
     }
@@ -196,26 +196,26 @@ final class UpdateManifestLoader {
 
     private let session: URLSession
     private let manifestURLs: [URL]
-    private let userAgent: () -> String
+    private let userAgent: @Sendable () -> String
 
     init(
         session: URLSession = .shared,
         manifestURLs: [URL] = UpdateManifestLoader.defaultURLs,
-        userAgent: @escaping () -> String
+        userAgent: @escaping @Sendable () -> String
     ) {
         self.session = session
         self.manifestURLs = manifestURLs
         self.userAgent = userAgent
     }
 
-    func load(completion: @escaping (Result<LoadedManifest, Error>) -> Void) {
+    func load(completion: @escaping @Sendable (Result<LoadedManifest, Error>) -> Void) {
         load(at: 0, lastError: URLError(.cannotFindHost), completion: completion)
     }
 
     private func load(
         at index: Int,
         lastError: Error,
-        completion: @escaping (Result<LoadedManifest, Error>) -> Void
+        completion: @escaping @Sendable (Result<LoadedManifest, Error>) -> Void
     ) {
         guard manifestURLs.indices.contains(index) else {
             completion(.failure(lastError))

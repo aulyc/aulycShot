@@ -9,9 +9,9 @@ import ApplicationServices
 /// The loop posts one fixed scroll step, waits for the screen to settle, asks
 /// the caller to capture a frame, and repeats. When several consecutive frames
 /// report no new content, the page has bottomed out and the loop finishes.
-final class AutoScroller {
+final class AutoScroller: @unchecked Sendable {
     /// What a single capture step revealed, reported back by the caller.
-    enum StepResult {
+    enum StepResult: Sendable {
         /// The step revealed fresh content — keep scrolling.
         case progressed
         /// No new content this step (duplicate / tiny delta).
@@ -41,7 +41,7 @@ final class AutoScroller {
     private let stallThreshold: Int
     private let queue = DispatchQueue(label: "aulycShot.auto-scroll", qos: .userInitiated)
     private let eventSource = CGEventSource(stateID: .hidSystemState)
-    private let onKeyPressed: (() -> Void)?
+    private let onKeyPressed: (@MainActor @Sendable () -> Void)?
 
     /// Stamped onto aulycShot's synthetic scroll events so the input-blocking
     /// tap can tell them apart from the user's real trackpad / wheel input
@@ -72,7 +72,7 @@ final class AutoScroller {
         stepPixels: Int,
         settleDelay: TimeInterval = 0.12,
         stallThreshold: Int = 4,
-        onKeyPressed: (() -> Void)? = nil
+        onKeyPressed: (@MainActor @Sendable () -> Void)? = nil
     ) {
         self.location = centerPoint
         self.blockingRect = blockingRect
@@ -89,8 +89,8 @@ final class AutoScroller {
     ///   - onFinished: invoked on the main queue once the page has bottomed
     ///     out (not called if `stop()` cancels the loop first).
     func start(
-        captureStep: @escaping () -> StepResult,
-        onFinished: @escaping () -> Void
+        captureStep: @escaping @Sendable () -> StepResult,
+        onFinished: @escaping @MainActor @Sendable () -> Void
     ) {
         installInputBlocker()
         queue.async { [weak self] in
@@ -108,8 +108,8 @@ final class AutoScroller {
     }
 
     private func runLoop(
-        captureStep: @escaping () -> StepResult,
-        onFinished: @escaping () -> Void
+        captureStep: @escaping @Sendable () -> StepResult,
+        onFinished: @escaping @MainActor @Sendable () -> Void
     ) {
         var stallCount = 0
 
@@ -130,7 +130,7 @@ final class AutoScroller {
 
             if stallCount >= stallThreshold {
                 if !cancelled {
-                    DispatchQueue.main.async { onFinished() }
+                    Task { @MainActor in onFinished() }
                 }
                 return
             }
@@ -228,7 +228,7 @@ final class AutoScroller {
 
             if !wasCancelled {
                 let onKeyPressed = onKeyPressed
-                DispatchQueue.main.async {
+                Task { @MainActor in
                     onKeyPressed?()
                 }
             }

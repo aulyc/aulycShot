@@ -30,6 +30,7 @@ enum OverlayCancellationPolicy {
     }
 }
 
+@MainActor
 enum OverlayPresentationPolicy {
     static let windowLevel = NSWindow.Level.screenSaver
     static let hidesOnDeactivate = false
@@ -62,6 +63,7 @@ struct CaptureResult {
     let screenRect: NSRect // In AppKit coordinates for editor positioning
 }
 
+@MainActor
 class OverlayWindowController {
     /// Where a preset image came from — drives the source-specific edit hint.
     enum PresetSource {
@@ -140,6 +142,7 @@ class OverlayWindowController {
         let isWindowCapture: Bool
     }
 
+    @MainActor
     private struct SelectionViewState {
         let selectionSizeLabelOverride: String?
         let selectionLocked: Bool
@@ -260,19 +263,13 @@ class OverlayWindowController {
 
         // Pre-capture all screen content before overlay panels appear,
         // so transient menus and popups are preserved in the snapshot.
-        // Use CGWindowListCreateImage with .bestResolution so the image
-        // matches the display's effective resolution (not the native panel
-        // resolution), avoiding a visible scale shift on scaled displays.
+        // Capture at the display's effective backing scale so the snapshot
+        // does not visibly shift when the overlay appears on a scaled display.
         screenSnapshots.removeAll()
         for screen in screens {
             if let displayID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID {
                 let displayBounds = CGDisplayBounds(displayID)
-                if let image = CGWindowListCreateImage(
-                    displayBounds,
-                    .optionOnScreenOnly,
-                    kCGNullWindowID,
-                    .bestResolution
-                ) {
+                if let image = ScreenCapturer.capture(rect: displayBounds, screen: screen)?.cgImagePreservingBacking() {
                     screenSnapshots[displayID] = image
                 }
             }
@@ -759,7 +756,9 @@ class OverlayWindowController {
             else {
                 return
             }
-            self?.restoreOverlayOrderingAfterApplicationSwitch()
+            Task { @MainActor [weak self] in
+                self?.restoreOverlayOrderingAfterApplicationSwitch()
+            }
         }
     }
 

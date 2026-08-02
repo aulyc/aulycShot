@@ -2,6 +2,7 @@ import AppKit
 import XCTest
 @testable import aulycShot
 
+@MainActor
 final class AboutActionHitTargetTests: XCTestCase {
     func testAboutPaneUsesTextLinksInsideScrollAndFixedCopyrightFooter() throws {
         let settingsView = SettingsView(frame: NSRect(x: 0, y: 0, width: 920, height: 696))

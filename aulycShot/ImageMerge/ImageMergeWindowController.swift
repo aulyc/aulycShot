@@ -14,6 +14,7 @@ private final class ImageMergeWindow: NSWindow {
     }
 }
 
+@MainActor
 final class ImageMergeWindowController: NSWindowController, NSWindowDelegate, NSPopoverDelegate {
     static let outputButtonHeight: CGFloat = 33
 
@@ -826,7 +827,9 @@ final class ImageMergeColorPaletteButton: NSButton {
     }
 
     deinit {
-        closePalettePanel()
+        MainActor.assumeIsolated {
+            closePalettePanel()
+        }
     }
 
     func configure(color: NSColor, accessibilityLabel: String) {
@@ -1265,7 +1268,9 @@ final class ImageMergeDropdownButton: NSButton {
     }
 
     deinit {
-        closeDropdownPanel()
+        MainActor.assumeIsolated {
+            closeDropdownPanel()
+        }
     }
 
     func configure(options: [String], accessibilityLabel: String) {

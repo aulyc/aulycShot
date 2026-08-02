@@ -4,30 +4,36 @@ import CoreVideo
 import Foundation
 
 enum RecordingExporter {
+    @MainActor
     static func exportGIF(
         from videoURL: URL,
         to destinationURL: URL,
         fps: Int = 15,
-        completion: @escaping (Result<Void, Error>) -> Void
+        completion: @escaping @MainActor @Sendable (Result<Void, Error>) -> Void
     ) {
-        DispatchQueue.global(qos: .userInitiated).async {
-            let result: Result<Void, Error> = Result {
-                try exportGIFSynchronously(from: videoURL, to: destinationURL, fps: fps)
+        Task.detached(priority: .userInitiated) {
+            let result: Result<Void, Error>
+            do {
+                try await exportGIFOffMainActor(from: videoURL, to: destinationURL, fps: fps)
+                result = .success(())
+            } catch {
+                result = .failure(error)
             }
-            DispatchQueue.main.async {
+            await MainActor.run {
                 completion(result)
             }
         }
     }
 
-    private static func exportGIFSynchronously(from videoURL: URL, to destinationURL: URL, fps: Int) throws {
+    private static func exportGIFOffMainActor(from videoURL: URL, to destinationURL: URL, fps: Int) async throws {
         do {
             try? FileManager.default.removeItem(at: destinationURL)
 
             let asset = AVURLAsset(url: videoURL)
-            guard let videoTrack = asset.tracks(withMediaType: .video).first else {
+            guard let videoTrack = try await asset.loadTracks(withMediaType: .video).first else {
                 throw ExportError.missingVideoTrack
             }
+            let nominalFrameRate = try await videoTrack.load(.nominalFrameRate)
 
             let reader = try AVAssetReader(asset: asset)
             let output = AVAssetReaderTrackOutput(
@@ -43,7 +49,7 @@ enum RecordingExporter {
             }
             reader.add(output)
 
-            let sourceFPS = normalizedSourceFPS(videoTrack.nominalFrameRate)
+            let sourceFPS = normalizedSourceFPS(nominalFrameRate)
             let encoder = GIFEncoder(url: destinationURL, fps: fps, sourceFPS: sourceFPS)
 
             guard reader.startReading() else {

@@ -3,6 +3,7 @@ import Carbon
 import XCTest
 @testable import aulycShot
 
+@MainActor
 final class ShortcutDefaultsTests: XCTestCase {
     private let preferenceKeys = [
         "screenshotHotkeyKeyCode",

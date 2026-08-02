@@ -1,8 +1,9 @@
 import AppKit
 
 /// Crop overlay shown after a long-screenshot scroll capture. The whole
-/// stitched image is scaled to fit on screen so the user sees all of it at
-/// once; only the top and bottom edges move — the width is fixed.
+/// stitched image is scaled to fit inside the original capture selection so
+/// the user sees all of it at once; only the top and bottom edges move — the
+/// width is fixed.
 ///
 /// At fit scale a long screenshot shrinks to a thin sliver, so dragging an
 /// edge pops a full-width preview at the cut line, letting the user place it

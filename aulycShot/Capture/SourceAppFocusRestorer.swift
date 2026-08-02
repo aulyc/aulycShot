@@ -1,5 +1,6 @@
 import AppKit
 
+@MainActor
 final class SourceAppFocusRestorer {
     private let processIdentifier: pid_t?
     private var restoreScheduled = false
@@ -29,7 +30,7 @@ final class SourceAppFocusRestorer {
                 return
             }
 
-            app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+            app.activate(options: [.activateAllWindows])
         }
     }
 }

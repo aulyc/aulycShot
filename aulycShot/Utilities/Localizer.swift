@@ -8,15 +8,22 @@ import Foundation
 /// `.lproj` bundle for the user's chosen `AppLanguage` explicitly and look keys
 /// up there, which also lets language changes take effect live.
 enum Localizer {
+    private final class Cache: @unchecked Sendable {
+        let lock = NSLock()
+        var value: (lang: AppLanguage, bundle: Bundle)?
+    }
+
     /// Sentinel returned by `localizedString` when a key is absent — distinct
     /// from any real value so we can detect misses and fall back.
     private static let missing = "\u{0}aulycShot.l10n.missing\u{0}"
 
     /// (language, resolved bundle) — recomputed only when the language changes.
-    private static var cache: (lang: AppLanguage, bundle: Bundle)?
+    private static let cache = Cache()
 
     private static func bundle(for lang: AppLanguage) -> Bundle {
-        if let cache, cache.lang == lang { return cache.bundle }
+        cache.lock.lock()
+        defer { cache.lock.unlock() }
+        if let value = cache.value, value.lang == lang { return value.bundle }
         let resolved: Bundle
         if let path = Bundle.main.path(forResource: lang.lprojName, ofType: "lproj"),
            let lproj = Bundle(path: path) {
@@ -25,7 +32,7 @@ enum Localizer {
             // Running unbundled (e.g. `swift run`) — no .lproj on disk.
             resolved = .main
         }
-        cache = (lang, resolved)
+        cache.value = (lang, resolved)
         return resolved
     }
 

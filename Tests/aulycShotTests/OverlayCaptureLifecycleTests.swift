@@ -2,6 +2,7 @@ import AppKit
 import XCTest
 @testable import aulycShot
 
+@MainActor
 final class OverlayCaptureLifecycleTests: XCTestCase {
     func testEscapeCancelsOnlyWhenDeliveredToOverlayApplication() throws {
         let event = try XCTUnwrap(

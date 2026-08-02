@@ -2,6 +2,7 @@ import AppKit
 import XCTest
 @testable import aulycShot
 
+@MainActor
 final class EditorCursorRoutingPolicyTests: XCTestCase {
     private let selectionRect = NSRect(x: 100, y: 100, width: 400, height: 300)
 

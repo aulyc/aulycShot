@@ -45,6 +45,7 @@ private final class SettingsWindow: NSWindow {
     }
 }
 
+@MainActor
 class SettingsWindowController: NSWindowController {
     static let shared = SettingsWindowController()
 
@@ -72,7 +73,9 @@ class SettingsWindowController: NSWindowController {
         super.init(window: window)
 
         NotificationCenter.default.addObserver(forName: .languageDidChange, object: nil, queue: .main) { [weak self] _ in
-            self?.window?.title = L10n.settingsTitle
+            Task { @MainActor [weak self] in
+                self?.window?.title = L10n.settingsTitle
+            }
         }
 
         settingsView = SettingsView(frame: NSRect(x: 0, y: 0, width: 920, height: 660))

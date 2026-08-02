@@ -1,6 +1,7 @@
 import Cocoa
 import Carbon
 
+@MainActor
 final class HotkeyManager {
 
     static let shared = HotkeyManager()
@@ -38,17 +39,19 @@ final class HotkeyManager {
     private init() {}
 
     deinit {
-        unregister()
-        unregisterSelectedImagePin()
-        unregisterClipboardImagePin()
-        unregisterClipboardTextPin()
-        unregisterSelectedImageEdit()
-        unregisterClipboardImageEdit()
-        unregisterRecord()
-        unregisterImageMerge()
-        if let handler = eventHandlerRef {
-            RemoveEventHandler(handler)
-            eventHandlerRef = nil
+        MainActor.assumeIsolated {
+            unregister()
+            unregisterSelectedImagePin()
+            unregisterClipboardImagePin()
+            unregisterClipboardTextPin()
+            unregisterSelectedImageEdit()
+            unregisterClipboardImageEdit()
+            unregisterRecord()
+            unregisterImageMerge()
+            if let handler = eventHandlerRef {
+                RemoveEventHandler(handler)
+                eventHandlerRef = nil
+            }
         }
     }
 
@@ -438,8 +441,10 @@ final class HotkeyManager {
     }
 
     /// Display string for the saved screenshot-execution hotkey, or nil if not set.
-    static func currentClipboardDisplayString() -> String? {
-        guard let (kc, mods) = HotkeyManager.shared.currentClipboardHotkey() else { return nil }
+    nonisolated static func currentClipboardDisplayString() -> String? {
+        guard Defaults.hasCustomClipboardHotkey else { return nil }
+        let kc = UInt32(Defaults.clipboardHotkeyKeyCode)
+        let mods = UInt32(Defaults.clipboardHotkeyModifiers)
         return modifierString(mods) + keyString(kc)
     }
 
@@ -598,7 +603,7 @@ final class HotkeyManager {
 
     // MARK: - Keycode helpers
 
-    static func isFunctionKey(_ keyCode: UInt32) -> Bool {
+    nonisolated static func isFunctionKey(_ keyCode: UInt32) -> Bool {
         let codes: Set<UInt32> = [
             UInt32(kVK_F1), UInt32(kVK_F2), UInt32(kVK_F3), UInt32(kVK_F4),
             UInt32(kVK_F5), UInt32(kVK_F6), UInt32(kVK_F7), UInt32(kVK_F8),
@@ -609,7 +614,7 @@ final class HotkeyManager {
         return codes.contains(keyCode)
     }
 
-    static func modifierString(_ m: UInt32) -> String {
+    nonisolated static func modifierString(_ m: UInt32) -> String {
         var s = ""
         if m & UInt32(controlKey) != 0 { s += "\u{2303}" }
         if m & UInt32(optionKey) != 0  { s += "\u{2325}" }
@@ -618,7 +623,7 @@ final class HotkeyManager {
         return s
     }
 
-    static func keyString(_ keyCode: UInt32) -> String {
+    nonisolated static func keyString(_ keyCode: UInt32) -> String {
         if let mapped = keyMap[keyCode] { return mapped }
         return "Key \(keyCode)"
     }
@@ -698,7 +703,7 @@ final class HotkeyManager {
         UInt32(kVK_PageUp): "\u{F72C}", UInt32(kVK_PageDown): "\u{F72D}",
     ]
 
-    private static let keyMap: [UInt32: String] = [
+    nonisolated private static let keyMap: [UInt32: String] = [
         UInt32(kVK_ANSI_A): "A", UInt32(kVK_ANSI_B): "B", UInt32(kVK_ANSI_C): "C",
         UInt32(kVK_ANSI_D): "D", UInt32(kVK_ANSI_E): "E", UInt32(kVK_ANSI_F): "F",
         UInt32(kVK_ANSI_G): "G", UInt32(kVK_ANSI_H): "H", UInt32(kVK_ANSI_I): "I",

@@ -14,6 +14,7 @@ func tintedToolbarIcon(_ itemID: ToolbarItemID, pointSize: CGFloat, color: NSCol
 
 /// Prevents a toolbar tooltip from being recreated merely because scrolling
 /// moved a different tile underneath a stationary pointer.
+@MainActor
 enum ToolbarTooltipHoverGate {
     private static var pointerLocationAtScroll: NSPoint?
     private static let movementThreshold: CGFloat = 1
@@ -72,6 +73,7 @@ enum ToolbarDragGhostPresentation {
 
 /// A transparent, mouse-ignoring window that keeps the dragged icon above both
 /// the settings window and its hidden-tools child panel.
+@MainActor
 final class ToolbarDragGhostOverlay {
     let panel: NSPanel
     let ghost: NSView
@@ -148,6 +150,7 @@ enum ToolbarSlotLayoutMode: Equatable {
 
 /// A single draggable tool icon in a `ToolbarSlotGridView`. Pressing it
 /// starts a drag handled by the owning grid.
+@MainActor
 final class ToolbarItemTile: NSView {
     static let previewIconPointSize: CGFloat = 15
 
@@ -305,6 +308,7 @@ final class ToolbarItemTile: NSView {
 
 /// A wrapping grid of tool tiles for one toolbar section, with drag-and-drop
 /// reordering both within the grid and across sibling grids.
+@MainActor
 final class ToolbarSlotGridView: NSView {
     static let tile: CGFloat = 34
     static let gap: CGFloat = 8
@@ -773,6 +777,7 @@ final class ToolbarSlotGridView: NSView {
 /// A live toolbar editor embedded directly into the editor preview. Its main
 /// and side drop zones are the same controls the user drags, so the preview is
 /// the source of truth instead of a second rendering of the grids below it.
+@MainActor
 final class ToolbarLayoutPreviewView: NSView {
     var layout: ToolbarLayout = .default {
         didSet {

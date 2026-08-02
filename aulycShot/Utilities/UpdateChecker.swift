@@ -3,7 +3,7 @@ import Foundation
 
 /// Outcome of an update check / install. Drives the menu bar item and the
 /// About pane.
-enum UpdateState: Equatable {
+enum UpdateState: Equatable, Sendable {
     case idle
     case checking
     case upToDate
@@ -16,7 +16,7 @@ enum UpdateState: Equatable {
 
 /// Sub-steps of the in-place install, surfaced so the UI can say "verifying"
 /// or "extracting" rather than one opaque "installing".
-enum InstallPhase: Equatable {
+enum InstallPhase: Equatable, Sendable {
     case verifying
     case unzipping
     case installing
@@ -32,6 +32,7 @@ extension Notification.Name {
 /// Both mirrors publish the same manifest and notarized DMG. `UpdateInstaller`
 /// owns download/hash/signature/install verification; this type owns the UI
 /// state machine and mirror failover.
+@MainActor
 final class UpdateChecker {
     static let shared = UpdateChecker()
 
@@ -40,9 +41,7 @@ final class UpdateChecker {
     private let shortcutTriggerDayKey = "automaticUpdateCheckShortcutTriggerDay"
     private let shortcutTriggerCountKey = "automaticUpdateCheckShortcutTriggerCount"
     private let automaticCheckShortcutTriggerCount = 1
-    private lazy var manifestLoader = UpdateManifestLoader {
-        "aulycShot/\(self.currentVersion)"
-    }
+    private let manifestLoader: UpdateManifestLoader
 
     private(set) var state: UpdateState = .idle {
         didSet {
@@ -56,7 +55,12 @@ final class UpdateChecker {
     private(set) var latestManifestSourceURL: URL?
     private var latestManifest: UpdateManifest?
 
-    private init() {}
+    private init() {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
+        manifestLoader = UpdateManifestLoader {
+            "aulycShot/\(version)"
+        }
+    }
 
     /// Running app version, e.g. "1.1.2".
     var currentVersion: String {
@@ -114,7 +118,10 @@ final class UpdateChecker {
     /// state. Manual checks ignore the screenshot-shortcut gate and the
     /// skipped-version preference; a background check stays silent about a
     /// skipped version.
-    func check(manual: Bool, completion: ((UpdateState) -> Void)? = nil) {
+    func check(
+        manual: Bool,
+        completion: (@MainActor @Sendable (UpdateState) -> Void)? = nil
+    ) {
         guard !isBusy else {
             completion?(state)
             return
@@ -122,32 +129,34 @@ final class UpdateChecker {
         setState(.checking)
 
         manifestLoader.load { [weak self] result in
-            guard let self else { return }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
 
-            UserDefaults.standard.set(Date(), forKey: self.throttleKey)
-            switch result {
-            case .failure:
-                self.finish(.failed, completion: completion)
-            case .success(let loaded):
-                let manifest = loaded.manifest
-                guard Self.isVersion(manifest.version, newerThan: self.currentVersion) else {
-                    self.latestManifest = nil
-                    self.latestVersion = nil
-                    self.latestPageURL = nil
+                UserDefaults.standard.set(Date(), forKey: self.throttleKey)
+                switch result {
+                case .failure:
+                    self.finish(.failed, completion: completion)
+                case .success(let loaded):
+                    let manifest = loaded.manifest
+                    guard Self.isVersion(manifest.version, newerThan: self.currentVersion) else {
+                        self.latestManifest = nil
+                        self.latestVersion = nil
+                        self.latestPageURL = nil
+                        self.latestManifestSourceURL = loaded.sourceURL
+                        self.finish(.upToDate, completion: completion)
+                        return
+                    }
+
+                    self.latestManifest = manifest
+                    self.latestVersion = manifest.version
+                    self.latestPageURL = manifest.releasePageURL
                     self.latestManifestSourceURL = loaded.sourceURL
-                    self.finish(.upToDate, completion: completion)
-                    return
-                }
 
-                self.latestManifest = manifest
-                self.latestVersion = manifest.version
-                self.latestPageURL = manifest.releasePageURL
-                self.latestManifestSourceURL = loaded.sourceURL
-
-                if !manual, manifest.version == self.skippedVersion {
-                    self.finish(.upToDate, completion: completion)
-                } else {
-                    self.finish(.available(version: manifest.version), completion: completion)
+                    if !manual, manifest.version == self.skippedVersion {
+                        self.finish(.upToDate, completion: completion)
+                    } else {
+                        self.finish(.available(version: manifest.version), completion: completion)
+                    }
                 }
             }
         }
@@ -165,7 +174,9 @@ final class UpdateChecker {
     /// running app, and relaunches. `onFailure` fires on the main thread if any
     /// step fails — the running app is left untouched. On success the app
     /// terminates and the detached helper reopens the new build.
-    func downloadAndInstall(onFailure: (() -> Void)? = nil) {
+    func downloadAndInstall(
+        onFailure: (@MainActor @Sendable () -> Void)? = nil
+    ) {
         let version: String
         switch state {
         case .available(let availableVersion):
@@ -184,7 +195,7 @@ final class UpdateChecker {
 
         setState(.downloading(version: version, fraction: 0))
 
-        let fail: () -> Void = { [weak self] in
+        let fail: @MainActor @Sendable () -> Void = { [weak self] in
             self?.setState(.installFailed(version: version))
             onFailure?()
         }
@@ -220,6 +231,7 @@ final class UpdateChecker {
                             self.setState(
                                 .installing(version: version, phase: .verifying)
                             )
+                            let checker = self
                             DispatchQueue.global(qos: .userInitiated).async {
                                 do {
                                     try UpdateInstaller.install(
@@ -227,17 +239,19 @@ final class UpdateChecker {
                                         provenanceAt: provenancePath,
                                         manifest: manifest,
                                         phase: { phase in
-                                            self.setState(
-                                                .installing(
-                                                    version: version,
-                                                    phase: phase
+                                            Task { @MainActor in
+                                                checker.setState(
+                                                    .installing(
+                                                        version: version,
+                                                        phase: phase
+                                                    )
                                                 )
-                                            )
+                                            }
                                         }
                                     )
-                                    DispatchQueue.main.async { NSApp.terminate(nil) }
+                                    Task { @MainActor in NSApp.terminate(nil) }
                                 } catch {
-                                    DispatchQueue.main.async { fail() }
+                                    Task { @MainActor in fail() }
                                 }
                             }
                         }
@@ -247,24 +261,21 @@ final class UpdateChecker {
         }
     }
 
-    private func finish(_ newState: UpdateState, completion: ((UpdateState) -> Void)?) {
-        DispatchQueue.main.async {
-            self.state = newState
-            completion?(newState)
-        }
+    private func finish(
+        _ newState: UpdateState,
+        completion: (@MainActor @Sendable (UpdateState) -> Void)?
+    ) {
+        state = newState
+        completion?(newState)
     }
 
     private func setState(_ newState: UpdateState) {
-        if Thread.isMainThread {
-            state = newState
-        } else {
-            DispatchQueue.main.async { self.state = newState }
-        }
+        state = newState
     }
 
     /// Strips a leading `release-v` / `v` from a tag — aulycShot tags releases as
     /// `release-v1.1.2`, so "release-v1.1.2" becomes "1.1.2".
-    static func normalizeVersion(_ raw: String) -> String {
+    nonisolated static func normalizeVersion(_ raw: String) -> String {
         var v = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if v.hasPrefix("release-v") {
             v.removeFirst("release-v".count)
@@ -278,7 +289,7 @@ final class UpdateChecker {
     }
 
     /// Component-wise numeric comparison: "1.2.0" is newer than "1.1.9".
-    static func isVersion(_ lhs: String, newerThan rhs: String) -> Bool {
+    nonisolated static func isVersion(_ lhs: String, newerThan rhs: String) -> Bool {
         let a = components(lhs)
         let b = components(rhs)
         for i in 0..<max(a.count, b.count) {
@@ -289,12 +300,12 @@ final class UpdateChecker {
         return false
     }
 
-    private static func dayKey(for date: Date) -> String {
+    nonisolated private static func dayKey(for date: Date) -> String {
         let components = Calendar.autoupdatingCurrent.dateComponents([.year, .month, .day], from: date)
         return "\(components.year ?? 0)-\(components.month ?? 0)-\(components.day ?? 0)"
     }
 
-    private static func components(_ version: String) -> [Int] {
+    nonisolated private static func components(_ version: String) -> [Int] {
         version.split(separator: ".").map { Int($0.prefix(while: { $0.isNumber })) ?? 0 }
     }
 }

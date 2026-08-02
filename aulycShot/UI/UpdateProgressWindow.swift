@@ -6,6 +6,7 @@ import AppKit
 /// Unlike `ToastWindow` it persists across phases: callers advance it through
 /// "checking → downloading → installing" by calling `show` repeatedly, and
 /// dismiss it explicitly when the flow ends (or the app relaunches itself).
+@MainActor
 final class UpdateProgressWindow: NSPanel {
     /// What the indicator shows: an indeterminate spinner, or a determinate bar.
     enum Style: Equatable {
@@ -49,8 +50,10 @@ final class UpdateProgressWindow: NSPanel {
             ctx.duration = 0.2
             window.animator().alphaValue = 0
         }, completionHandler: {
-            window.spinner.stopAnimation(nil)
-            window.orderOut(nil)
+            MainActor.assumeIsolated {
+                window.spinner.stopAnimation(nil)
+                window.orderOut(nil)
+            }
         })
     }
 

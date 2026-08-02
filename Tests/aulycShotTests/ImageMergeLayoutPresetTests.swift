@@ -2,6 +2,7 @@ import AppKit
 import XCTest
 @testable import aulycShot
 
+@MainActor
 final class ImageMergeLayoutPresetTests: XCTestCase {
     private let preferenceKeys = [
         "imageMergeSpacing",

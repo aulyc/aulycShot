@@ -1,5 +1,6 @@
 import AppKit
 
+@MainActor
 protocol SelectionViewDelegate: AnyObject {
     func selectionDidStart()
     /// - Parameter isWindowSelection: true when the rect came from clicking a
@@ -71,6 +72,7 @@ enum EditorCursorRoutingPolicy {
     }
 }
 
+@MainActor
 class SelectionView: NSView {
     weak var delegate: SelectionViewDelegate?
 
@@ -110,6 +112,13 @@ class SelectionView: NSView {
 
     // Scroll capture mode: update border styling while the controller manages event routing.
     var scrollCaptureActive = false
+
+    // Crop mode is hosted by the same full-screen overlay window, but must not
+    // keep painting that window's frozen desktop snapshot and dimming mask.
+    // The crop view itself remains confined to the original selection.
+    var cropPresentationActive = false {
+        didSet { needsDisplay = true }
+    }
 
     // When false, the selection frame becomes a fixed viewport.
     var selectionInteractionEnabled = true
@@ -657,6 +666,15 @@ class SelectionView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let context = NSGraphicsContext.current?.cgContext else { return }
+
+        // A long-screenshot crop should read as a panel over the live desktop,
+        // not as a newly opened full-screen interface. Clear the transparent
+        // overlay outside the selection; ScrollCropView paints only its own
+        // selection-sized frame above this view.
+        if cropPresentationActive {
+            context.clear(bounds)
+            return
+        }
 
         // Draw pre-captured screen snapshot as background so transient
         // menus/popups remain visible even after they dismiss.

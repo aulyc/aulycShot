@@ -1,6 +1,7 @@
 import AppKit
 import UniformTypeIdentifiers
 
+@MainActor
 final class ShareViewController: NSViewController {
     private static let handoffNotificationName = Notification.Name("com.aulyc.aulycshot.share-handoff")
 
@@ -52,16 +53,26 @@ final class ShareViewController: NSViewController {
         }
 
         if candidate.provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
-            candidate.provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { [weak self] item, _ in
-                guard let self else { return }
+            let controller = WeakShareViewController(self)
+            candidate.provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+                let payload = ShareItemProviderPayload(item)
+                Task { @MainActor in
+                    guard let self = controller.value else { return }
 
-                if let sourceURL = self.fileURL(from: item),
-                   let handoffURL = self.copyImageFileToHandoffDirectory(sourceURL, typeIdentifier: candidate.imageTypeIdentifier) {
-                    self.openContainingApp(with: handoffURL)
-                    return
+                    if let sourceURL = self.fileURL(from: payload.value),
+                       let handoffURL = self.copyImageFileToHandoffDirectory(
+                           sourceURL,
+                           typeIdentifier: candidate.imageTypeIdentifier
+                       ) {
+                        self.openContainingApp(with: handoffURL)
+                        return
+                    }
+
+                    self.loadImagePayload(
+                        from: candidate.provider,
+                        typeIdentifier: candidate.imageTypeIdentifier
+                    )
                 }
-
-                self.loadImagePayload(from: candidate.provider, typeIdentifier: candidate.imageTypeIdentifier)
             }
             return
         }
@@ -75,43 +86,49 @@ final class ShareViewController: NSViewController {
             return
         }
 
-        provider.loadItem(forTypeIdentifier: typeIdentifier, options: nil) { [weak self] item, _ in
-            guard let self else { return }
+        let controller = WeakShareViewController(self)
+        provider.loadItem(forTypeIdentifier: typeIdentifier, options: nil) { item, _ in
+            let payload = ShareItemProviderPayload(item)
+            Task { @MainActor in
+                guard let self = controller.value else { return }
 
-            guard let handoffURL = self.writeImagePayload(item, typeIdentifier: typeIdentifier) else {
-                self.fail(with: "Unable to read image")
-                return
+                guard let handoffURL = self.writeImagePayload(payload.value, typeIdentifier: typeIdentifier) else {
+                    self.fail(with: "Unable to read image")
+                    return
+                }
+
+                self.openContainingApp(with: handoffURL)
             }
-
-            self.openContainingApp(with: handoffURL)
         }
     }
 
     private func openContainingApp(with fileURL: URL) {
-        DispatchQueue.main.async { [weak self] in
+        openHandoffURL(for: fileURL) { [weak self] success in
             guard let self else { return }
+            if success {
+                self.extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
+                return
+            }
 
-            self.openHandoffURL(for: fileURL) { success in
+            self.launchContainingApplication { [weak self] success in
+                guard let self else { return }
                 if success {
-                    self.extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
-                    return
-                }
-
-                self.launchContainingApplication { success in
-                    if success {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            self.postHandoffNotification(for: fileURL)
-                            self.extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
-                        }
-                    } else {
-                        self.fail(with: "Unable to open aulycShot")
+                    Task { @MainActor [weak self] in
+                        try? await Task.sleep(for: .milliseconds(300))
+                        guard let self else { return }
+                        self.postHandoffNotification(for: fileURL)
+                        self.extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
                     }
+                } else {
+                    self.fail(with: "Unable to open aulycShot")
                 }
             }
         }
     }
 
-    private func launchContainingApplication(completion: @escaping (Bool) -> Void) {
+    private func launchContainingApplication(
+        completion: @escaping @MainActor @Sendable (Bool) -> Void
+    ) {
         guard let appURL = Self.containingApplicationURL() else {
             completion(false)
             return
@@ -125,7 +142,7 @@ final class ShareViewController: NSViewController {
                 NSLog("aulycShot share extension: failed to launch containing app: \(error)")
             }
 
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 completion(error == nil)
             }
         }
@@ -140,7 +157,10 @@ final class ShareViewController: NSViewController {
         )
     }
 
-    private func openHandoffURL(for fileURL: URL, completion: @escaping (Bool) -> Void) {
+    private func openHandoffURL(
+        for fileURL: URL,
+        completion: @escaping @MainActor @Sendable (Bool) -> Void
+    ) {
         guard let url = Self.handoffURL(for: fileURL) else {
             completion(false)
             return
@@ -157,7 +177,7 @@ final class ShareViewController: NSViewController {
         }
 
         extensionContext.open(url) { success in
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 if success {
                     completion(true)
                 } else {
@@ -319,18 +339,15 @@ final class ShareViewController: NSViewController {
     }
 
     private func fail(with message: String) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.progressIndicator.stopAnimation(nil)
-            self.statusLabel.stringValue = message
+        progressIndicator.stopAnimation(nil)
+        statusLabel.stringValue = message
 
-            let error = NSError(
-                domain: "com.aulyc.aulycshot.share-extension",
-                code: 1,
-                userInfo: [NSLocalizedDescriptionKey: message]
-            )
-            self.extensionContext?.cancelRequest(withError: error)
-        }
+        let error = NSError(
+            domain: "com.aulyc.aulycshot.share-extension",
+            code: 1,
+            userInfo: [NSLocalizedDescriptionKey: message]
+        )
+        extensionContext?.cancelRequest(withError: error)
     }
 
     private static func firstImageTypeIdentifier(in provider: NSItemProvider) -> String? {
@@ -364,7 +381,28 @@ final class ShareViewController: NSViewController {
     }
 }
 
-private struct ImageCandidate {
+private struct ImageCandidate: @unchecked Sendable {
     let provider: NSItemProvider
     let imageTypeIdentifier: String?
+}
+
+/// `NSItemProvider` invokes its load callback on an unspecified queue and hands
+/// it an Objective-C payload whose concrete type is not statically Sendable.
+/// The payload is never inspected until the task has entered the main actor.
+private struct ShareItemProviderPayload: @unchecked Sendable {
+    let value: NSSecureCoding?
+
+    init(_ value: NSSecureCoding?) {
+        self.value = value
+    }
+}
+
+/// The provider callback must not capture the main-actor controller directly.
+/// This weak bridge is only dereferenced after entering the main actor.
+private final class WeakShareViewController: @unchecked Sendable {
+    weak var value: ShareViewController?
+
+    init(_ value: ShareViewController) {
+        self.value = value
+    }
 }

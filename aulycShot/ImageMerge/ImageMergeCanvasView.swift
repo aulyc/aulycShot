@@ -7,6 +7,7 @@ private func isImageMergeSelectionDeleteKey(_ event: NSEvent) -> Bool {
     return event.keyCode == 51 || event.keyCode == 117
 }
 
+@MainActor
 final class ImageMergeCanvasView: NSView {
     var document: ImageMergeDocument? {
         didSet {
@@ -447,7 +448,6 @@ final class ImageMergeCanvasView: NSView {
                 }
 
                 if dragged.maxX <= reference.minX {
-                    let currentGap = reference.minX - dragged.maxX
                     let delta = reference.minX - gapReference.gap - dragged.maxX
                     if abs(delta) <= threshold {
                         let snapped = dragged.offsetBy(dx: delta, dy: 0)
@@ -524,7 +524,6 @@ final class ImageMergeCanvasView: NSView {
                 }
 
                 if dragged.maxY <= reference.minY {
-                    let currentGap = reference.minY - dragged.maxY
                     let delta = reference.minY - gapReference.gap - dragged.maxY
                     if abs(delta) <= threshold {
                         let snapped = dragged.offsetBy(dx: 0, dy: delta)
@@ -1047,7 +1046,9 @@ final class ImageMergeThumbnailListView: NSView {
 
         guard autoScrollTimer == nil else { return }
         let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
-            self?.performAutoScrollTick()
+            MainActor.assumeIsolated {
+                self?.performAutoScrollTick()
+            }
         }
         RunLoop.main.add(timer, forMode: .common)
         autoScrollTimer = timer

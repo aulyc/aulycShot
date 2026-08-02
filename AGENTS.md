@@ -17,6 +17,8 @@ bash scripts/rebuild-and-open.sh
 ```
 
 This script builds the app bundle, kills any running instance, launches the new build, and confirms it started.
+It launches the local `.cache/build/aulycShot.app` directly and must not write to `/Applications`;
+formal installation is a separate, explicitly authorized `make install-release` operation.
 
 ### SwiftPM in restricted sandboxes
 
@@ -198,27 +200,43 @@ This script builds the app bundle, kills any running instance, launches the new 
 ## Hotspot Ownership
 
 - `aulycShot/Editor/EditWindowController.swift` owns editor session wiring,
-  toolbar callbacks, scroll capture, crop mode, and output actions. Keep tool
+  crop/output orchestration, and collaborator callbacks. Editor chrome lives in
+  `EditorKeyboardShortcut.swift`, `EditorOptionChrome.swift`, `ToolbarView.swift`,
+  `ToolButton.swift`, `EditorSubToolbars.swift`, `EditorHUDControls.swift`,
+  `SelectionChromeOverlay.swift`, and the `Scroll*.swift` controls. Keep tool
   state changes paired with toolbar/sub-toolbar updates. Verify with
   `bash scripts/compile-check.sh`; use `bash scripts/rebuild-and-open.sh` for
   UI interaction changes.
 - `aulycShot/Editor/EditCanvasView.swift` owns annotation state, mouse handling,
-  selection chrome, undo/redo, and export compositing. Preserve value-typed
-  annotation mutation and snapshot-based undo. Verify with
+  and selection interaction. Hit testing, snapshot history, export compositing,
+  cursors, edit tools, and live text editing live in their named collaborators.
+  Preserve value-typed annotation mutation and snapshot-based undo. Verify with
   `bash scripts/compile-check.sh`; use `bash scripts/rebuild-and-open.sh` when
   hit testing or visible editing behavior changes.
-- `aulycShot/Editor/Annotations.swift` owns annotation model structs and drawing
-  behavior. Keep drawing and hit-testing logic together for each annotation
-  type. Verify with `bash scripts/compile-check.sh`.
-- `aulycShot/Settings/SettingsView.swift` owns the settings window and preference
-  controls. Keep persisted defaults in `Defaults.swift` aligned with visible
-  controls and localized strings. Verify with `bash scripts/compile-check.sh`;
+- `aulycShot/Editor/Annotations.swift` owns the annotation protocol and shared
+  geometry. Each `*Annotation.swift` file owns that type's model, drawing, and
+  hit testing; keep those responsibilities together. Verify with
+  `bash scripts/compile-check.sh`.
+- `aulycShot/Settings/SettingsView.swift` owns settings-window orchestration and
+  shared pane state. General, shortcut, permission, and about behavior live in
+  their matching `*SettingsPane.swift` files; chrome, builders, and controls
+  live in `SettingsChrome.swift` and `SettingsShared*.swift`. Keep persisted
+  defaults in `Defaults.swift` aligned with visible controls and localized
+  strings. Verify with `bash scripts/compile-check.sh`;
   use `bash scripts/rebuild-and-open.sh` for settings UI behavior.
-- `aulycShot/Capture/PinLauncher.swift` owns pinned-image window behavior,
-  toolbar visibility, drag/resize behavior, and zoom interaction. Keep hover
-  affordances and the above/below-100% drag model stable. Verify with
+- `aulycShot/Capture/PinLauncher.swift` owns pin creation only. Window lifetime,
+  image interaction, navigation, toolbar, text pins, and pure zoom/viewport
+  geometry live in `PinWindow*.swift`, `PinContentView.swift`,
+  `PinNavigatorView.swift`, `PinToolbar.swift`, `TextPin.swift`, and
+  `PinZoomPolicy.swift`. Keep hover affordances and the above/below-100% drag
+  model stable. Verify with
   `bash scripts/compile-check.sh`; use `bash scripts/rebuild-and-open.sh` for
   pin-window interaction changes.
+- `aulycShot/Capture/RecordingEngine.swift` owns main-thread recording lifecycle
+  and ScreenCaptureKit coordination. `RecordingWriterCoordinator.swift` owns
+  queue serialization, while `RecordingWriterSession.swift` and
+  `RecordingWriterBackend.swift` own writer state and AVFoundation I/O. Keep all
+  writer mutation on the recording queue and completion delivery single-shot.
 - `aulycShot/Utilities/Defaults.swift` owns persisted preferences and localized
   string accessors. Keep new settings normalized at the persistence boundary and
   add matching keys to every `Resources/*.lproj/Localizable.strings` file.

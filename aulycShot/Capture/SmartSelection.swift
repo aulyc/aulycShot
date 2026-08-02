@@ -1,8 +1,8 @@
 import CoreGraphics
 import Darwin
 
-struct SmartSelectionCandidate: Equatable {
-    enum Kind: Equatable {
+struct SmartSelectionCandidate: Equatable, Sendable {
+    enum Kind: Equatable, Sendable {
         case element
         case window(CGWindowID)
         case screen(CGDirectDisplayID)

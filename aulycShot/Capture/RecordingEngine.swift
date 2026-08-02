@@ -44,57 +44,151 @@ enum RecordingSavePreference: String, CaseIterable {
 typealias RecordingProgressCallback = (_ seconds: Int) -> Void
 typealias RecordingCompletionCallback = (_ url: URL?, _ error: Error?) -> Void
 
+struct RecordingLifecycle: Equatable {
+    enum TerminationIntent: Equatable {
+        case finish
+        case cancel
+    }
+
+    private enum Phase: Equatable {
+        case idle
+        case starting(isPaused: Bool)
+        case active(isPaused: Bool)
+        case terminating(TerminationIntent)
+    }
+
+    private var phase: Phase = .idle
+
+    var state: RecordingEngine.State {
+        switch phase {
+        case .idle:
+            return .idle
+        case .starting(isPaused: false), .active(isPaused: false):
+            return .recording
+        case .starting(isPaused: true), .active(isPaused: true):
+            return .paused
+        case .terminating:
+            return .stopping
+        }
+    }
+
+    var allowsStartupWork: Bool {
+        if case .starting = phase { return true }
+        return false
+    }
+
+    var isPaused: Bool {
+        switch phase {
+        case .starting(isPaused: true), .active(isPaused: true): return true
+        default: return false
+        }
+    }
+
+    var terminationIntent: TerminationIntent? {
+        if case .terminating(let intent) = phase { return intent }
+        return nil
+    }
+
+    mutating func start() -> Bool {
+        guard phase == .idle else { return false }
+        phase = .starting(isPaused: false)
+        return true
+    }
+
+    mutating func markCaptureStarted() -> Bool {
+        guard case .starting(let isPaused) = phase else { return false }
+        phase = .active(isPaused: isPaused)
+        return true
+    }
+
+    mutating func pause() -> Bool {
+        switch phase {
+        case .starting(isPaused: false):
+            phase = .starting(isPaused: true)
+        case .active(isPaused: false):
+            phase = .active(isPaused: true)
+        default:
+            return false
+        }
+        return true
+    }
+
+    mutating func resume() -> Bool {
+        switch phase {
+        case .starting(isPaused: true):
+            phase = .starting(isPaused: false)
+        case .active(isPaused: true):
+            phase = .active(isPaused: false)
+        default:
+            return false
+        }
+        return true
+    }
+
+    mutating func requestStop() -> Bool {
+        requestTermination(.finish)
+    }
+
+    mutating func requestCancel() -> Bool {
+        requestTermination(.cancel)
+    }
+
+    mutating func complete() -> Bool {
+        guard phase != .idle else { return false }
+        phase = .idle
+        return true
+    }
+
+    private mutating func requestTermination(_ intent: TerminationIntent) -> Bool {
+        switch phase {
+        case .starting, .active:
+            phase = .terminating(intent)
+            return true
+        case .idle, .terminating:
+            return false
+        }
+    }
+}
+
+@MainActor
 final class RecordingEngine: NSObject {
-    enum State {
+    typealias RecordingError = ScreenRecordingError
+
+    enum State: Equatable {
         case idle
         case recording
         case paused
         case stopping
     }
 
-    private(set) var state: State = .idle
-
     private let fps: Int
-    private let recordingQueue = DispatchQueue(label: "aulycShot.recording")
+    private let writerCoordinator: RecordingWriterCoordinator
 
-    private var screen: NSScreen?
+    private var lifecycle = RecordingLifecycle()
     private var sourceRect: CGRect = .zero
     private var stream: SCStream?
     private var streamOutput: RecordingStreamOutput?
-    private var outputURL: URL?
-
-    private var assetWriter: AVAssetWriter?
-    private var videoInput: AVAssetWriterInput?
-    private var adaptor: AVAssetWriterInputPixelBufferAdaptor?
-    private var sessionStarted = false
-
-    private var hasWrittenFrame = false
-
+    private var captureTask: Task<Void, Never>?
+    private var terminationTask: Task<Void, Never>?
     private var progressTimer: Timer?
     private var elapsedSeconds = 0
-    private var pauseStartTime: Date?
-    private var totalPausedDuration: TimeInterval = 0
 
+    var state: State { lifecycle.state }
     var onProgress: RecordingProgressCallback?
     var onCompletion: RecordingCompletionCallback?
     var onPauseChanged: ((Bool) -> Void)?
 
-    init(fps: Int = 30) {
+    init(fps: Int = 30, writerCoordinator: RecordingWriterCoordinator = RecordingWriterCoordinator()) {
         self.fps = fps
+        self.writerCoordinator = writerCoordinator
     }
 
     func startRecording(rect: NSRect, screen: NSScreen, excludeWindowNumbers: [CGWindowID] = []) {
-        guard state == .idle else { return }
+        guard lifecycle.start() else { return }
         guard rect.width > 0, rect.height > 0 else {
-            fail(RecordingError.invalidSelection)
+            complete(url: nil, error: RecordingError.invalidSelection)
             return
         }
-
-        self.state = .recording
-        self.screen = screen
-        self.totalPausedDuration = 0
-        self.pauseStartTime = nil
-        self.hasWrittenFrame = false
 
         sourceRect = CGRect(
             x: rect.minX - screen.frame.minX,
@@ -102,68 +196,52 @@ final class RecordingEngine: NSObject {
             width: rect.width,
             height: rect.height
         )
+        elapsedSeconds = 0
 
-        Task {
-            await beginCapture(screen: screen, excludeWindowNumbers: excludeWindowNumbers)
+        captureTask = Task { [weak self] in
+            await self?.beginCapture(screen: screen, excludeWindowNumbers: excludeWindowNumbers)
         }
     }
 
     func pauseRecording() {
-        guard state == .recording else { return }
-        state = .paused
-        pauseStartTime = Date()
-        DispatchQueue.main.async { [weak self] in
-            self?.progressTimer?.invalidate()
-            self?.progressTimer = nil
-            self?.onPauseChanged?(true)
-        }
+        guard lifecycle.pause() else { return }
+        stopProgressTimer()
+        writerCoordinator.pause(at: ProcessInfo.processInfo.systemUptime)
+        onPauseChanged?(true)
     }
 
     func resumeRecording() {
-        guard state == .paused else { return }
-        if let pauseStartTime {
-            totalPausedDuration += Date().timeIntervalSince(pauseStartTime)
-            self.pauseStartTime = nil
+        guard lifecycle.resume() else { return }
+        writerCoordinator.resume(at: ProcessInfo.processInfo.systemUptime)
+        if stream != nil {
+            startProgressTimer()
         }
-        state = .recording
-        DispatchQueue.main.async { [weak self] in
-            self?.startProgressTimer()
-            self?.onPauseChanged?(false)
-        }
+        onPauseChanged?(false)
     }
 
     func stopRecording() {
-        guard state == .recording || state == .paused else { return }
-        state = .stopping
-        DispatchQueue.main.async { [weak self] in
-            self?.progressTimer?.invalidate()
-            self?.progressTimer = nil
-        }
-        Task {
-            await finalizeCapture()
-        }
+        guard lifecycle.requestStop() else { return }
+        stopProgressTimer()
+        captureTask?.cancel()
+        scheduleTermination()
     }
 
     func cancelRecording() {
-        guard state == .recording || state == .paused else { return }
-        state = .stopping
-        DispatchQueue.main.async { [weak self] in
-            self?.progressTimer?.invalidate()
-            self?.progressTimer = nil
-        }
-        Task {
-            await cancelCapture()
-        }
+        guard lifecycle.requestCancel() else { return }
+        stopProgressTimer()
+        captureTask?.cancel()
+        writerCoordinator.enqueueCancellation()
+        scheduleTermination()
     }
 
     private func beginCapture(screen: NSScreen, excludeWindowNumbers: [CGWindowID]) async {
         do {
             let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-            guard state == .recording else { return }
+            guard lifecycle.allowsStartupWork, !Task.isCancelled else { return }
 
             let screenID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
             guard let display = content.displays.first(where: { $0.displayID == screenID }) ?? content.displays.first else {
-                fail(RecordingError.noDisplay)
+                await failStartup(RecordingError.noDisplay)
                 return
             }
 
@@ -171,206 +249,143 @@ final class RecordingEngine: NSObject {
                 content.windows.first(where: { $0.windowID == windowID })
             }
             let filter = SCContentFilter(display: display, excludingWindows: excludedWindows)
-
             let scale = max(screen.backingScaleFactor, 1)
             let (pixelWidth, pixelHeight) = VideoEncodingSettings.evenDimensions(
                 width: sourceRect.width * scale,
                 height: sourceRect.height * scale
             )
-
-            let config = SCStreamConfiguration()
-            config.sourceRect = sourceRect
-            config.width = pixelWidth
-            config.height = pixelHeight
-            config.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(fps))
-            config.showsCursor = true
-            config.capturesAudio = false
-            config.pixelFormat = kCVPixelFormatType_32BGRA
-            config.scalesToFit = false
-            if #available(macOS 14.0, *) {
-                config.colorSpaceName = CGColorSpace.sRGB
-            }
-
+            let config = makeStreamConfiguration(width: pixelWidth, height: pixelHeight)
             let outputURL = Self.makeOutputURL()
-            self.outputURL = outputURL
-            try prepareWriter(url: outputURL, width: pixelWidth, height: pixelHeight)
-            guard state == .recording else {
-                cleanupTemporaryOutput()
-                return
+
+            try await writerCoordinator.prepare(
+                outputURL: outputURL,
+                width: pixelWidth,
+                height: pixelHeight,
+                fps: fps
+            )
+            guard lifecycle.allowsStartupWork, !Task.isCancelled else { return }
+            if lifecycle.isPaused {
+                writerCoordinator.pause(at: ProcessInfo.processInfo.systemUptime)
             }
 
             let output = RecordingStreamOutput()
-            output.onFrame = { [weak self] pixelBuffer, presentationTime in
-                self?.handleFrame(pixelBuffer: pixelBuffer, presentationTime: presentationTime)
+            let writerCoordinator = writerCoordinator
+            output.onFrame = { pixelBuffer, presentationTime in
+                writerCoordinator.appendFromCaptureQueue(
+                    pixelBuffer: pixelBuffer,
+                    presentationTime: presentationTime
+                )
             }
             output.onStopped = { [weak self] in
-                self?.stopRecording()
+                Task { @MainActor in
+                    self?.stopRecording()
+                }
             }
             streamOutput = output
 
             let stream = SCStream(filter: filter, configuration: config, delegate: output)
-            try stream.addStreamOutput(output, type: .screen, sampleHandlerQueue: recordingQueue)
-            guard state == .recording else {
-                cleanupTemporaryOutput()
-                return
-            }
-            try await stream.startCapture()
+            try stream.addStreamOutput(output, type: .screen, sampleHandlerQueue: writerCoordinator.queue)
             self.stream = stream
+            try await stream.startCapture()
 
-            DispatchQueue.main.async { [weak self] in
-                self?.elapsedSeconds = 0
-                self?.onProgress?(0)
-                self?.startProgressTimer()
+            guard lifecycle.markCaptureStarted(), !Task.isCancelled else { return }
+            onProgress?(0)
+            if !lifecycle.isPaused {
+                startProgressTimer()
             }
         } catch {
-            fail(error)
+            if lifecycle.terminationIntent == nil {
+                await failStartup(error)
+            }
         }
     }
 
-    private func prepareWriter(url: URL, width: Int, height: Int) throws {
-        let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
-        let input = AVAssetWriterInput(
-            mediaType: .video,
-            outputSettings: VideoEncodingSettings.outputSettings(width: width, height: height, fps: fps)
-        )
-        input.expectsMediaDataInRealTime = true
-
-        let sourceAttributes: [String: Any] = [
-            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-            kCVPixelBufferWidthKey as String: width,
-            kCVPixelBufferHeightKey as String: height,
-        ]
-        let adaptor = AVAssetWriterInputPixelBufferAdaptor(
-            assetWriterInput: input,
-            sourcePixelBufferAttributes: sourceAttributes
-        )
-
-        guard writer.canAdd(input) else { throw RecordingError.writerSetupFailed }
-        writer.add(input)
-        writer.startWriting()
-
-        self.assetWriter = writer
-        self.videoInput = input
-        self.adaptor = adaptor
-        self.sessionStarted = false
-    }
-
-    private func handleFrame(pixelBuffer: CVPixelBuffer, presentationTime: CMTime) {
-        guard state == .recording else { return }
-        writeMP4Frame(pixelBuffer: pixelBuffer, presentationTime: adjustedTime(presentationTime))
-    }
-
-    private func writeMP4Frame(pixelBuffer: CVPixelBuffer, presentationTime: CMTime) {
-        guard let writer = assetWriter,
-              let input = videoInput,
-              let adaptor = adaptor,
-              input.isReadyForMoreMediaData
-        else { return }
-
-        if !sessionStarted {
-            writer.startSession(atSourceTime: presentationTime)
-            sessionStarted = true
+    private func makeStreamConfiguration(width: Int, height: Int) -> SCStreamConfiguration {
+        let config = SCStreamConfiguration()
+        config.sourceRect = sourceRect
+        config.width = width
+        config.height = height
+        config.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(fps))
+        config.showsCursor = true
+        config.capturesAudio = false
+        config.pixelFormat = kCVPixelFormatType_32BGRA
+        config.scalesToFit = false
+        if #available(macOS 14.0, *) {
+            config.colorSpaceName = CGColorSpace.sRGB
         }
+        return config
+    }
 
-        if adaptor.append(pixelBuffer, withPresentationTime: presentationTime) {
-            hasWrittenFrame = true
+    private func scheduleTermination() {
+        guard terminationTask == nil else { return }
+        let startupTask = captureTask
+        terminationTask = Task { [weak self] in
+            _ = await startupTask?.result
+            await self?.finishTermination()
         }
     }
 
-    private func adjustedTime(_ time: CMTime) -> CMTime {
-        guard totalPausedDuration > 0 else { return time }
-        return CMTimeSubtract(
-            time,
-            CMTimeMakeWithSeconds(totalPausedDuration, preferredTimescale: time.timescale)
-        )
-    }
-
-    private func finalizeCapture() async {
+    private func finishTermination() async {
+        guard let intent = lifecycle.terminationIntent else { return }
         if let stream {
             try? await stream.stopCapture()
             self.stream = nil
         }
         streamOutput = nil
 
-        await finalizeMP4()
+        switch intent {
+        case .cancel:
+            await writerCoordinator.cancel()
+            complete(url: nil, error: nil)
+        case .finish:
+            switch await writerCoordinator.finish() {
+            case .success(let url):
+                complete(url: url, error: nil)
+            case .failure(let error):
+                complete(url: nil, error: error)
+            }
+        }
     }
 
-    private func cancelCapture() async {
+    private func failStartup(_ error: Error) async {
         if let stream {
             try? await stream.stopCapture()
             self.stream = nil
         }
         streamOutput = nil
-        cleanupTemporaryOutput()
-
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.state = .idle
-            self.onCompletion?(nil, nil)
-        }
-    }
-
-    private func finalizeMP4() async {
-        guard let writer = assetWriter, let input = videoInput else {
-            fail(RecordingError.writerSetupFailed)
-            return
-        }
-
-        input.markAsFinished()
-        await writer.finishWriting()
-
-        assetWriter = nil
-        videoInput = nil
-        adaptor = nil
-
-        if let error = writer.error {
-            fail(error)
-        } else if !hasWrittenFrame {
-            fail(RecordingError.noFrames)
-        } else {
-            succeed()
-        }
+        await writerCoordinator.cancel()
+        complete(url: nil, error: error)
     }
 
     private func startProgressTimer() {
         progressTimer?.invalidate()
-        progressTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            self.elapsedSeconds += 1
-            self.onProgress?(self.elapsedSeconds)
-        }
+        progressTimer = Timer.scheduledTimer(
+            timeInterval: 1.0,
+            target: self,
+            selector: #selector(progressTimerFired(_:)),
+            userInfo: nil,
+            repeats: true
+        )
     }
 
-    private func succeed() {
-        let url = outputURL
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.state = .idle
-            self.onCompletion?(url, nil)
-        }
+    @objc private func progressTimerFired(_ timer: Timer) {
+        elapsedSeconds += 1
+        onProgress?(elapsedSeconds)
     }
 
-    private func fail(_ error: Error) {
-        cleanupTemporaryOutput()
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.progressTimer?.invalidate()
-            self.progressTimer = nil
-            self.state = .idle
-            self.onCompletion?(nil, error)
-        }
+    private func stopProgressTimer() {
+        progressTimer?.invalidate()
+        progressTimer = nil
     }
 
-    private func cleanupTemporaryOutput() {
-        let url = outputURL
-        assetWriter?.cancelWriting()
-        assetWriter = nil
-        videoInput = nil
-        adaptor = nil
-        outputURL = nil
-        if let url {
-            try? FileManager.default.removeItem(at: url)
-        }
+    private func complete(url: URL?, error: Error?) {
+        guard lifecycle.complete() else { return }
+        stopProgressTimer()
+        captureTask = nil
+        terminationTask = nil
+        stream = nil
+        streamOutput = nil
+        onCompletion?(url, error)
     }
 
     private static func makeOutputURL() -> URL {
@@ -383,27 +398,11 @@ final class RecordingEngine: NSObject {
         return FileManager.default.temporaryDirectory
             .appendingPathComponent("aulycShot-recording-\(date)-\(token).mp4")
     }
-
-    enum RecordingError: LocalizedError {
-        case invalidSelection
-        case noDisplay
-        case noFrames
-        case writerSetupFailed
-
-        var errorDescription: String? {
-            switch self {
-            case .invalidSelection: return "The selected recording area is empty"
-            case .noDisplay: return "Could not find the selected display"
-            case .noFrames: return "No video frames were recorded"
-            case .writerSetupFailed: return "Could not prepare the recording writer"
-            }
-        }
-    }
 }
 
-private final class RecordingStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate {
-    var onFrame: ((CVPixelBuffer, CMTime) -> Void)?
-    var onStopped: (() -> Void)?
+private final class RecordingStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sendable {
+    var onFrame: (@Sendable (CVPixelBuffer, CMTime) -> Void)?
+    var onStopped: (@Sendable () -> Void)?
 
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
         guard type == .screen, let pixelBuffer = sampleBuffer.imageBuffer else { return }
@@ -411,8 +410,6 @@ private final class RecordingStreamOutput: NSObject, SCStreamOutput, SCStreamDel
     }
 
     func stream(_ stream: SCStream, didStopWithError error: Error) {
-        DispatchQueue.main.async { [weak self] in
-            self?.onStopped?()
-        }
+        onStopped?()
     }
 }

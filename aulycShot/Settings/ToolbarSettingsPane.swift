@@ -11,6 +11,7 @@ enum ToolbarSection {
 /// Settings tab for customizing the editor toolbars. The main and side
 /// toolbars are edited directly in the preview, while hidden tools live in an
 /// on-demand nine-slot panel anchored to the preview's lower-right corner.
+@MainActor
 final class ToolbarSettingsPane: NSView {
     /// Layout currently shown in the grids and preview. Drag edits persist
     /// immediately, so the settings page has no separate apply step.
@@ -48,9 +49,11 @@ final class ToolbarSettingsPane: NSView {
     }
 
     deinit {
-        dismissHiddenToolsPanel(restoreFocus: false)
-        stopObservingPageScroll()
-        NotificationCenter.default.removeObserver(self)
+        MainActor.assumeIsolated {
+            dismissHiddenToolsPanel(restoreFocus: false)
+            stopObservingPageScroll()
+            NotificationCenter.default.removeObserver(self)
+        }
     }
 
     override func viewDidMoveToWindow() {
@@ -68,9 +71,11 @@ final class ToolbarSettingsPane: NSView {
             object: clipView,
             queue: .main
         ) { [weak self] _ in
-            ToolbarTooltipHoverGate.suppressForScroll()
-            ToolTipWindow.hide()
-            self?.positionHiddenToolsPanel()
+            Task { @MainActor [weak self] in
+                ToolbarTooltipHoverGate.suppressForScroll()
+                ToolTipWindow.hide()
+                self?.positionHiddenToolsPanel()
+            }
         }
     }
 

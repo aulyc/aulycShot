@@ -1,6 +1,7 @@
 import XCTest
 @testable import aulycShot
 
+@MainActor
 final class EditorInitialToolTests: XCTestCase {
     func testScreenCaptureEditorStartsWithRectangleTool() {
         guard let tool = EditWindowController.startupTool(isPresetImage: false) else {

@@ -1,5 +1,6 @@
 import AppKit
 
+@MainActor
 enum ImageEditLauncher {
     /// Hands the supplied image file off to the editor in image-edit mode.
     /// Returns false if the file could not be loaded; the caller should then

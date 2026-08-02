@@ -1,6 +1,7 @@
 import AppKit
 import UniformTypeIdentifiers
 
+@MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
     private static let shareHandoffNotificationName = Notification.Name("com.aulyc.aulycshot.share-handoff")
 
@@ -18,6 +19,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var suspendedEditDraft: OverlayWindowController.SuspendedEditDraft?
     private var pendingReopenSettingsWorkItem: DispatchWorkItem?
     private var pendingOpenImageURLs: [URL] = []
+
+    private var activityAvailability: AppActivityAvailability {
+        let availability = AppActivityAvailability(
+            overlayActive: overlayController != nil,
+            recordingActive: recordingEngine != nil
+        )
+        assert(!availability.hasConflictingActivities, "Capture overlay and recording cannot be active together")
+        return availability
+    }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return false
@@ -100,7 +110,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.applyHotkeyState()
+            Task { @MainActor in
+                self?.applyHotkeyState()
+            }
         }
         applyHotkeyState()
     }
@@ -274,7 +286,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @discardableResult
     private func openImageURLs(_ urls: [URL]) -> Bool {
-        guard overlayController == nil, recordingEngine == nil else { return true }
+        guard activityAvailability.canBeginActivity else { return true }
         guard let url = urls.lazy.compactMap(Self.resolvedImageFileURL).first(where: Self.isImageFile) else {
             ToastWindow.show(message: L10n.openImageNoImage)
             return false
@@ -312,39 +324,46 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func handleTrigger(fromShortcut: Bool = false) {
-        if recordingEngine != nil {
-            stopRecordingAndSave()
-            return
-        }
-        guard overlayController == nil, recordingEngine == nil else { return }
-        guard requireFeaturePermissions() else { return }
-        if resumeSuspendedEditIfAvailable() {
-            return
-        }
-        if fromShortcut {
-            UpdateChecker.shared.checkFromScreenshotShortcutIfDue()
-        }
-        startCapture()
+        AppActivityEntryRouter.routeScreenshot(
+            availability: activityAvailability,
+            beginCapture: { [self] in
+                guard requireFeaturePermissions() else { return }
+                if resumeSuspendedEditIfAvailable() {
+                    return
+                }
+                if fromShortcut {
+                    UpdateChecker.shared.checkFromScreenshotShortcutIfDue()
+                }
+                startCapture()
+            },
+            stopRecording: { [self] in
+                stopRecordingAndSave()
+            }
+        )
     }
 
     func handleRecordingTrigger() {
-        guard overlayController == nil, recordingEngine == nil else { return }
-        guard requireFeaturePermissions() else { return }
-        let focusRestorer = SourceAppFocusRestorer.captureFrontmostApplication()
-        overlayController = OverlayWindowController(
-            postCaptureAction: .record,
-            onRecordingSelection: { [weak self] rect, screen in
-                self?.beginRecording(rect: rect, screen: screen)
-            },
-            onRequestFocusReturn: {
-                focusRestorer.restore()
-            },
-            onComplete: { [weak self] finalImage in
-                self?.handleEditCompletion(finalImage)
+        AppActivityEntryRouter.routeRecordingSelection(
+            availability: activityAvailability,
+            beginSelection: { [self] in
+                guard requireFeaturePermissions() else { return }
+                let focusRestorer = SourceAppFocusRestorer.captureFrontmostApplication()
+                overlayController = OverlayWindowController(
+                    postCaptureAction: .record,
+                    onRecordingSelection: { [weak self] rect, screen in
+                        self?.beginRecording(rect: rect, screen: screen)
+                    },
+                    onRequestFocusReturn: {
+                        focusRestorer.restore()
+                    },
+                    onComplete: { [weak self] finalImage in
+                        self?.handleEditCompletion(finalImage)
+                    }
+                )
+                overlayController?.activate()
+                applyHotkeyState()
             }
         )
-        overlayController?.activate()
-        applyHotkeyState()
     }
 
     /// Opens the single image currently selected in Finder directly in the
@@ -400,26 +419,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// Pin-hotkey trigger: pin Finder selection onto the screen. Skipped while
     /// a capture overlay is up.
     func handleSelectedImagePinTrigger() {
-        guard overlayController == nil, recordingEngine == nil else { return }
+        guard activityAvailability.canBeginActivity else { return }
         PinLauncher.pinSelectedImagesIfAvailable()
     }
 
     /// Pin-hotkey trigger: pin the clipboard image onto the screen. Skipped
     /// while a capture overlay is up.
     func handleClipboardImagePinTrigger() {
-        guard overlayController == nil, recordingEngine == nil else { return }
+        guard activityAvailability.canBeginActivity else { return }
         PinLauncher.pinClipboardImageIfAvailable()
     }
 
     /// Pin-hotkey trigger: render clipboard text into a desktop text pin.
     /// Skipped while a capture overlay is up.
     func handleClipboardTextPinTrigger() {
-        guard overlayController == nil, recordingEngine == nil else { return }
+        guard activityAvailability.canBeginActivity else { return }
         PinLauncher.pinClipboardTextIfAvailable()
     }
 
     func handleSelectedImageEditTrigger() {
-        guard overlayController == nil, recordingEngine == nil else { return }
+        guard activityAvailability.canBeginActivity else { return }
         guard let controller = launchSelectedImageEdit() else {
             ToastWindow.show(message: L10n.selectedImageEditNoImage)
             return
@@ -429,7 +448,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func handleClipboardImageEditTrigger() {
-        guard overlayController == nil, recordingEngine == nil else { return }
+        guard activityAvailability.canBeginActivity else { return }
         guard let controller = launchClipboardImageEdit() else {
             ToastWindow.show(message: L10n.clipboardImageEditNoImage)
             return
@@ -440,7 +459,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @discardableResult
     func handlePinnedImageEditRequest(_ image: NSImage, beforePresent: () -> Void) -> Bool {
-        guard overlayController == nil, recordingEngine == nil else { return false }
+        guard activityAvailability.canBeginActivity else { return false }
         beforePresent()
 
         guard let controller = ImageEditLauncher.launch(
@@ -462,20 +481,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func handleImageMergeMenuTrigger() {
-        guard overlayController == nil, recordingEngine == nil else { return }
+        guard activityAvailability.canBeginActivity else { return }
         ImageMergeLauncher.shared.openEmpty()
     }
 
     func handleImageMergeShortcutTrigger() {
-        guard overlayController == nil,
-              recordingEngine == nil,
+        guard activityAvailability.canBeginActivity,
               !ImageMergeLauncher.shared.isWorkbenchActive
         else { return }
         ImageMergeLauncher.shared.openFromShortcutSources()
     }
 
     func startCapture(postCaptureAction: OverlayWindowController.PostCaptureAction = .edit) {
-        guard overlayController == nil, recordingEngine == nil else { return }
+        guard activityAvailability.canBeginActivity else { return }
         let focusRestorer = SourceAppFocusRestorer.captureFrontmostApplication()
         overlayController = OverlayWindowController(
             postCaptureAction: postCaptureAction,
@@ -698,7 +716,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func continueEditingMergedImage(_ image: NSImage) {
-        guard overlayController == nil, recordingEngine == nil else { return }
+        guard activityAvailability.canBeginActivity else { return }
         let focusRestorer = SourceAppFocusRestorer.captureFrontmostApplication()
         guard let controller = ImageEditLauncher.launch(
             generatedImage: image,
@@ -721,8 +739,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func beginRecording(rect: NSRect, screen: NSScreen) {
-        guard recordingEngine == nil else { return }
+        AppActivityEntryRouter.routeRecordingHandoff(
+            availability: activityAvailability,
+            beginRecording: { [self] in
+                beginRecordingAfterActivityHandoff(rect: rect, screen: screen)
+            }
+        )
+    }
 
+    private func beginRecordingAfterActivityHandoff(rect: NSRect, screen: NSScreen) {
         recordingScreenRect = rect
         recordingScreen = screen
         recordingCancelRequested = false

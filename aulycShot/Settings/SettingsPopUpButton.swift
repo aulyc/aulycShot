@@ -6,6 +6,7 @@ import Carbon
 /// The selected value, target/action wiring, represented objects, and item API
 /// still come from `NSPopUpButton`; only the closed control and expanded list
 /// are rendered by the app.
+@MainActor
 final class SettingsPopUpButton: NSPopUpButton {
     private static let minimumWidth: CGFloat = 120
     private static let controlHeight: CGFloat = 34
@@ -37,7 +38,9 @@ final class SettingsPopUpButton: NSPopUpButton {
     }
 
     deinit {
-        dismissDropdown(restoreFocus: false)
+        MainActor.assumeIsolated {
+            dismissDropdown(restoreFocus: false)
+        }
     }
 
     private func commonInit() {
@@ -274,7 +277,9 @@ final class SettingsPopUpButton: NSPopUpButton {
             object: clipView,
             queue: .main
         ) { [weak self] _ in
-            self?.updateDropdownPositionAfterScroll()
+            Task { @MainActor [weak self] in
+                self?.updateDropdownPositionAfterScroll()
+            }
         }
     }
 

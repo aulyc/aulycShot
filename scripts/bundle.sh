@@ -161,5 +161,5 @@ echo "✅ Built and signed $APP_DIR"
 ARCHS=$(lipo -archs "$MACOS/aulycShot" 2>/dev/null || echo "unknown")
 echo "   Architectures: $ARCHS"
 echo ""
-echo "To install and run from /Applications:"
+echo "To rebuild and run the local development app:"
 echo "  bash scripts/rebuild-and-open.sh"

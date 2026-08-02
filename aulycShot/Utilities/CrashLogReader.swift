@@ -112,7 +112,7 @@ enum CrashLogReader {
         return String(decoding: pretty, as: UTF8.self)
     }
 
-    private static let fm = FileManager.default
+    private static var fm: FileManager { FileManager.default }
 
     private static func diagnosticReportDirs() -> [URL] {
         guard let library = fm.urls(for: .libraryDirectory, in: .userDomainMask).first else {

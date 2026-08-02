@@ -14,6 +14,7 @@ struct UpdateAlertPresentation {
 /// unused button controls. This dedicated panel creates only the controls the
 /// update flow actually requested, while leaving the global screenshot
 /// shortcut and WindowServer capture available.
+@MainActor
 final class UpdateAlertPresenter: NSObject {
     static let shared = UpdateAlertPresenter()
 
@@ -47,6 +48,7 @@ final class UpdateAlertPresenter: NSObject {
     }
 }
 
+@MainActor
 final class UpdateAlertPanel: NSPanel {
     let actionButtons: [NSButton]
     var onCancel: (() -> Void)?
@@ -165,6 +167,7 @@ final class UpdateAlertPanel: NSPanel {
     }
 }
 
+@MainActor
 private final class UpdateAlertSession: NSObject {
     let panel: UpdateAlertPanel
     let completion: ((NSApplication.ModalResponse) -> Void)?
@@ -183,7 +186,9 @@ private final class UpdateAlertSession: NSObject {
     }
 
     deinit {
-        removeCloseObserver()
+        MainActor.assumeIsolated {
+            removeCloseObserver()
+        }
     }
 
     func present() {
@@ -201,7 +206,9 @@ private final class UpdateAlertSession: NSObject {
             object: panel,
             queue: .main
         ) { [weak self] _ in
-            self?.finish(response: .cancel, orderOut: false)
+            Task { @MainActor [weak self] in
+                self?.finish(response: .cancel, orderOut: false)
+            }
         }
 
         NSApp.activate(ignoringOtherApps: true)

@@ -2,6 +2,7 @@ import AppKit
 import XCTest
 @testable import aulycShot
 
+@MainActor
 final class UpdateAlertPresentationTests: XCTestCase {
     func testUpdatePanelContainsOnlyRequestedControlsAndIsNonmodal() throws {
         if ProcessInfo.processInfo.environment["AULYC_SKIP_WINDOW_SERVER_TESTS"] == "1" {

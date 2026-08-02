@@ -1,21 +1,5 @@
 import AppKit
 
-enum EditTool {
-    case none
-    case pen
-    case marker
-    case mosaic
-    case eraser
-    case magnifier
-    case rectangle
-    case ellipse
-    case arrow
-    case line
-    case numbered
-    case text
-    case scrollCapture
-}
-
 class EditCanvasView: NSView {
     private static let fallbackShapePreviewSeed: UInt64 = 0xC0DEC0DEC0DEC0DE
 
@@ -340,7 +324,7 @@ class EditCanvasView: NSView {
         // can sit outside the annotation body — without this, the click
         // falls through to the SelectionView and we never see a mouseDown.
         let local = convert(point, from: superview)
-        if hitTestAnnotation(at: local) != nil {
+        if AnnotationHitTesting.topmostIndex(at: local, in: annotations) != nil {
             return super.hitTest(point)
         }
         if hitTestSelectionHandle(at: local) != nil {
@@ -400,8 +384,7 @@ class EditCanvasView: NSView {
         fileprivate let numberCounter: Int
         fileprivate let selectedIndexes: Set<Int>
         fileprivate let primarySelectedIndex: Int?
-        fileprivate let undoStack: [EditorSnapshot]
-        fileprivate let redoStack: [EditorSnapshot]
+        fileprivate let history: UndoHistory<EditorSnapshot>
         fileprivate let previewImage: NSImage?
     }
 
@@ -413,10 +396,9 @@ class EditCanvasView: NSView {
         let numberCounter: Int
     }
 
-    private var undoStack: [EditorSnapshot] = []
-    private var redoStack: [EditorSnapshot] = []
-    var canUndo: Bool { !undoStack.isEmpty }
-    var canRedo: Bool { !redoStack.isEmpty }
+    private var history = UndoHistory<EditorSnapshot>()
+    var canUndo: Bool { history.canUndo }
+    var canRedo: Bool { history.canRedo }
     /// Stash for drag-style operations and text edits — captured before the
     /// mutation begins, then either committed (drag actually moved / text
     /// edit produced a change) or discarded (just a click / cancel).
@@ -435,8 +417,7 @@ class EditCanvasView: NSView {
             numberCounter: numberCounter,
             selectedIndexes: selectedIndexes,
             primarySelectedIndex: primarySelectedIndex,
-            undoStack: undoStack,
-            redoStack: redoStack,
+            history: history,
             previewImage: previewImage
         )
     }
@@ -449,8 +430,7 @@ class EditCanvasView: NSView {
         }
         annotations = state.annotations
         numberCounter = state.numberCounter
-        undoStack = state.undoStack
-        redoStack = state.redoStack
+        history = state.history
         setSelectedIndexes(state.selectedIndexes, primary: state.primarySelectedIndex)
         needsDisplay = true
         notifyHistoryStateChanged()
@@ -467,8 +447,7 @@ class EditCanvasView: NSView {
     /// Call BEFORE any direct, instantaneous mutation (creation / deletion
     /// / text edit commit).
     private func recordUndo() {
-        undoStack.append(currentSnapshot())
-        redoStack.removeAll()
+        history.record(currentSnapshot())
         notifyHistoryStateChanged()
     }
 
@@ -482,8 +461,7 @@ class EditCanvasView: NSView {
     private func commitPendingUndo() {
         guard let snap = pendingSnapshot else { return }
         pendingSnapshot = nil
-        undoStack.append(snap)
-        redoStack.removeAll()
+        history.record(snap)
         notifyHistoryStateChanged()
     }
 
@@ -493,8 +471,7 @@ class EditCanvasView: NSView {
 
     @discardableResult
     func undo() -> Bool {
-        guard let prev = undoStack.popLast() else { return false }
-        redoStack.append(currentSnapshot())
+        guard let prev = history.undo(current: currentSnapshot()) else { return false }
         apply(prev)
         needsDisplay = true
         notifyHistoryStateChanged()
@@ -504,8 +481,7 @@ class EditCanvasView: NSView {
 
     @discardableResult
     func redo() -> Bool {
-        guard let next = redoStack.popLast() else { return false }
-        undoStack.append(currentSnapshot())
+        guard let next = history.redo(current: currentSnapshot()) else { return false }
         apply(next)
         needsDisplay = true
         notifyHistoryStateChanged()
@@ -931,7 +907,7 @@ class EditCanvasView: NSView {
             selectedIndex = nil
             eraserSelection = EraserSelection(start: point, current: point, didDelete: false)
             captureUndoForPending()
-            EditCanvasView.eraserCursor.set()
+            EditCanvasCursors.eraserCursor.set()
             needsDisplay = true
             return
         }
@@ -961,7 +937,7 @@ class EditCanvasView: NSView {
         // Universal: clicking on any draggable existing annotation starts a
         // drag, regardless of which tool is selected (or none). Drawing tools
         // only take over for clicks on empty canvas.
-        if let idx = hitTestAnnotation(at: point) {
+        if let idx = AnnotationHitTesting.topmostIndex(at: point, in: annotations) {
             // Commit any in-progress text edit before grabbing something else.
             activeTextField?.commit()
             if isShiftSelecting {
@@ -1590,71 +1566,12 @@ class EditCanvasView: NSView {
         annotationClipMask: NSImage? = nil
     ) -> NSImage? {
         guard let baseImage = previewImage ?? fallbackBaseImage else { return nil }
-
-        let innerImage: NSImage
-        if annotations.isEmpty {
-            innerImage = baseImage
-        } else if
-            let compositeRep = Self.makeCompositeBitmapRep(matching: baseImage),
-            let graphicsContext = NSGraphicsContext(bitmapImageRep: compositeRep)
-        {
-            let imageBounds = NSRect(origin: .zero, size: baseImage.size)
-            let annotationBounds = NSRect(origin: .zero, size: bounds.size)
-
-            NSGraphicsContext.saveGraphicsState()
-            NSGraphicsContext.current = graphicsContext
-            graphicsContext.imageInterpolation = .high
-            baseImage.draw(
-                in: imageBounds,
-                from: NSRect(origin: .zero, size: baseImage.size),
-                operation: .copy,
-                fraction: 1.0
-            )
-
-            let context = graphicsContext.cgContext
-            if let annotationClipMask {
-                _ = WindowEffects.clip(context, toAlphaOf: annotationClipMask, in: imageBounds)
-            }
-            context.saveGState()
-            if annotationBounds.width > 0, annotationBounds.height > 0 {
-                let scaleX = imageBounds.width / annotationBounds.width
-                let scaleY = imageBounds.height / annotationBounds.height
-                context.scaleBy(x: scaleX, y: scaleY)
-            }
-            for annotation in annotations {
-                annotation.drawApplyingTransforms(in: context, bounds: annotationBounds)
-            }
-            context.restoreGState()
-            graphicsContext.flushGraphics()
-
-            NSGraphicsContext.restoreGraphicsState()
-
-            let merged = NSImage(size: baseImage.size)
-            merged.addRepresentation(compositeRep)
-            innerImage = merged
-        } else {
-            innerImage = baseImage
-        }
-
-        return innerImage
-    }
-
-    private static func makeCompositeBitmapRep(matching image: NSImage) -> NSBitmapImageRep? {
-        guard let cgImage = image.cgImagePreservingBacking() else { return nil }
-        let rep = NSBitmapImageRep(
-            bitmapDataPlanes: nil,
-            pixelsWide: cgImage.width,
-            pixelsHigh: cgImage.height,
-            bitsPerSample: 8,
-            samplesPerPixel: 4,
-            hasAlpha: true,
-            isPlanar: false,
-            colorSpaceName: .deviceRGB,
-            bytesPerRow: 0,
-            bitsPerPixel: 0
+        return EditorCompositeRenderer.compositeImage(
+            baseImage: baseImage,
+            annotations: annotations,
+            annotationBounds: bounds,
+            annotationClipMask: annotationClipMask
         )
-        rep?.size = image.size
-        return rep
     }
 
     func loadPreviewImage(_ image: NSImage) {
@@ -1726,16 +1643,6 @@ class EditCanvasView: NSView {
         buffer?.append(point)
     }
 
-    /// Topmost annotation under `point` that the user can grab.
-    private func hitTestAnnotation(at point: NSPoint) -> Int? {
-        for i in annotations.indices.reversed() {
-            if annotations[i].containsPoint(point) {
-                return i
-            }
-        }
-        return nil
-    }
-
     private var canShowHoverHighlight: Bool {
         activeTextField == nil
             && activeTool != .eraser
@@ -1761,7 +1668,7 @@ class EditCanvasView: NSView {
             setHoveredAnnotationIndex(nil)
             return
         }
-        setHoveredAnnotationIndex(hitTestAnnotation(at: point))
+        setHoveredAnnotationIndex(AnnotationHitTesting.topmostIndex(at: point, in: annotations))
     }
 
     private func updateEraserSelection(to point: NSPoint) {
@@ -3074,125 +2981,6 @@ class EditCanvasView: NSView {
     /// background. The hotspot is the lens center, where a drag drops the
     /// lens. The drawing handler is resolution-independent, so the cursor
     /// stays crisp on Retina displays.
-    private static let magnifierCursor: NSCursor = {
-        let size: CGFloat = 28
-        let lensCenter = NSPoint(x: 11, y: 17)
-        let lensRadius: CGFloat = 7
-
-        let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { _ in
-            let lens = NSBezierPath(ovalIn: NSRect(
-                x: lensCenter.x - lensRadius,
-                y: lensCenter.y - lensRadius,
-                width: lensRadius * 2,
-                height: lensRadius * 2
-            ))
-
-            // Handle — from the lens's lower-right edge toward the corner.
-            let diag = CGFloat(2).squareRoot() / 2
-            let handleStart = NSPoint(
-                x: lensCenter.x + lensRadius * diag,
-                y: lensCenter.y - lensRadius * diag
-            )
-            let handle = NSBezierPath()
-            handle.lineCapStyle = .round
-            handle.move(to: handleStart)
-            handle.line(to: NSPoint(x: handleStart.x + 7.5, y: handleStart.y - 7.5))
-
-            // "+" inside the lens, echoing the toolbar icon.
-            let arm: CGFloat = 3.4
-            let plus = NSBezierPath()
-            plus.lineCapStyle = .round
-            plus.move(to: NSPoint(x: lensCenter.x - arm, y: lensCenter.y))
-            plus.line(to: NSPoint(x: lensCenter.x + arm, y: lensCenter.y))
-            plus.move(to: NSPoint(x: lensCenter.x, y: lensCenter.y - arm))
-            plus.line(to: NSPoint(x: lensCenter.x, y: lensCenter.y + arm))
-
-            // Dark halo pass — fatter strokes underneath for contrast.
-            NSColor.black.withAlphaComponent(0.55).setStroke()
-            lens.lineWidth = 5;   lens.stroke()
-            handle.lineWidth = 7; handle.stroke()
-            plus.lineWidth = 4;   plus.stroke()
-
-            // White body pass.
-            NSColor.white.setStroke()
-            lens.lineWidth = 2;     lens.stroke()
-            handle.lineWidth = 3.5; handle.stroke()
-            plus.lineWidth = 1.8;   plus.stroke()
-            return true
-        }
-        return NSCursor(
-            image: image,
-            hotSpot: NSPoint(x: lensCenter.x, y: size - lensCenter.y)
-        )
-    }()
-
-    private static let eraserCursor: NSCursor = {
-        let size: CGFloat = 28
-        let center = NSPoint(x: 14, y: 14)
-
-        let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { _ in
-            let transform = NSAffineTransform()
-            transform.translateX(by: center.x, yBy: center.y)
-            transform.rotate(byDegrees: -35)
-            transform.translateX(by: -center.x, yBy: -center.y)
-
-            NSGraphicsContext.saveGraphicsState()
-            transform.concat()
-
-            let bodyRect = NSRect(x: 7, y: 9, width: 16, height: 10)
-            let body = NSBezierPath(roundedRect: bodyRect, xRadius: 3, yRadius: 3)
-
-            NSColor.black.withAlphaComponent(0.55).setStroke()
-            body.lineWidth = 5
-            body.stroke()
-
-            NSColor.white.setFill()
-            body.fill()
-
-            NSColor.systemRed.withAlphaComponent(0.95).setFill()
-            NSBezierPath(roundedRect: NSRect(x: 7, y: 9, width: 7, height: 10), xRadius: 3, yRadius: 3).fill()
-
-            let divider = NSBezierPath()
-            divider.move(to: NSPoint(x: 14, y: 10))
-            divider.line(to: NSPoint(x: 14, y: 18))
-            NSColor.black.withAlphaComponent(0.28).setStroke()
-            divider.lineWidth = 1
-            divider.stroke()
-
-            NSColor.white.withAlphaComponent(0.95).setStroke()
-            body.lineWidth = 1.5
-            body.stroke()
-
-            NSGraphicsContext.restoreGraphicsState()
-            return true
-        }
-        return NSCursor(image: image, hotSpot: NSPoint(x: center.x, y: size - center.y))
-    }()
-
-    private static let plusCursor: NSCursor = {
-        let size: CGFloat = 28
-        let center = NSPoint(x: 14, y: 14)
-
-        let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { _ in
-            let plus = NSBezierPath()
-            plus.lineCapStyle = .round
-            plus.move(to: NSPoint(x: center.x - 8, y: center.y))
-            plus.line(to: NSPoint(x: center.x + 8, y: center.y))
-            plus.move(to: NSPoint(x: center.x, y: center.y - 8))
-            plus.line(to: NSPoint(x: center.x, y: center.y + 8))
-
-            NSColor.black.withAlphaComponent(0.55).setStroke()
-            plus.lineWidth = 5
-            plus.stroke()
-
-            NSColor.white.setStroke()
-            plus.lineWidth = 2.5
-            plus.stroke()
-            return true
-        }
-        return NSCursor(image: image, hotSpot: NSPoint(x: center.x, y: size - center.y))
-    }()
-
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let trackingArea {
@@ -3230,7 +3018,7 @@ class EditCanvasView: NSView {
         // Don't fight the text field's I-beam while editing.
         if activeTextField != nil { return }
         if activeTool == .eraser {
-            EditCanvasView.eraserCursor.set()
+            EditCanvasCursors.eraserCursor.set()
             return
         }
         // Action buttons on the selection chrome: pointing finger.
@@ -3260,14 +3048,14 @@ class EditCanvasView: NSView {
         }
         // Hovering over any draggable mark: open hand so the user knows it
         // can be picked up regardless of the active tool.
-        if hitTestAnnotation(at: point) != nil {
+        if AnnotationHitTesting.topmostIndex(at: point, in: annotations) != nil {
             NSCursor.openHand.set()
             return
         }
         // Magnifier tool over empty canvas: a loupe cursor signals that a
         // drag here drops a lens.
         if activeTool == .magnifier {
-            EditCanvasView.magnifierCursor.set()
+            EditCanvasCursors.magnifierCursor.set()
             return
         }
         NSCursor.arrow.set()
@@ -3346,212 +3134,5 @@ class EditCanvasView: NSView {
         case 126: return NSPoint(x: 0, y: step)  // Up Arrow
         default: return nil
         }
-    }
-}
-
-// MARK: - Editable Text Field
-
-/// Borderless transparent NSTextField that auto-grows to fit its content
-/// and reports commit/cancel via closures. Used by the text annotation
-/// tool while the user is typing.
-final class EditableTextField: NSTextField, NSTextFieldDelegate {
-    var onCommit: ((String) -> Void)?
-    var onCancel: (() -> Void)?
-    var onChange: (() -> Void)?
-
-    /// Outline flag for the text being edited. Carried through the edit
-    /// session and read back when the annotation is committed. The live field
-    /// shows plain text; the outline is rendered on the committed
-    /// `TextAnnotation`, which adds it without shifting the glyphs.
-    var hasStroke: Bool = false
-    var annotationColor: NSColor = EditorStyleDefaults.primaryColor {
-        didSet {
-            updateAppearanceForCurrentMode()
-            onChange?()
-        }
-    }
-    var hasCallout: Bool = false {
-        didSet {
-            updateAppearanceForCurrentMode()
-            onChange?()
-        }
-    }
-    var calloutTip: NSPoint? {
-        didSet { onChange?() }
-    }
-    /// Rotation carried by an existing text annotation while it is being edited.
-    /// The live editor stays horizontal, but the committed annotation keeps the
-    /// original angle instead of snapping back to zero.
-    var rotation: CGFloat = 0
-
-    var annotationOrigin: NSPoint {
-        guard hasCallout else { return frame.origin }
-        return NSPoint(
-            x: frame.minX + TextAnnotation.calloutHorizontalPadding,
-            y: frame.minY + TextAnnotation.calloutVerticalPadding
-        )
-    }
-
-    private var didFinish = false
-    private var wasCanceled = false
-    private static let insertNewlineIgnoringFieldEditorSelector = #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:))
-    private static let insertLineBreakSelector = #selector(NSResponder.insertLineBreak(_:))
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        configure()
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    private func configure() {
-        isBordered = false
-        isBezeled = false
-        drawsBackground = false
-        backgroundColor = .clear
-        focusRingType = .none
-        delegate = self
-        cell?.usesSingleLineMode = false
-        cell?.wraps = false
-        cell?.isScrollable = false
-        maximumNumberOfLines = 0
-        target = self
-        action = #selector(commitFromAction)
-        stringValue = ""
-        placeholderString = ""
-
-        // Visible editing border so the user can tell where the field is on
-        // screen (the rest of the field is fully transparent over the
-        // canvas content).
-        wantsLayer = true
-        layer?.borderColor = NSColor.white.withAlphaComponent(0.85).cgColor
-        layer?.borderWidth = 1
-        layer?.cornerRadius = 2
-        layer?.backgroundColor = NSColor.black.withAlphaComponent(0.15).cgColor
-    }
-
-    private func updateAppearanceForCurrentMode() {
-        if hasCallout {
-            textColor = TextAnnotation.contrastingTextColor(for: annotationColor)
-            layer?.backgroundColor = annotationColor.cgColor
-            layer?.cornerRadius = TextAnnotation.calloutCornerRadius
-        } else {
-            textColor = annotationColor
-            layer?.backgroundColor = NSColor.black.withAlphaComponent(0.15).cgColor
-            layer?.cornerRadius = 2
-        }
-    }
-
-    @objc private func commitFromAction() {
-        commit()
-    }
-
-    func commit() {
-        guard !didFinish else { return }
-        didFinish = true
-        onCommit?(stringValue)
-    }
-
-    func cancel() {
-        guard !didFinish else { return }
-        didFinish = true
-        onCancel?()
-    }
-
-    func controlTextDidChange(_ obj: Notification) {
-        sizeToFitText()
-    }
-
-    func controlTextDidEndEditing(_ obj: Notification) {
-        guard !didFinish else { return }
-        if wasCanceled {
-            cancel()
-        } else {
-            commit()
-        }
-    }
-
-    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
-        if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
-            wasCanceled = true
-            window?.makeFirstResponder(nil)
-            return true
-        }
-        if commandSelector == #selector(NSResponder.insertNewline(_:)) {
-            let modifiers = NSApp.currentEvent?.modifierFlags.intersection(.deviceIndependentFlagsMask) ?? []
-            if modifiers.contains(.shift) {
-                insertLineBreak(in: textView)
-            } else {
-                window?.makeFirstResponder(nil)
-            }
-            return true
-        }
-        if commandSelector == Self.insertNewlineIgnoringFieldEditorSelector
-            || commandSelector == Self.insertLineBreakSelector {
-            insertLineBreak(in: textView)
-            return true
-        }
-        return false
-    }
-
-    private func insertLineBreak(in textView: NSTextView) {
-        textView.insertText("\n", replacementRange: textView.selectedRange())
-        stringValue = textView.string
-        sizeToFitText()
-    }
-
-    /// The app has no main menu, so standard editing key equivalents
-    /// (⌘A/⌘C/⌘V/⌘X/⌘Z/⇧⌘Z) never reach the field editor. Route them
-    /// here while we hold focus.
-    override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        guard window?.firstResponder === currentEditor() else {
-            return super.performKeyEquivalent(with: event)
-        }
-        let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        let cmd: NSEvent.ModifierFlags = .command
-        let cmdShift: NSEvent.ModifierFlags = [.command, .shift]
-        guard let chars = event.charactersIgnoringModifiers?.lowercased() else {
-            return super.performKeyEquivalent(with: event)
-        }
-        if mods == cmd {
-            switch chars {
-            case "a": currentEditor()?.selectAll(nil); return true
-            case "c": currentEditor()?.copy(nil); return true
-            case "v": currentEditor()?.paste(nil); return true
-            case "x": currentEditor()?.cut(nil); return true
-            case "z":
-                if let undoMgr = currentEditor()?.undoManager, undoMgr.canUndo {
-                    undoMgr.undo(); return true
-                }
-            default: break
-            }
-        } else if mods == cmdShift, chars == "z" {
-            if let undoMgr = currentEditor()?.undoManager, undoMgr.canRedo {
-                undoMgr.redo(); return true
-            }
-        }
-        return super.performKeyEquivalent(with: event)
-    }
-
-    /// Recompute width/height from the current string + font, keeping the
-    /// top edge anchored so text grows downward only when font size changes.
-    func sizeToFitText() {
-        guard let font = font else { return }
-        let contentSize = TextAnnotation.editorSize(for: stringValue, font: font)
-        let size = hasCallout
-            ? NSSize(
-                width: contentSize.width + TextAnnotation.calloutHorizontalPadding * 2,
-                height: contentSize.height + TextAnnotation.calloutVerticalPadding * 2
-            )
-            : contentSize
-
-        let prevTop = frame.maxY
-        var f = frame
-        f.size = size
-        f.origin.y = prevTop - size.height
-        frame = f
-        onChange?()
     }
 }
