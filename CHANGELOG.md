@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.7] - 2026-08-03
+
 ### Changed
 
 - Refactor recording, editor, pinned-window, and settings internals into responsibility-focused components while preserving existing workflows
