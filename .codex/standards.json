@@ -286,7 +286,7 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "9b33750e0a77d369335208e9eb57581fb4327df945c40e74e89915b023af0e2c"
+      "sha256": "85cdd37b44b3468986193719e703d7afc4686cabb07160d7691571507e5675ad"
     },
     {
       "path": "README.md",
@@ -326,19 +326,19 @@
     },
     {
       "path": "aulycShot/Utilities/UpdateChecker.swift",
-      "sha256": "1f8f6e443c4f84620b6fddba3d972e8f55f5e1c4cfc7e87546dcf8ee841dcc1a"
+      "sha256": "9b8a48c9ccb745b00518f001460cb00ca66513c2eb22a176e5f2223290ead026"
     },
     {
       "path": "aulycShot/Utilities/UpdateInstaller.swift",
-      "sha256": "b34c714b003a738b8074906be2f7ec08097c48ff95972deb02e8529ef5302df3"
+      "sha256": "38923762c04f014497bfa1c2de721c285448e8650edd299a889614f2239d244b"
     },
     {
       "path": "aulycShot/Utilities/UpdateManifest.swift",
-      "sha256": "e4b2a7806e237931393f1514570c99f0c182af7915cbee8d31a69b04f39c7f0b"
+      "sha256": "eab61fe2f3ca1e8e50a2a4b77e48a75879d98b0907e5c60a6e0b7fbf7291720f"
     },
     {
       "path": "scripts/bundle.sh",
-      "sha256": "ac02bbfdb51a354c5d5e401eb2d629fc2427ccea9edacd1f19cf7750335c679e"
+      "sha256": "2ea668e72330aa74acdc68c46f3fe9d43f708330439799b5023c38d92210fb07"
     },
     {
       "path": "scripts/generate-icon.sh",
@@ -398,7 +398,7 @@
     },
     {
       "path": "Tests/aulycShotTests/UpdateManifestTests.swift",
-      "sha256": "83f9c62e25ab99a13d0c04abaacd4b491f4aa1472c9c9383f4224f8a0a8eaf53"
+      "sha256": "68c462dfe888fe813ac9141cfae85cd76d4d4c90be359bf0b33b9e1d9b51f6f5"
     },
     {
       "path": "Tests/test_icon_assets.py",
