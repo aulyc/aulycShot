@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Refactor recording, editor, pinned-window, and settings internals into responsibility-focused components while preserving existing workflows
+- Launch local development builds directly without replacing the app in `/Applications`
+
+### Fixed
+
+- Serialize recording writer preparation, frame timing, pause and resume adjustment, stop, cancellation, and completion delivery on one queue
+- Keep screenshot and recording entry points mutually exclusive while preserving the screenshot shortcut's recording-stop behavior
+- Keep long-screenshot cropping inside the selected region instead of presenting a full-screen backdrop
+- Replace deprecated macOS capture, application activation, and AVFoundation loading APIs and eliminate strict-concurrency warnings
+
 ## [1.8.6] - 2026-08-02
 
 ### Added
