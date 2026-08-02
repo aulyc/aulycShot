@@ -389,8 +389,20 @@ final class ImageMergeLayoutPresetTests: XCTestCase {
             XCTAssertTrue(imageListLabel.isDescendant(of: imageListHeader))
             XCTAssertTrue(addFilesButton.isDescendant(of: imageListHeader))
             XCTAssertTrue(addClipboardButton.isDescendant(of: imageListHeader))
-            XCTAssertEqual(imageListLabel.frame.midY, addFilesButton.frame.midY, accuracy: 1)
-            XCTAssertEqual(imageListLabel.frame.midY, addClipboardButton.frame.midY, accuracy: 1)
+            let imageListLabelAlignmentMidY = alignmentMidY(
+                of: imageListLabel,
+                in: imageListHeader
+            )
+            XCTAssertEqual(
+                imageListLabelAlignmentMidY,
+                alignmentMidY(of: addFilesButton, in: imageListHeader),
+                accuracy: 1
+            )
+            XCTAssertEqual(
+                imageListLabelAlignmentMidY,
+                alignmentMidY(of: addClipboardButton, in: imageListHeader),
+                accuracy: 1
+            )
 
             let outputButtons = try XCTUnwrap(
                 contentView.descendants(of: NSStackView.self).first {
@@ -532,6 +544,12 @@ final class ImageMergeLayoutPresetTests: XCTestCase {
             }
         }
         try body()
+    }
+
+    private func alignmentMidY(of view: NSView, in coordinateView: NSView) -> CGFloat {
+        let alignmentRect = view.alignmentRect(forFrame: view.frame)
+        return view.superview?.convert(alignmentRect, to: coordinateView).midY
+            ?? alignmentRect.midY
     }
 }
 
