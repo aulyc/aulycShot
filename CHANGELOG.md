@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.8] - 2026-08-03
+
 ### Fixed
 
 - Preserve downloaded provenance and DMG files before URLSession removes its temporary download, restoring verified in-app update installation
