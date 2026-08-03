@@ -23,6 +23,7 @@ final class RecordingWriterCoordinator: @unchecked Sendable {
     func prepare(outputURL: URL, width: Int, height: Int, fps: Int) async throws {
         try await withCheckedThrowingContinuation { continuation in
             queue.async { [self] in
+                assertOnQueue()
                 let newSession = RecordingWriterSession(queue: queue, backendFactory: backendFactory)
                 do {
                     try newSession.prepare(outputURL: outputURL, width: width, height: height, fps: fps)
@@ -37,24 +38,27 @@ final class RecordingWriterCoordinator: @unchecked Sendable {
     }
 
     func appendFromCaptureQueue(pixelBuffer: CVPixelBuffer, presentationTime: CMTime) {
-        dispatchPrecondition(condition: .onQueue(queue))
+        assertOnQueue()
         session?.append(pixelBuffer: pixelBuffer, presentationTime: presentationTime)
     }
 
-    func pause(at time: TimeInterval) {
+    func pause() {
         queue.async { [self] in
-            session?.pause(at: time)
+            assertOnQueue()
+            session?.pause()
         }
     }
 
-    func resume(at time: TimeInterval) {
+    func resume() {
         queue.async { [self] in
-            session?.resume(at: time)
+            assertOnQueue()
+            session?.resume()
         }
     }
 
     func enqueueCancellation() {
         queue.async { [self] in
+            assertOnQueue()
             session?.cancel()
             session = nil
         }
@@ -63,6 +67,7 @@ final class RecordingWriterCoordinator: @unchecked Sendable {
     func cancel() async {
         await withCheckedContinuation { continuation in
             queue.async { [self] in
+                assertOnQueue()
                 session?.cancel()
                 session = nil
                 continuation.resume()
@@ -73,11 +78,14 @@ final class RecordingWriterCoordinator: @unchecked Sendable {
     func finish() async -> RecordingWriterFinishOutcome {
         await withCheckedContinuation { continuation in
             queue.async { [self] in
+                assertOnQueue()
                 guard let session else {
                     continuation.resume(returning: .failure(ScreenRecordingError.noFrames))
                     return
                 }
+                let completionQueue = queue
                 let didBegin = session.finish { [weak self] outcome in
+                    dispatchPrecondition(condition: .onQueue(completionQueue))
                     self?.session = nil
                     continuation.resume(returning: outcome)
                 }
@@ -87,5 +95,9 @@ final class RecordingWriterCoordinator: @unchecked Sendable {
                 }
             }
         }
+    }
+
+    private func assertOnQueue() {
+        dispatchPrecondition(condition: .onQueue(queue))
     }
 }

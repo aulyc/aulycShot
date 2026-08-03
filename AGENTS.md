@@ -39,17 +39,6 @@ formal installation is a separate, explicitly authorized `make install-release` 
   `SWIFTPM_SANDBOX_CONFIG_PATH` and `SWIFTPM_SANDBOX_SECURITY_PATH`; never store
   credentials in the repository or `.cache/swiftpm/`.
 
-## Project Structure
-
-- `aulycShot/App/` — Entry point (`main.swift`, `AppDelegate.swift`, `Info.plist`)
-- `aulycShot/Capture/` — Screen capture logic (ScreenCaptureKit, selection overlay)
-- `aulycShot/Editor/` — Post-capture annotation editor
-- `aulycShot/Trigger/` — Double-tap ⌘ key detection
-- `aulycShot/UI/` — Status bar, toast, cursor chip
-- `aulycShot/Settings/` — Settings dialog (startup + preferences)
-- `aulycShot/Utilities/` — UserDefaults wrapper
-- `scripts/` — Build and bundle scripts
-
 ## Key Rules
 
 - **Always run `bash scripts/compile-check.sh` after modifying code** to verify the compile.

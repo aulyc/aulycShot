@@ -206,13 +206,13 @@ final class RecordingEngine: NSObject {
     func pauseRecording() {
         guard lifecycle.pause() else { return }
         stopProgressTimer()
-        writerCoordinator.pause(at: ProcessInfo.processInfo.systemUptime)
+        writerCoordinator.pause()
         onPauseChanged?(true)
     }
 
     func resumeRecording() {
         guard lifecycle.resume() else { return }
-        writerCoordinator.resume(at: ProcessInfo.processInfo.systemUptime)
+        writerCoordinator.resume()
         if stream != nil {
             startProgressTimer()
         }
@@ -265,22 +265,23 @@ final class RecordingEngine: NSObject {
             )
             guard lifecycle.allowsStartupWork, !Task.isCancelled else { return }
             if lifecycle.isPaused {
-                writerCoordinator.pause(at: ProcessInfo.processInfo.systemUptime)
+                writerCoordinator.pause()
             }
 
-            let output = RecordingStreamOutput()
             let writerCoordinator = writerCoordinator
-            output.onFrame = { pixelBuffer, presentationTime in
-                writerCoordinator.appendFromCaptureQueue(
-                    pixelBuffer: pixelBuffer,
-                    presentationTime: presentationTime
-                )
-            }
-            output.onStopped = { [weak self] in
-                Task { @MainActor in
-                    self?.stopRecording()
+            let output = RecordingStreamOutput(
+                onFrame: { pixelBuffer, presentationTime in
+                    writerCoordinator.appendFromCaptureQueue(
+                        pixelBuffer: pixelBuffer,
+                        presentationTime: presentationTime
+                    )
+                },
+                onStopped: { [weak self] in
+                    Task { @MainActor in
+                        self?.stopRecording()
+                    }
                 }
-            }
+            )
             streamOutput = output
 
             let stream = SCStream(filter: filter, configuration: config, delegate: output)
@@ -400,16 +401,27 @@ final class RecordingEngine: NSObject {
     }
 }
 
+/// ScreenCaptureKit owns this delegate after stream startup. Its callbacks are
+/// immutable so the framework can invoke them from its delivery queues without
+/// racing a later callback replacement.
 private final class RecordingStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sendable {
-    var onFrame: (@Sendable (CVPixelBuffer, CMTime) -> Void)?
-    var onStopped: (@Sendable () -> Void)?
+    private let onFrame: @Sendable (CVPixelBuffer, CMTime) -> Void
+    private let onStopped: @Sendable () -> Void
+
+    init(
+        onFrame: @escaping @Sendable (CVPixelBuffer, CMTime) -> Void,
+        onStopped: @escaping @Sendable () -> Void
+    ) {
+        self.onFrame = onFrame
+        self.onStopped = onStopped
+    }
 
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
         guard type == .screen, let pixelBuffer = sampleBuffer.imageBuffer else { return }
-        onFrame?(pixelBuffer, CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
+        onFrame(pixelBuffer, CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
     }
 
     func stream(_ stream: SCStream, didStopWithError error: Error) {
-        onStopped?()
+        onStopped()
     }
 }

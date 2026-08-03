@@ -6,7 +6,9 @@ import CryptoKit
 /// The running `.app` bundle can't overwrite itself while it's open, so the
 /// final swap is handed to a detached `/bin/bash` helper: it waits for this
 /// process to exit, replaces the bundle, and relaunches. The caller must
-/// terminate the app immediately after `install` returns.
+/// terminate the app immediately after `install` returns. Download state is
+/// confined to `stateQueue`; delegate callbacks only pass immutable snapshots
+/// into that queue before touching mutable state.
 final class UpdateInstaller: NSObject, @unchecked Sendable {
     static let shared = UpdateInstaller()
 
@@ -110,6 +112,7 @@ final class UpdateInstaller: NSObject, @unchecked Sendable {
     }
 
     private func startCurrentDownload() {
+        assertOnStateQueue()
         guard downloadURLs.indices.contains(downloadIndex), let session else {
             deliver(.failure(InstallError.download))
             return
@@ -124,6 +127,7 @@ final class UpdateInstaller: NSObject, @unchecked Sendable {
     }
 
     private func retryDownload(after error: Error) {
+        assertOnStateQueue()
         guard !delivered else { return }
         downloadIndex += 1
         guard downloadURLs.indices.contains(downloadIndex) else {
@@ -134,6 +138,7 @@ final class UpdateInstaller: NSObject, @unchecked Sendable {
     }
 
     private func deliver(_ result: Result<URL, Error>) {
+        assertOnStateQueue()
         guard !delivered else { return }
         delivered = true
         let handler = finishHandler
@@ -144,6 +149,10 @@ final class UpdateInstaller: NSObject, @unchecked Sendable {
         session?.finishTasksAndInvalidate()
         session = nil
         Task { @MainActor in handler?(result) }
+    }
+
+    private func assertOnStateQueue() {
+        dispatchPrecondition(condition: .onQueue(stateQueue))
     }
 
     // MARK: - Install

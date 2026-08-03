@@ -381,6 +381,8 @@ final class ShareViewController: NSViewController {
     }
 }
 
+/// Immutable provider metadata captured on the main actor and handed to the
+/// provider's asynchronous load callback without later mutation.
 private struct ImageCandidate: @unchecked Sendable {
     let provider: NSItemProvider
     let imageTypeIdentifier: String?

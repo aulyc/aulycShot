@@ -19,7 +19,7 @@ enum ScreenRecordingError: LocalizedError, Equatable {
     }
 }
 
-enum RecordingWriterFinishOutcome: @unchecked Sendable {
+enum RecordingWriterFinishOutcome: Sendable {
     case success(URL)
     case failure(Error)
 }
@@ -47,8 +47,10 @@ final class RecordingWriterSession: @unchecked Sendable {
     private(set) var sessionStarted = false
     private(set) var hasWrittenFrame = false
     private(set) var outputURL: URL?
-    private(set) var totalPausedDuration: TimeInterval = 0
-    private var pauseStartTime: TimeInterval?
+    private var nominalFrameDuration: CMTime = .invalid
+    private var presentationOffset: CMTime = .zero
+    private var lastWrittenPresentationTime: CMTime?
+    private var resumePending = false
     private var backend: RecordingWriterBackend?
 
     init(
@@ -72,6 +74,7 @@ final class RecordingWriterSession: @unchecked Sendable {
         self.outputURL = outputURL
         do {
             backend = try backendFactory(outputURL, width, height, fps)
+            nominalFrameDuration = CMTime(value: 1, timescale: CMTimeScale(max(fps, 1)))
             state = .recording
         } catch {
             state = .failed
@@ -85,38 +88,37 @@ final class RecordingWriterSession: @unchecked Sendable {
         assertOnQueue()
         guard state == .recording,
               let backend,
-              backend.isReadyForMoreMediaData
+              backend.isReadyForMoreMediaData,
+              let adjustment = timelineAdjustment(for: presentationTime)
         else {
             return false
         }
 
-        let adjustedTime = adjustedPresentationTime(presentationTime)
         if !sessionStarted {
-            backend.startSession(at: adjustedTime)
+            backend.startSession(at: adjustment.outputTime)
             sessionStarted = true
         }
 
-        let appended = backend.append(pixelBuffer, at: adjustedTime)
+        let appended = backend.append(pixelBuffer, at: adjustment.outputTime)
         if appended {
+            presentationOffset = adjustment.offset
+            lastWrittenPresentationTime = adjustment.outputTime
+            resumePending = false
             hasWrittenFrame = true
         }
         return appended
     }
 
-    func pause(at time: TimeInterval) {
+    func pause() {
         assertOnQueue()
         guard state == .recording else { return }
-        pauseStartTime = time
         state = .paused
     }
 
-    func resume(at time: TimeInterval) {
+    func resume() {
         assertOnQueue()
         guard state == .paused else { return }
-        if let pauseStartTime {
-            totalPausedDuration += max(0, time - pauseStartTime)
-        }
-        pauseStartTime = nil
+        resumePending = true
         state = .recording
     }
 
@@ -131,7 +133,6 @@ final class RecordingWriterSession: @unchecked Sendable {
         }
 
         state = .finishing
-        pauseStartTime = nil
         backend.markAsFinished()
         backend.finish { [weak self] in
             guard let self else { return }
@@ -148,16 +149,37 @@ final class RecordingWriterSession: @unchecked Sendable {
         state = .cancelled
         backend?.cancel()
         backend = nil
-        pauseStartTime = nil
+        resumePending = false
         cleanupOutput()
     }
 
-    private func adjustedPresentationTime(_ time: CMTime) -> CMTime {
-        guard totalPausedDuration > 0 else { return time }
-        return CMTimeSubtract(
-            time,
-            CMTimeMakeWithSeconds(totalPausedDuration, preferredTimescale: time.timescale)
-        )
+    private struct TimelineAdjustment {
+        let outputTime: CMTime
+        let offset: CMTime
+    }
+
+    /// Builds the output timeline exclusively from the stream's frame PTS.
+    /// On resume, the first successfully written frame follows the previous
+    /// output by one nominal frame, so no second clock needs to be aligned.
+    private func timelineAdjustment(for sourceTime: CMTime) -> TimelineAdjustment? {
+        guard sourceTime.isNumeric else { return nil }
+
+        if resumePending, let lastWrittenPresentationTime {
+            let targetTime = CMTimeAdd(lastWrittenPresentationTime, nominalFrameDuration)
+            guard targetTime.isNumeric else { return nil }
+            return TimelineAdjustment(
+                outputTime: targetTime,
+                offset: CMTimeSubtract(sourceTime, targetTime)
+            )
+        }
+
+        let outputTime = CMTimeSubtract(sourceTime, presentationOffset)
+        guard outputTime.isNumeric else { return nil }
+        if let lastWrittenPresentationTime,
+           CMTimeCompare(outputTime, lastWrittenPresentationTime) <= 0 {
+            return nil
+        }
+        return TimelineAdjustment(outputTime: outputTime, offset: presentationOffset)
     }
 
     private func completeFinish() -> RecordingWriterFinishOutcome {

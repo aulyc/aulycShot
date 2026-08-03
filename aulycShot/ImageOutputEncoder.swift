@@ -3,7 +3,7 @@ import ImageIO
 import UniformTypeIdentifiers
 import zlib
 
-struct EncodedImageOutput: @unchecked Sendable {
+struct EncodedImageOutput: Sendable {
     let data: Data
     let fileExtension: String
     let contentType: String

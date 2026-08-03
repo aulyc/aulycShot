@@ -31,6 +31,9 @@ private final class PreviewHandlerStore: @unchecked Sendable {
     }
 }
 
+/// Initial state is populated synchronously before `self` escapes. Every later
+/// frame/preview mutation is serialized by `captureQueue`; only the replaceable
+/// preview callback crosses domains and it is protected by PreviewHandlerStore.
 final class ScrollCapturer: @unchecked Sendable {
     private struct ImageFormat {
         let bitsPerComponent: Int

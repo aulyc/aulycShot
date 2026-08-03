@@ -3,6 +3,7 @@ import AppKit
 // MARK: - Text Pin
 
 enum TextPinDebugLog {
+    /// Serializes process-reset state and file writes through one lock.
     private final class State: @unchecked Sendable {
         let lock = NSLock()
         var didResetForProcess = false

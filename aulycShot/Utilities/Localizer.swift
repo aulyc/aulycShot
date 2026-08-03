@@ -8,6 +8,7 @@ import Foundation
 /// `.lproj` bundle for the user's chosen `AppLanguage` explicitly and look keys
 /// up there, which also lets language changes take effect live.
 enum Localizer {
+    /// Every access to the cached language/bundle pair is protected by `lock`.
     private final class Cache: @unchecked Sendable {
         let lock = NSLock()
         var value: (lang: AppLanguage, bundle: Bundle)?

@@ -9,6 +9,8 @@ import ApplicationServices
 /// The loop posts one fixed scroll step, waits for the screen to settle, asks
 /// the caller to capture a frame, and repeats. When several consecutive frames
 /// report no new content, the page has bottomed out and the loop finishes.
+/// Loop work is confined to `queue`, cancellation is protected by `lock`, and
+/// event-tap lifecycle methods are invoked on the main thread.
 final class AutoScroller: @unchecked Sendable {
     /// What a single capture step revealed, reported back by the caller.
     enum StepResult: Sendable {

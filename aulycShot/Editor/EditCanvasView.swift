@@ -244,30 +244,7 @@ class EditCanvasView: NSView {
         var didDelete: Bool
     }
 
-    /// One of the eight resize grips around a resizable annotation — four
-    /// corners plus four edge midpoints. Coordinates are y-up (canvas
-    /// space), so "top" maps to `maxY`.
-    enum ResizeAnchor: CaseIterable {
-        case topLeft, top, topRight, right, bottomRight, bottom, bottomLeft, left
-
-        var movesMinX: Bool { self == .topLeft || self == .left || self == .bottomLeft }
-        var movesMaxX: Bool { self == .topRight || self == .right || self == .bottomRight }
-        var movesMinY: Bool { self == .bottomLeft || self == .bottom || self == .bottomRight }
-        var movesMaxY: Bool { self == .topLeft || self == .top || self == .topRight }
-
-        /// Center of this grip for a given rect, in canvas coordinates.
-        func point(in rect: NSRect) -> NSPoint {
-            let x: CGFloat = movesMinX ? rect.minX : (movesMaxX ? rect.maxX : rect.midX)
-            let y: CGFloat = movesMinY ? rect.minY : (movesMaxY ? rect.maxY : rect.midY)
-            return NSPoint(x: x, y: y)
-        }
-    }
-
-    private enum ResizeConstraint {
-        case none
-        case preserveAspectRatio
-        case square
-    }
+    typealias ResizeAnchor = EditorCanvasGeometry.ResizeAnchor
 
     /// Active drag on a selection handle (rotate / curve / number tip /
     /// magnifier source / resize). The original annotation is captured so
@@ -1215,7 +1192,7 @@ class EditCanvasView: NSView {
 
         case .mosaic:
             if let start = shapeStart, let end = shapeCurrent {
-                let rect = rectFromTwoPoints(start, end)
+                let rect = EditorCanvasGeometry.rectFromTwoPoints(start, end)
                 if rect.width > 2, rect.height > 2,
                    let baseImage = resolveBaseImageForEditing(),
                    let region = MosaicTool.createMosaicRegion(
@@ -1260,8 +1237,8 @@ class EditCanvasView: NSView {
 
         case .rectangle:
             if let start = shapeStart, let current = shapeCurrent {
-                let end = constrainedShapeEnd(from: start, to: current, tool: .rectangle, modifiers: event.modifierFlags)
-                let rect = rectFromTwoPoints(start, end)
+                let end = EditorCanvasGeometry.constrainedShapeEnd(from: start, to: current, tool: .rectangle, modifiers: event.modifierFlags)
+                let rect = EditorCanvasGeometry.rectFromTwoPoints(start, end)
                 if rect.width > 2, rect.height > 2 {
                     recordUndo()
                     annotations.append(RectAnnotation(
@@ -1283,8 +1260,8 @@ class EditCanvasView: NSView {
 
         case .ellipse:
             if let start = shapeStart, let current = shapeCurrent {
-                let end = constrainedShapeEnd(from: start, to: current, tool: .ellipse, modifiers: event.modifierFlags)
-                let rect = rectFromTwoPoints(start, end)
+                let end = EditorCanvasGeometry.constrainedShapeEnd(from: start, to: current, tool: .ellipse, modifiers: event.modifierFlags)
+                let rect = EditorCanvasGeometry.rectFromTwoPoints(start, end)
                 if rect.width > 2, rect.height > 2 {
                     recordUndo()
                     annotations.append(EllipseAnnotation(
@@ -1306,7 +1283,7 @@ class EditCanvasView: NSView {
 
         case .arrow:
             if let start = shapeStart, let current = shapeCurrent {
-                let end = constrainedShapeEnd(from: start, to: current, tool: .arrow, modifiers: event.modifierFlags)
+                let end = EditorCanvasGeometry.constrainedShapeEnd(from: start, to: current, tool: .arrow, modifiers: event.modifierFlags)
                 let dist = hypot(end.x - start.x, end.y - start.y)
                 if dist > 5 {
                     recordUndo()
@@ -1324,7 +1301,7 @@ class EditCanvasView: NSView {
 
         case .line:
             if let start = shapeStart, let current = shapeCurrent {
-                let end = constrainedShapeEnd(from: start, to: current, tool: .line, modifiers: event.modifierFlags)
+                let end = EditorCanvasGeometry.constrainedShapeEnd(from: start, to: current, tool: .line, modifiers: event.modifierFlags)
                 let dist = hypot(end.x - start.x, end.y - start.y)
                 if dist > 5 {
                     recordUndo()
@@ -1346,7 +1323,7 @@ class EditCanvasView: NSView {
     }
 
     override func flagsChanged(with event: NSEvent) {
-        if shapeStart != nil, constrainsShapeWithShift(activeTool) {
+        if shapeStart != nil, EditorCanvasGeometry.constrainsShapeWithShift(activeTool) {
             needsDisplay = true
         }
         super.flagsChanged(with: event)
@@ -1412,7 +1389,7 @@ class EditCanvasView: NSView {
 
         // Draw in-progress shape preview
         if let start = shapeStart, let rawCurrent = shapeCurrent {
-            let current = constrainedShapeEnd(
+            let current = EditorCanvasGeometry.constrainedShapeEnd(
                 from: start,
                 to: rawCurrent,
                 tool: activeTool,
@@ -1423,7 +1400,7 @@ class EditCanvasView: NSView {
 
             switch activeTool {
             case .rectangle:
-                let rect = rectFromTwoPoints(start, current)
+                let rect = EditorCanvasGeometry.rectFromTwoPoints(start, current)
                 RectAnnotation(
                     rect: rect,
                     color: currentColor,
@@ -1433,7 +1410,7 @@ class EditCanvasView: NSView {
                     roughStyle: previewRoughStyle(for: rect)
                 ).draw(in: context, bounds: bounds)
             case .ellipse:
-                let rect = rectFromTwoPoints(start, current)
+                let rect = EditorCanvasGeometry.rectFromTwoPoints(start, current)
                 EllipseAnnotation(
                     rect: rect,
                     color: currentColor,
@@ -1445,7 +1422,7 @@ class EditCanvasView: NSView {
             case .mosaic:
                 // Mosaic preview: a semi-transparent gray fill marking the
                 // region that will be pixelated on mouseUp.
-                let rect = rectFromTwoPoints(start, current)
+                let rect = EditorCanvasGeometry.rectFromTwoPoints(start, current)
                 context.setFillColor(NSColor.gray.withAlphaComponent(0.5).cgColor)
                 context.fill(rect)
             case .line:
@@ -1486,7 +1463,7 @@ class EditCanvasView: NSView {
 
         if let eraserSelection {
             drawEraserSelection(
-                rectFromTwoPoints(eraserSelection.start, eraserSelection.current),
+                EditorCanvasGeometry.rectFromTwoPoints(eraserSelection.start, eraserSelection.current),
                 in: context
             )
         }
@@ -1674,7 +1651,7 @@ class EditCanvasView: NSView {
     private func updateEraserSelection(to point: NSPoint) {
         guard var selection = eraserSelection else { return }
         selection.current = point
-        eraseAnnotations(in: rectFromTwoPoints(selection.start, point), selection: &selection)
+        eraseAnnotations(in: EditorCanvasGeometry.rectFromTwoPoints(selection.start, point), selection: &selection)
         eraserSelection = selection
         needsDisplay = true
     }
@@ -1890,15 +1867,6 @@ class EditCanvasView: NSView {
         refreshCursorAtCurrentLocation()
     }
 
-    private func rectFromTwoPoints(_ a: NSPoint, _ b: NSPoint) -> NSRect {
-        NSRect(
-            x: min(a.x, b.x),
-            y: min(a.y, b.y),
-            width: abs(b.x - a.x),
-            height: abs(b.y - a.y)
-        )
-    }
-
     private func previewRoughStyle(for rect: NSRect) -> RoughShapeStyle {
         RoughShapeStyle.make(
             seed: shapeRoughSeed ?? Self.fallbackShapePreviewSeed,
@@ -1907,86 +1875,24 @@ class EditCanvasView: NSView {
         )
     }
 
-    private func constrainedShapeEnd(
-        from start: NSPoint,
-        to end: NSPoint,
-        tool: EditTool,
-        modifiers: NSEvent.ModifierFlags
-    ) -> NSPoint {
-        guard modifiers
-            .intersection(.deviceIndependentFlagsMask)
-            .contains(.shift)
-        else { return end }
-
-        switch tool {
-        case .line, .arrow:
-            return axisLockedEnd(from: start, to: end)
-        case .rectangle, .ellipse:
-            return squareLockedEnd(from: start, to: end)
-        default:
-            return end
-        }
-    }
-
-    private func constrainsShapeWithShift(_ tool: EditTool) -> Bool {
-        switch tool {
-        case .line, .arrow, .rectangle, .ellipse:
-            return true
-        default:
-            return false
-        }
-    }
-
-    private func axisLockedEnd(from start: NSPoint, to end: NSPoint) -> NSPoint {
-        let dx = end.x - start.x
-        let dy = end.y - start.y
-        if abs(dx) >= abs(dy) {
-            return NSPoint(x: end.x, y: start.y)
-        }
-        return NSPoint(x: start.x, y: end.y)
-    }
-
-    private func squareLockedEnd(from start: NSPoint, to end: NSPoint) -> NSPoint {
-        let dx = end.x - start.x
-        let dy = end.y - start.y
-        let side = max(abs(dx), abs(dy))
-        guard side > 0 else { return end }
-
-        let xSign: CGFloat = dx < 0 ? -1 : 1
-        let ySign: CGFloat = dy < 0 ? -1 : 1
-        return NSPoint(
-            x: start.x + side * xSign,
-            y: start.y + side * ySign
-        )
-    }
-
     // MARK: - Selection handles
 
     /// Padded bounding rect (unrotated) used as the dashed selection box and
     /// as the anchor for the rotate / delete / edit handles.
     private func selectionBox(for annotation: Annotation) -> NSRect {
-        annotation.boundingRect.insetBy(
-            dx: -EditCanvasView.selectionBoxPad,
-            dy: -EditCanvasView.selectionBoxPad
+        EditorCanvasGeometry.selectionBox(
+            boundingRect: annotation.boundingRect,
+            padding: Self.selectionBoxPad
         )
     }
 
-    /// Apply the annotation's rotation (around its bounding-rect mid) to a
-    /// point expressed in the unrotated frame, returning the canvas-space
-    /// position. Used to place screen-space chrome (rotation handle, delete
-    /// button) at corners that follow the rotated annotation.
+    /// Places screen-space chrome at a point that follows the annotation's
+    /// rotation around its bounding-rect center.
     private func rotated(_ point: NSPoint, for annotation: Annotation) -> NSPoint {
-        let rect = annotation.boundingRect
-        let cx = rect.midX
-        let cy = rect.midY
-        let rot = annotation.supportsRotation ? annotation.rotation : 0
-        let dx = point.x - cx
-        let dy = point.y - cy
-        let cosR = cos(rot)
-        let sinR = sin(rot)
-        return NSPoint(
-            x: cx + dx * cosR - dy * sinR,
-            y: cy + dx * sinR + dy * cosR
+        EditorCanvasGeometry.rotated(
+            point,
+            around: annotation.boundingRect,
+            rotation: annotation.supportsRotation ? annotation.rotation : 0
         )
     }
 
@@ -2528,7 +2434,11 @@ class EditCanvasView: NSView {
     }
 
     private func resizeHandlePoint(_ anchor: ResizeAnchor, for annotation: Annotation) -> NSPoint {
-        rotated(anchor.point(in: annotation.boundingRect), for: annotation)
+        EditorCanvasGeometry.resizeHandlePoint(
+            anchor,
+            boundingRect: annotation.boundingRect,
+            rotation: annotation.supportsRotation ? annotation.rotation : 0
+        )
     }
 
     private func hitTestSelectionHandle(at point: NSPoint) -> HandleDragState.Kind? {
@@ -2608,13 +2518,6 @@ class EditCanvasView: NSView {
         return nil
     }
 
-    private func clampedToCanvas(_ point: NSPoint) -> NSPoint {
-        NSPoint(
-            x: min(max(point.x, bounds.minX), bounds.maxX),
-            y: min(max(point.y, bounds.minY), bounds.maxY)
-        )
-    }
-
     private func applyHandleDrag(state: HandleDragState, currentMouse: NSPoint) {
         guard state.index < annotations.count else { return }
 
@@ -2683,7 +2586,7 @@ class EditCanvasView: NSView {
 
         case .magnifierSource:
             guard let magnifier = state.original as? MagnifierAnnotation else { return }
-            let point = clampedToCanvas(currentMouse)
+            let point = EditorCanvasGeometry.clamped(currentMouse, to: bounds)
             let dist = hypot(point.x - magnifier.center.x, point.y - magnifier.center.y)
             let source = dist < MagnifierAnnotation.sourceResetDistance ? nil : point
             annotations[state.index] = magnifier.withSourceCenter(source)
@@ -2736,7 +2639,7 @@ class EditCanvasView: NSView {
                 // Move only the edge(s) this grip owns; the opposite edge(s)
                 // stay pinned. min/abs keep the rect valid if the user drags a
                 // grip past its opposite side.
-                let newRect = resizedRect(
+                let newRect = EditorCanvasGeometry.resizedRect(
                     from: mosaic.rect,
                     anchor: anchor,
                     currentMouse: currentMouse,
@@ -2762,7 +2665,7 @@ class EditCanvasView: NSView {
                     blockSize: mosaic.blockSize
                 )
             } else if let rect = state.original as? RectAnnotation {
-                let newRect = resizedRotatedRect(
+                let newRect = EditorCanvasGeometry.resizedRotatedRect(
                     from: rect.rect,
                     rotation: rect.rotation,
                     anchor: anchor,
@@ -2781,7 +2684,7 @@ class EditCanvasView: NSView {
                     rotation: rect.rotation
                 )
             } else if let ellipse = state.original as? EllipseAnnotation {
-                let newRect = resizedRotatedRect(
+                let newRect = EditorCanvasGeometry.resizedRotatedRect(
                     from: ellipse.rect,
                     rotation: ellipse.rotation,
                     anchor: anchor,
@@ -2800,7 +2703,7 @@ class EditCanvasView: NSView {
                     rotation: ellipse.rotation
                 )
             } else if let image = state.original as? ImageAnnotation {
-                let newRect = resizedRotatedRect(
+                let newRect = EditorCanvasGeometry.resizedRotatedRect(
                     from: image.rect,
                     rotation: image.rotation,
                     anchor: anchor,
@@ -2816,162 +2719,18 @@ class EditCanvasView: NSView {
         needsDisplay = true
     }
 
-    private func resizedRect(
-        from original: NSRect,
-        anchor: ResizeAnchor,
-        currentMouse: NSPoint,
-        minimumSize: CGFloat,
-        constraint: ResizeConstraint = .none
-    ) -> NSRect {
-        if constraint != .none {
-            return resizedRotatedRect(
-                from: original,
-                rotation: 0,
-                anchor: anchor,
-                currentMouse: currentMouse,
-                minimumSize: minimumSize,
-                constraint: constraint
-            )
-        }
-
-        var minX = original.minX
-        var maxX = original.maxX
-        var minY = original.minY
-        var maxY = original.maxY
-
-        if anchor.movesMinX { minX = currentMouse.x }
-        if anchor.movesMaxX { maxX = currentMouse.x }
-        if anchor.movesMinY { minY = currentMouse.y }
-        if anchor.movesMaxY { maxY = currentMouse.y }
-
-        let width = abs(maxX - minX)
-        let height = abs(maxY - minY)
-        guard width >= minimumSize, height >= minimumSize else {
-            return original
-        }
-
-        return NSRect(
-            x: min(minX, maxX),
-            y: min(minY, maxY),
-            width: width,
-            height: height
-        )
-    }
-
-    private func resizedRotatedRect(
-        from original: NSRect,
-        rotation: CGFloat,
-        anchor: ResizeAnchor,
-        currentMouse: NSPoint,
-        minimumSize: CGFloat,
-        constraint: ResizeConstraint = .none
-    ) -> NSRect {
-        let originalHalfWidth = original.width / 2
-        let originalHalfHeight = original.height / 2
-        let originalCenter = NSPoint(x: original.midX, y: original.midY)
-        guard original.width > 0, original.height > 0 else { return original }
-
-        let xSign: CGFloat? = anchor.movesMinX ? -1 : (anchor.movesMaxX ? 1 : nil)
-        let ySign: CGFloat? = anchor.movesMinY ? -1 : (anchor.movesMaxY ? 1 : nil)
-
-        let fixedLocal = NSPoint(
-            x: xSign.map { -$0 * originalHalfWidth } ?? 0,
-            y: ySign.map { -$0 * originalHalfHeight } ?? 0
-        )
-        let fixedWorld = point(originalCenter, adding: rotatedVector(fixedLocal, by: rotation))
-        let deltaLocal = unrotatedVector(delta(from: fixedWorld, to: currentMouse), by: rotation)
-
-        // Keep dimensions signed until the center is placed so handles can
-        // cross over the fixed edge; the returned NSRect stays normalized.
-        let proposedWidth = xSign.map { $0 * deltaLocal.x } ?? original.width
-        let proposedHeight = ySign.map { $0 * deltaLocal.y } ?? original.height
-        var signedWidth = proposedWidth
-        var signedHeight = proposedHeight
-
-        func direction(for value: CGFloat) -> CGFloat {
-            value < 0 ? -1 : 1
-        }
-
-        if constraint == .preserveAspectRatio, xSign != nil || ySign != nil {
-            let scale: CGFloat
-            switch (xSign, ySign) {
-            case (.some, .some):
-                let denominator = original.width * original.width + original.height * original.height
-                scale = denominator > 0
-                    ? (original.width * abs(proposedWidth) + original.height * abs(proposedHeight)) / denominator
-                    : 1
-            case (.some, .none):
-                scale = abs(proposedWidth) / original.width
-            case (.none, .some):
-                scale = abs(proposedHeight) / original.height
-            case (.none, .none):
-                scale = 1
-            }
-            guard scale.isFinite else { return original }
-            signedWidth = (xSign == nil ? 1 : direction(for: proposedWidth)) * original.width * scale
-            signedHeight = (ySign == nil ? 1 : direction(for: proposedHeight)) * original.height * scale
-        } else if constraint == .square, xSign != nil || ySign != nil {
-            let side: CGFloat
-            switch (xSign, ySign) {
-            case (.some, .some):
-                side = max(abs(proposedWidth), abs(proposedHeight))
-            case (.some, .none):
-                side = abs(proposedWidth)
-            case (.none, .some):
-                side = abs(proposedHeight)
-            case (.none, .none):
-                side = min(original.width, original.height)
-            }
-            guard side.isFinite else { return original }
-            signedWidth = (xSign == nil ? 1 : direction(for: proposedWidth)) * side
-            signedHeight = (ySign == nil ? 1 : direction(for: proposedHeight)) * side
-        }
-
-        let halfWidth = abs(signedWidth) / 2
-        let halfHeight = abs(signedHeight) / 2
-        let centerLocal = NSPoint(
-            x: xSign.map { $0 * signedWidth / 2 } ?? 0,
-            y: ySign.map { $0 * signedHeight / 2 } ?? 0
-        )
-        let center = point(fixedWorld, adding: rotatedVector(centerLocal, by: rotation))
-        return NSRect(
-            x: center.x - halfWidth,
-            y: center.y - halfHeight,
-            width: halfWidth * 2,
-            height: halfHeight * 2
-        )
-    }
-
     private func constrainedEndpoint(
         _ currentMouse: NSPoint,
         fixedPoint: NSPoint
     ) -> NSPoint {
-        guard NSEvent.modifierFlags
-                  .intersection(.deviceIndependentFlagsMask)
-                  .contains(.shift)
-        else { return currentMouse }
-        return axisLockedEnd(from: fixedPoint, to: currentMouse)
-    }
-
-    private func rotatedVector(_ vector: NSPoint, by rotation: CGFloat) -> NSPoint {
-        let cosR = cos(rotation)
-        let sinR = sin(rotation)
-        return NSPoint(
-            x: vector.x * cosR - vector.y * sinR,
-            y: vector.x * sinR + vector.y * cosR
+        let shiftPressed = NSEvent.modifierFlags
+            .intersection(.deviceIndependentFlagsMask)
+            .contains(.shift)
+        return EditorCanvasGeometry.constrainedEndpoint(
+            currentMouse,
+            fixedPoint: fixedPoint,
+            shiftPressed: shiftPressed
         )
-    }
-
-    private func unrotatedVector(_ vector: NSPoint, by rotation: CGFloat) -> NSPoint {
-        rotatedVector(vector, by: -rotation)
-    }
-
-    private func point(_ point: NSPoint, adding vector: NSPoint) -> NSPoint {
-        NSPoint(x: point.x + vector.x, y: point.y + vector.y)
-    }
-
-    private func delta(from start: NSPoint, to end: NSPoint) -> NSPoint {
-        NSPoint(x: end.x - start.x, y: end.y - start.y)
     }
 
     // MARK: - Cursor

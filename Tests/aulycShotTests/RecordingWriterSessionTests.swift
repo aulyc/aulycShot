@@ -9,48 +9,93 @@ final class RecordingWriterSessionTests: XCTestCase {
         case finish
     }
 
+    /// Test assertions and simulated AVFoundation callbacks may arrive outside
+    /// the writer queue, so every mutable backend field is protected by `lock`.
     private final class FakeBackend: RecordingWriterBackend, @unchecked Sendable {
-        var isReadyForMoreMediaData = true
-        var error: Error?
-        var appendResult = true
-        var automaticallyFinishes = true
-        private(set) var sessionStartTimes: [CMTime] = []
-        private(set) var appendedTimes: [CMTime] = []
-        private(set) var markAsFinishedCount = 0
-        private(set) var finishCount = 0
-        private(set) var cancelCount = 0
+        private let lock = NSLock()
+        private var storedIsReadyForMoreMediaData = true
+        private var storedError: Error?
+        private var storedAppendResult = true
+        private var storedAutomaticallyFinishes = true
+        private var storedSessionStartTimes: [CMTime] = []
+        private var storedAppendedTimes: [CMTime] = []
+        private var storedMarkAsFinishedCount = 0
+        private var storedFinishCount = 0
+        private var storedCancelCount = 0
         private var finishCompletion: (@Sendable () -> Void)?
 
+        var isReadyForMoreMediaData: Bool {
+            get { withLock { storedIsReadyForMoreMediaData } }
+            set { withLock { storedIsReadyForMoreMediaData = newValue } }
+        }
+
+        var error: Error? {
+            get { withLock { storedError } }
+            set { withLock { storedError = newValue } }
+        }
+
+        var appendResult: Bool {
+            get { withLock { storedAppendResult } }
+            set { withLock { storedAppendResult = newValue } }
+        }
+
+        var automaticallyFinishes: Bool {
+            get { withLock { storedAutomaticallyFinishes } }
+            set { withLock { storedAutomaticallyFinishes = newValue } }
+        }
+
+        var sessionStartTimes: [CMTime] { withLock { storedSessionStartTimes } }
+        var appendedTimes: [CMTime] { withLock { storedAppendedTimes } }
+        var markAsFinishedCount: Int { withLock { storedMarkAsFinishedCount } }
+        var finishCount: Int { withLock { storedFinishCount } }
+        var cancelCount: Int { withLock { storedCancelCount } }
+
         func startSession(at presentationTime: CMTime) {
-            sessionStartTimes.append(presentationTime)
+            withLock { storedSessionStartTimes.append(presentationTime) }
         }
 
         func append(_ pixelBuffer: CVPixelBuffer, at presentationTime: CMTime) -> Bool {
-            appendedTimes.append(presentationTime)
-            return appendResult
+            withLock {
+                storedAppendedTimes.append(presentationTime)
+                return storedAppendResult
+            }
         }
 
         func markAsFinished() {
-            markAsFinishedCount += 1
+            withLock { storedMarkAsFinishedCount += 1 }
         }
 
         func finish(completion: @escaping @Sendable () -> Void) {
-            finishCount += 1
-            if automaticallyFinishes {
+            let shouldFinish = withLock {
+                storedFinishCount += 1
+                if !storedAutomaticallyFinishes {
+                    finishCompletion = completion
+                }
+                return storedAutomaticallyFinishes
+            }
+            if shouldFinish {
                 completion()
-            } else {
-                finishCompletion = completion
             }
         }
 
         func completeFinish() {
-            let completion = finishCompletion
-            finishCompletion = nil
+            let completion = withLock {
+                let completion = finishCompletion
+                finishCompletion = nil
+                return completion
+            }
             completion?()
         }
 
         func cancel() {
-            cancelCount += 1
+            withLock { storedCancelCount += 1 }
+        }
+
+        @discardableResult
+        private func withLock<T>(_ body: () -> T) -> T {
+            lock.lock()
+            defer { lock.unlock() }
+            return body()
         }
     }
 
@@ -81,22 +126,88 @@ final class RecordingWriterSessionTests: XCTestCase {
         XCTAssertEqual(fixture.session.state, .finished)
     }
 
-    func testPauseResumeAdjustsPresentationTimeOnce() async throws {
+    func testPauseResumeBuildsContinuousTimelineFromFramePTS() async throws {
         let fixture = try makeFixture()
 
         fixture.queue.sync {
             try? fixture.session.prepare(outputURL: fixture.url, width: 2, height: 2, fps: 30)
             XCTAssertTrue(fixture.session.append(pixelBuffer: fixture.pixelBuffer, presentationTime: CMTime(seconds: 10, preferredTimescale: 600)))
-            fixture.session.pause(at: 100)
+            fixture.session.pause()
             XCTAssertFalse(fixture.session.append(pixelBuffer: fixture.pixelBuffer, presentationTime: CMTime(seconds: 12, preferredTimescale: 600)))
-            fixture.session.resume(at: 102.5)
+            fixture.session.resume()
             XCTAssertTrue(fixture.session.append(pixelBuffer: fixture.pixelBuffer, presentationTime: CMTime(seconds: 15, preferredTimescale: 600)))
         }
         _ = await finish(fixture)
 
-        XCTAssertEqual(fixture.session.totalPausedDuration, 2.5, accuracy: 0.0001)
-        XCTAssertEqual(fixture.backend.appendedTimes.map(CMTimeGetSeconds), [10, 12.5])
+        assertTimes(fixture.backend.appendedTimes, equal: [10, 10 + 1.0 / 30.0])
         XCTAssertEqual(fixture.backend.sessionStartTimes.map(CMTimeGetSeconds), [10])
+    }
+
+    func testMultiplePausesAdvanceByOneFrameAtEachResume() async throws {
+        let fixture = try makeFixture()
+
+        fixture.queue.sync {
+            try? fixture.session.prepare(outputURL: fixture.url, width: 2, height: 2, fps: 10)
+            XCTAssertTrue(fixture.session.append(pixelBuffer: fixture.pixelBuffer, presentationTime: seconds(10)))
+            fixture.session.pause()
+            fixture.session.resume()
+            XCTAssertTrue(fixture.session.append(pixelBuffer: fixture.pixelBuffer, presentationTime: seconds(15)))
+            XCTAssertTrue(fixture.session.append(pixelBuffer: fixture.pixelBuffer, presentationTime: seconds(16)))
+            fixture.session.pause()
+            fixture.session.resume()
+            XCTAssertTrue(fixture.session.append(pixelBuffer: fixture.pixelBuffer, presentationTime: seconds(20)))
+        }
+        _ = await finish(fixture)
+
+        assertTimes(fixture.backend.appendedTimes, equal: [10, 10.1, 11.1, 11.2])
+    }
+
+    func testPauseBeforeFirstFrameKeepsFirstSourcePTS() async throws {
+        let fixture = try makeFixture()
+
+        fixture.queue.sync {
+            try? fixture.session.prepare(outputURL: fixture.url, width: 2, height: 2, fps: 30)
+            fixture.session.pause()
+            fixture.session.resume()
+            XCTAssertTrue(fixture.session.append(pixelBuffer: fixture.pixelBuffer, presentationTime: seconds(40)))
+        }
+        _ = await finish(fixture)
+
+        assertTimes(fixture.backend.appendedTimes, equal: [40])
+        assertTimes(fixture.backend.sessionStartTimes, equal: [40])
+    }
+
+    func testResumeOffsetCommitsOnlyAfterAFrameIsWritten() async throws {
+        let fixture = try makeFixture()
+
+        fixture.queue.sync {
+            try? fixture.session.prepare(outputURL: fixture.url, width: 2, height: 2, fps: 10)
+            XCTAssertTrue(fixture.session.append(pixelBuffer: fixture.pixelBuffer, presentationTime: seconds(10)))
+            fixture.session.pause()
+            fixture.session.resume()
+            fixture.backend.appendResult = false
+            XCTAssertFalse(fixture.session.append(pixelBuffer: fixture.pixelBuffer, presentationTime: seconds(15)))
+            fixture.backend.appendResult = true
+            XCTAssertTrue(fixture.session.append(pixelBuffer: fixture.pixelBuffer, presentationTime: seconds(16)))
+            XCTAssertTrue(fixture.session.append(pixelBuffer: fixture.pixelBuffer, presentationTime: seconds(17)))
+        }
+        _ = await finish(fixture)
+
+        assertTimes(fixture.backend.appendedTimes, equal: [10, 10.1, 10.1, 11.1])
+    }
+
+    func testNonIncreasingSourcePTSIsRejectedOutsideResumeBoundary() throws {
+        let fixture = try makeFixture()
+
+        fixture.queue.sync {
+            try? fixture.session.prepare(outputURL: fixture.url, width: 2, height: 2, fps: 30)
+            XCTAssertTrue(fixture.session.append(pixelBuffer: fixture.pixelBuffer, presentationTime: seconds(10)))
+            XCTAssertFalse(fixture.session.append(pixelBuffer: fixture.pixelBuffer, presentationTime: seconds(10)))
+            XCTAssertFalse(fixture.session.append(pixelBuffer: fixture.pixelBuffer, presentationTime: seconds(9)))
+            XCTAssertFalse(fixture.session.append(pixelBuffer: fixture.pixelBuffer, presentationTime: .invalid))
+        }
+
+        assertTimes(fixture.backend.appendedTimes, equal: [10])
     }
 
     func testCancelRemovesTemporaryOutputAndRejectsNewFrames() throws {
@@ -209,8 +320,8 @@ final class RecordingWriterSessionTests: XCTestCase {
         let fixture = try makeFixture()
 
         try fixture.queue.sync {
-            fixture.session.pause(at: 1)
-            fixture.session.resume(at: 2)
+            fixture.session.pause()
+            fixture.session.resume()
             XCTAssertFalse(fixture.session.finish { _ in })
             try? fixture.session.prepare(outputURL: fixture.url, width: 2, height: 2, fps: 30)
 
@@ -220,11 +331,10 @@ final class RecordingWriterSessionTests: XCTestCase {
                 XCTAssertEqual(error as? ScreenRecordingError, .writerSetupFailed)
             }
 
-            fixture.session.pause(at: 10)
-            fixture.session.pause(at: 11)
-            fixture.session.resume(at: 8)
-            fixture.session.resume(at: 12)
-            XCTAssertEqual(fixture.session.totalPausedDuration, 0)
+            fixture.session.pause()
+            fixture.session.pause()
+            fixture.session.resume()
+            fixture.session.resume()
             XCTAssertEqual(fixture.session.state, .recording)
         }
     }
@@ -234,7 +344,7 @@ final class RecordingWriterSessionTests: XCTestCase {
 
         fixture.queue.sync {
             try? fixture.session.prepare(outputURL: fixture.url, width: 2, height: 2, fps: 30)
-            fixture.session.pause(at: 10)
+            fixture.session.pause()
         }
         let outcome = await finish(fixture)
 
@@ -272,6 +382,9 @@ final class RecordingWriterSessionTests: XCTestCase {
         assertFailure(outcome, equals: ScreenRecordingError.writerSetupFailed)
     }
 
+    /// Immutable fixture values cross into the queue closures used by the tests.
+    /// CVPixelBuffer is not declared Sendable, but this 2x2 buffer is never
+    /// mutated after fixture construction.
     private struct Fixture: @unchecked Sendable {
         let queue: DispatchQueue
         let session: RecordingWriterSession
@@ -280,6 +393,7 @@ final class RecordingWriterSessionTests: XCTestCase {
         let url: URL
     }
 
+    /// Completion callbacks update this counter only through its lock.
     private final class SendableCounter: @unchecked Sendable {
         private let lock = NSLock()
         private var count = 0
@@ -297,6 +411,7 @@ final class RecordingWriterSessionTests: XCTestCase {
         }
     }
 
+    /// Completion callbacks read and write the outcome only through its lock.
     private final class SendableOutcomeBox: @unchecked Sendable {
         private let lock = NSLock()
         private var storedValue: RecordingWriterFinishOutcome?
@@ -352,6 +467,23 @@ final class RecordingWriterSessionTests: XCTestCase {
             return XCTFail("Expected writer failure", file: file, line: line)
         }
         XCTAssertEqual(error as? T, expectedError, file: file, line: line)
+    }
+
+    private func assertTimes(
+        _ actual: [CMTime],
+        equal expected: [TimeInterval],
+        accuracy: TimeInterval = 0.0001,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertEqual(actual.count, expected.count, file: file, line: line)
+        for (actualTime, expectedTime) in zip(actual, expected) {
+            XCTAssertEqual(CMTimeGetSeconds(actualTime), expectedTime, accuracy: accuracy, file: file, line: line)
+        }
+    }
+
+    private func seconds(_ value: TimeInterval) -> CMTime {
+        CMTime(seconds: value, preferredTimescale: 600)
     }
 
     private func makePixelBuffer() throws -> CVPixelBuffer {

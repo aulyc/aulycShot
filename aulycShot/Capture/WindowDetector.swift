@@ -13,6 +13,9 @@ struct DetectedWindow: Sendable {
     }
 }
 
+/// Window snapshots are main-actor state. Accessibility probing runs on the
+/// dedicated queue, and request generation is the only cross-domain mutable
+/// field, protected by `requestLock`.
 final class WindowDetector: @unchecked Sendable {
     private var windows: [DetectedWindow] = []
     private let ownPID = ProcessInfo.processInfo.processIdentifier
@@ -25,6 +28,7 @@ final class WindowDetector: @unchecked Sendable {
     private var requestGeneration = 0
 
     /// Snapshot all visible windows (excluding this app).
+    @MainActor
     func refresh() {
         guard let infoList = CGWindowListCopyWindowInfo(
             [.optionOnScreenOnly, .excludeDesktopElements],
@@ -87,18 +91,21 @@ final class WindowDetector: @unchecked Sendable {
     /// High-layer system surfaces (menu bar, Dock, popups) are often only a
     /// translucent foreground when captured as independent windows. Capture
     /// their already-composited screen pixels instead.
+    @MainActor
     func usesCompositedScreenBackdrop(forWindowID windowID: CGWindowID) -> Bool {
         windows.first { $0.windowID == windowID }?.usesCompositedScreenBackdrop ?? false
     }
 
     /// Return the topmost window whose frame contains `cgPoint`
     /// (CG coordinates: origin at top-left of primary display, y increases downward).
+    @MainActor
     func windowAt(cgPoint: CGPoint) -> DetectedWindow? {
         // CGWindowListCopyWindowInfo returns windows in front-to-back z-order,
         // so the first hit is the topmost window.
         return windows.first { $0.frame.contains(cgPoint) }
     }
 
+    @MainActor
     func baseCandidates(
         at cgPoint: CGPoint,
         screenFrame: CGRect,
@@ -124,6 +131,7 @@ final class WindowDetector: @unchecked Sendable {
         )
     }
 
+    @MainActor
     func requestCandidates(
         at cgPoint: CGPoint,
         screenFrame: CGRect,

@@ -294,6 +294,8 @@ struct ScreenCapturer {
         String(format: "%.1f", Double(value))
     }
 
+    /// ScreenCaptureKit completion and the waiting caller share this box only
+    /// through the lock-protected accessors below.
     private final class CaptureResultBox: @unchecked Sendable {
         private let lock = NSLock()
         private var image: NSImage?

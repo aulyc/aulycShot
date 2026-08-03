@@ -244,7 +244,7 @@ class EditWindowController {
         if !layout.primary.isEmpty {
             let tv = ToolbarView(items: layout.primary, orientation: .horizontal)
             wireToolbarCallbacks(tv)
-            tv.frame = toolbarRect(in: hostSelectionView.bounds, size: tv.preferredSize)
+            tv.frame = chromeLayout.toolbarRect(in: hostSelectionView.bounds, size: tv.preferredSize)
             styleFloatingHUD(tv)
             self.toolbarView = tv
             hostSelectionView.addSubview(tv)
@@ -253,7 +253,7 @@ class EditWindowController {
         if !layout.side.isEmpty {
             let sv = ToolbarView(items: layout.side, orientation: .vertical)
             wireToolbarCallbacks(sv)
-            sv.frame = sideToolbarRect(
+            sv.frame = chromeLayout.sideToolbarRect(
                 in: hostSelectionView.bounds,
                 size: sv.preferredSize,
                 avoiding: toolbarView?.frame
@@ -603,7 +603,7 @@ class EditWindowController {
             showsShapeStrokeStyles: shapeStrokeStyle != nil,
             shapeStrokePreviewShape: shapeStrokePreviewShape
         )
-        let subRect = subToolbarRect(
+        let subRect = chromeLayout.subToolbarRect(
             width: resolvedWidth,
             height: 36,
             toolbarFrame: toolbarFrame,
@@ -654,7 +654,7 @@ class EditWindowController {
 
     private func showTextSubToolbar() {
         guard let hostSelectionView, let toolbarFrame = subToolbarAnchorFrame else { return }
-        let subRect = subToolbarRect(
+        let subRect = chromeLayout.subToolbarRect(
             width: TextSubToolbar.preferredWidth,
             height: 36,
             toolbarFrame: toolbarFrame,
@@ -709,7 +709,7 @@ class EditWindowController {
 
     private func showMosaicSubToolbar() {
         guard let hostSelectionView, let toolbarFrame = subToolbarAnchorFrame else { return }
-        let subRect = subToolbarRect(
+        let subRect = chromeLayout.subToolbarRect(
             width: MosaicSubToolbar.preferredWidth,
             height: 36,
             toolbarFrame: toolbarFrame,
@@ -741,7 +741,7 @@ class EditWindowController {
             let toolbarFrame = subToolbarAnchorFrame
         else { return }
 
-        subToolbarView.frame = subToolbarRect(
+        subToolbarView.frame = chromeLayout.subToolbarRect(
             width: subToolbarView.frame.width,
             height: subToolbarView.frame.height,
             toolbarFrame: toolbarFrame,
@@ -754,13 +754,13 @@ class EditWindowController {
     private func repositionFloatingChrome() {
         guard let hostSelectionView else { return }
         if let toolbarView {
-            toolbarView.frame = toolbarRect(
+            toolbarView.frame = chromeLayout.toolbarRect(
                 in: hostSelectionView.bounds,
                 size: toolbarView.preferredSize
             )
         }
         if let sideToolbarView {
-            sideToolbarView.frame = sideToolbarRect(
+            sideToolbarView.frame = chromeLayout.sideToolbarRect(
                 in: hostSelectionView.bounds,
                 size: sideToolbarView.preferredSize,
                 avoiding: toolbarView?.frame
@@ -1859,97 +1859,15 @@ class EditWindowController {
         hostSelectionView?.needsDisplay = true
     }
 
-    private func toolbarRect(in bounds: NSRect, size: NSSize) -> NSRect {
-        let width = size.width
-        let height = size.height
-        let margin: CGFloat = 8
-
-        let referenceRect = selectionViewRect
-        let x = clampedX(
-            referenceRect.midX - width / 2,
-            width: width,
-            in: bounds,
-            margin: margin
-        )
-        var y = referenceRect.minY - height - margin
-        if y < margin {
-            y = min(referenceRect.maxY + margin, bounds.maxY - height - margin)
-        }
-        y = max(margin, min(bounds.maxY - height - margin, y))
-
-        return NSRect(x: x, y: y, width: width, height: height)
-    }
-
-    /// Frame for the vertical side toolbar. Prefers the right of the
-    /// selection, flips to the left when there's no room, and stays
-    /// vertically centered on the selection.
-    ///
-    /// `avoiding` is the primary toolbar's frame, when it exists. The two
-    /// bars are positioned independently against their own preferred
-    /// anchors, so for a small selection near a screen edge the side
-    /// toolbar can dip into the horizontal bar's row. When that happens we
-    /// slide the side toolbar clear of the primary toolbar's band.
-    private func sideToolbarRect(
-        in bounds: NSRect,
-        size: NSSize,
-        avoiding primaryFrame: NSRect? = nil
-    ) -> NSRect {
-        let width = size.width
-        let height = size.height
-        let margin: CGFloat = 8
-
-        let referenceRect = selectionViewRect
-        var x = referenceRect.maxX + margin
-        if x + width > bounds.maxX - margin {
-            x = referenceRect.minX - width - margin
-        }
-        x = max(margin, min(bounds.maxX - width - margin, x))
-
-        var y = referenceRect.midY - height / 2
-        y = max(margin, min(bounds.maxY - height - margin, y))
-
-        var rect = NSRect(x: x, y: y, width: width, height: height)
-
-        if let primary = primaryFrame, rect.intersects(primary) {
-            // Try to sit fully above the primary toolbar's band; fall back
-            // to below it when there isn't enough headroom.
-            let above = primary.maxY + margin
-            if above + height <= bounds.maxY - margin {
-                rect.origin.y = above
-            } else {
-                rect.origin.y = max(margin, primary.minY - margin - height)
-            }
-        }
-
-        return rect
-    }
-
-    private func subToolbarRect(
-        width: CGFloat,
-        height: CGFloat,
-        toolbarFrame: NSRect,
-        in bounds: NSRect
-    ) -> NSRect {
-        let margin: CGFloat = 8
-        let x = clampedX(toolbarFrame.midX - width / 2, width: width, in: bounds, margin: margin)
-        var y = toolbarFrame.minY - height - 4
-        if y < margin {
-            y = min(toolbarFrame.maxY + 4, bounds.maxY - height - margin)
-        }
-        y = max(margin, min(bounds.maxY - height - margin, y))
-
-        return NSRect(x: x, y: y, width: width, height: height)
-    }
-
-    private func clampedX(_ proposedX: CGFloat, width: CGFloat, in bounds: NSRect, margin: CGFloat) -> CGFloat {
-        max(margin, min(bounds.maxX - width - margin, proposedX))
-    }
-
     private func styleFloatingHUD(_ view: NSView) {
         view.wantsLayer = true
         view.layer?.shadowColor = NSColor.black.cgColor
         view.layer?.shadowOpacity = 0.25
         view.layer?.shadowRadius = 10
         view.layer?.shadowOffset = CGSize(width: 0, height: -2)
+    }
+
+    private var chromeLayout: EditorChromeLayout {
+        EditorChromeLayout(selectionRect: selectionViewRect)
     }
 }

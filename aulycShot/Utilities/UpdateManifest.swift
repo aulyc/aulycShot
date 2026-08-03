@@ -183,7 +183,7 @@ struct UpdateManifest: Decodable, Equatable, Sendable {
 /// A transport error, non-200 response, or invalid document advances to the
 /// next mirror. A valid response is authoritative even when it reports that
 /// the running app is already current.
-final class UpdateManifestLoader: @unchecked Sendable {
+final class UpdateManifestLoader: Sendable {
     struct LoadedManifest: Sendable {
         let manifest: UpdateManifest
         let sourceURL: URL

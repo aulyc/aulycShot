@@ -14,6 +14,8 @@ protocol RecordingWriterBackend: AnyObject {
     func cancel()
 }
 
+/// AVFoundation writer objects are mutable but are only reached through the
+/// queue-confined RecordingWriterSession, whose entry points assert ownership.
 final class AVAssetRecordingWriterBackend: RecordingWriterBackend, @unchecked Sendable {
     private let writer: AVAssetWriter
     private let input: AVAssetWriterInput

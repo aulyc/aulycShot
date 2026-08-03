@@ -399,6 +399,7 @@ private final class UpdateManifestURLProtocol: URLProtocol {
     override func stopLoading() {}
 }
 
+/// URLProtocol callbacks and test setup share the handler only through `lock`.
 private final class UpdateManifestHandlerStore: @unchecked Sendable {
     private let lock = NSLock()
     private var storedHandler: ((URLRequest) throws -> (status: Int, data: Data, error: Error?))?
