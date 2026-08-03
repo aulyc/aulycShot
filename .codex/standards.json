@@ -326,11 +326,11 @@
     },
     {
       "path": "aulycShot/Utilities/UpdateChecker.swift",
-      "sha256": "9b8a48c9ccb745b00518f001460cb00ca66513c2eb22a176e5f2223290ead026"
+      "sha256": "7a6a22c33e0565ae857c9f7c7903c39baf50d0dbeb400269336eac620789dbc8"
     },
     {
       "path": "aulycShot/Utilities/UpdateInstaller.swift",
-      "sha256": "38923762c04f014497bfa1c2de721c285448e8650edd299a889614f2239d244b"
+      "sha256": "c3989e9644f5e0ed27d1ffe16359e3ac6fc6f0e95397722cf282bc35a75efe76"
     },
     {
       "path": "aulycShot/Utilities/UpdateManifest.swift",
@@ -398,7 +398,7 @@
     },
     {
       "path": "Tests/aulycShotTests/UpdateManifestTests.swift",
-      "sha256": "68c462dfe888fe813ac9141cfae85cd76d4d4c90be359bf0b33b9e1d9b51f6f5"
+      "sha256": "2c9687b88bfff1e72085bb98ef2ae280eade6e54590858da5fbddfa5bfc56487"
     },
     {
       "path": "Tests/test_icon_assets.py",
