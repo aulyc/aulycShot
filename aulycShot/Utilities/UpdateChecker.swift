@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import OSLog
 
 /// Outcome of an update check / install. Drives the menu bar item and the
 /// About pane.
@@ -35,6 +36,17 @@ extension Notification.Name {
 @MainActor
 final class UpdateChecker {
     static let shared = UpdateChecker()
+
+    private static let logger = Logger(
+        subsystem: "com.aulyc.aulycshot",
+        category: "updater"
+    )
+
+    private enum FailureStage: String {
+        case provenanceDownload = "provenance-download"
+        case artifactDownload = "artifact-download"
+        case verificationAndInstall = "verification-and-install"
+    }
 
     private let throttleKey = "lastUpdateCheckAt"
     private let skippedVersionKey = "skippedUpdateVersion"
@@ -195,7 +207,18 @@ final class UpdateChecker {
 
         setState(.downloading(version: version, fraction: 0))
 
-        let fail: @MainActor @Sendable () -> Void = { [weak self] in
+        let fail: @MainActor @Sendable (FailureStage, Error) -> Void = {
+            [weak self] stage, error in
+            let errorCode: String
+            if let installError = error as? UpdateInstaller.InstallError {
+                errorCode = "installer.\(installError.rawValue)"
+            } else {
+                let nsError = error as NSError
+                errorCode = "system.\(nsError.domain).\(nsError.code)"
+            }
+            Self.logger.error(
+                "Update failed stage=\(stage.rawValue, privacy: .public) code=\(errorCode, privacy: .public)"
+            )
             self?.setState(.installFailed(version: version))
             onFailure?()
         }
@@ -205,8 +228,8 @@ final class UpdateChecker {
             expectedSHA256: manifest.provenance.sha256
         ) { provenanceResult in
             switch provenanceResult {
-            case .failure:
-                fail()
+            case .failure(let error):
+                fail(.provenanceDownload, error)
             case .success(let provenancePath):
                 var lastPercent = -1
                 UpdateInstaller.shared.downloadDMG(
@@ -224,9 +247,9 @@ final class UpdateChecker {
                     },
                     completion: { result in
                         switch result {
-                        case .failure:
+                        case .failure(let error):
                             try? FileManager.default.removeItem(at: provenancePath)
-                            fail()
+                            fail(.artifactDownload, error)
                         case .success(let dmgPath):
                             self.setState(
                                 .installing(version: version, phase: .verifying)
@@ -251,7 +274,10 @@ final class UpdateChecker {
                                     )
                                     Task { @MainActor in NSApp.terminate(nil) }
                                 } catch {
-                                    Task { @MainActor in fail() }
+                                    Task {
+                                        @MainActor in
+                                        fail(.verificationAndInstall, error)
+                                    }
                                 }
                             }
                         }

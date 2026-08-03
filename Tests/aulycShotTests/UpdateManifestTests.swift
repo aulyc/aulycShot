@@ -185,6 +185,39 @@ final class UpdateManifestTests: XCTestCase {
         )
     }
 
+    func testInstallerPreservesURLSessionDownloadBeforeDelegateReturns() throws {
+        let payload = Data("formal provenance".utf8)
+        let hashInput = FileManager.default.temporaryDirectory
+            .appendingPathComponent("aulycShot-update-hash-\(UUID().uuidString)")
+        try payload.write(to: hashInput)
+        let expectedSHA256 = try UpdateInstaller.sha256(of: hashInput)
+        try FileManager.default.removeItem(at: hashInput)
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [UpdateManifestURLProtocol.self]
+        let installer = UpdateInstaller(sessionConfiguration: configuration)
+        UpdateManifestURLProtocol.handler = { _ in
+            (200, payload, nil)
+        }
+        let finished = expectation(description: "download is preserved")
+
+        installer.downloadProvenance(
+            from: [URL(string: "https://download.example/provenance.json")!],
+            expectedSHA256: expectedSHA256
+        ) { result in
+            switch result {
+            case .failure(let error):
+                XCTFail("unexpected failure: \(error)")
+            case .success(let url):
+                defer { try? FileManager.default.removeItem(at: url) }
+                XCTAssertEqual(try? Data(contentsOf: url), payload)
+            }
+            finished.fulfill()
+        }
+
+        wait(for: [finished], timeout: 2)
+    }
+
     func testInstallerRequiresProvenanceToBindSourceAndArtifact() throws {
         let manifest = try UpdateManifest.decodeValidated(from: manifestData())
         let file = FileManager.default.temporaryDirectory

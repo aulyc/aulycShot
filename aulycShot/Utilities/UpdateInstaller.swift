@@ -10,7 +10,7 @@ import CryptoKit
 final class UpdateInstaller: NSObject, @unchecked Sendable {
     static let shared = UpdateInstaller()
 
-    enum InstallError: Error, Equatable {
+    enum InstallError: String, Error, Equatable {
         case download
         case checksumMismatch
         case invalidManifest
@@ -28,13 +28,25 @@ final class UpdateInstaller: NSObject, @unchecked Sendable {
     private var downloadURLs: [URL] = []
     private var downloadIndex = 0
     private var expectedSHA256 = ""
-    private var downloadedFileExtension = ""
     private var activeTaskIdentifier: Int?
     private var handledTaskIdentifiers = Set<Int>()
     private var delivered = false
-    /// URLSession delegate callbacks first enqueue here, so all mutable
-    /// download state above has one serial execution domain.
+    private let makeSessionConfiguration: () -> URLSessionConfiguration
+    /// Delegate callbacks preserve URLSession's temporary file synchronously,
+    /// then enqueue here so mutable download state has one serial owner.
     private let stateQueue = DispatchQueue(label: "aulycShot.update-installer-state")
+
+    private override init() {
+        makeSessionConfiguration = { .default }
+        super.init()
+    }
+
+    init(sessionConfiguration: URLSessionConfiguration) {
+        makeSessionConfiguration = {
+            sessionConfiguration.copy() as! URLSessionConfiguration
+        }
+        super.init()
+    }
 
     // MARK: - Download
 
@@ -50,7 +62,6 @@ final class UpdateInstaller: NSObject, @unchecked Sendable {
         downloadVerifiedFile(
             from: urls,
             expectedSHA256: expectedSHA256,
-            fileExtension: "dmg",
             progress: progress,
             completion: completion
         )
@@ -64,7 +75,6 @@ final class UpdateInstaller: NSObject, @unchecked Sendable {
         downloadVerifiedFile(
             from: urls,
             expectedSHA256: expectedSHA256,
-            fileExtension: "json",
             progress: { _ in },
             completion: completion
         )
@@ -73,7 +83,6 @@ final class UpdateInstaller: NSObject, @unchecked Sendable {
     private func downloadVerifiedFile(
         from urls: [URL],
         expectedSHA256: String,
-        fileExtension: String,
         progress: @escaping @MainActor @Sendable (Double) -> Void,
         completion: @escaping @MainActor @Sendable (Result<URL, Error>) -> Void
     ) {
@@ -86,14 +95,13 @@ final class UpdateInstaller: NSObject, @unchecked Sendable {
             downloadURLs = urls
             downloadIndex = 0
             self.expectedSHA256 = expectedSHA256
-            downloadedFileExtension = fileExtension
             progressHandler = progress
             finishHandler = completion
             activeTaskIdentifier = nil
             handledTaskIdentifiers.removeAll()
             delivered = false
 
-            let config = URLSessionConfiguration.default
+            let config = makeSessionConfiguration()
             config.timeoutIntervalForResource = 300
             let session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
             self.session = session
@@ -269,6 +277,13 @@ final class UpdateInstaller: NSObject, @unchecked Sendable {
             digest.update(data: data)
         }
         return digest.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func preserveDownloadedFile(at location: URL) throws -> URL {
+        let destination = FileManager.default.temporaryDirectory
+            .appendingPathComponent("aulycShot-update-\(UUID().uuidString)")
+        try FileManager.default.moveItem(at: location, to: destination)
+        return destination
     }
 
     private static func verifyApplication(
@@ -489,34 +504,43 @@ extension UpdateInstaller: URLSessionDownloadDelegate {
         let sessionID = ObjectIdentifier(session)
         let taskIdentifier = downloadTask.taskIdentifier
         let statusCode = (downloadTask.response as? HTTPURLResponse)?.statusCode
+        let preservedLocation: Result<URL, Error>
+        if statusCode == nil || statusCode == 200 {
+            preservedLocation = Result {
+                try Self.preserveDownloadedFile(at: location)
+            }
+        } else {
+            preservedLocation = .failure(InstallError.download)
+        }
+
         stateQueue.async { [self] in
             guard let activeSession = self.session,
                   ObjectIdentifier(activeSession) == sessionID,
                   taskIdentifier == activeTaskIdentifier,
                   !delivered
-            else { return }
-            handledTaskIdentifiers.insert(taskIdentifier)
-
-            if let statusCode, statusCode != 200 {
-                retryDownload(after: InstallError.download)
+            else {
+                if case .success(let url) = preservedLocation {
+                    try? FileManager.default.removeItem(at: url)
+                }
                 return
             }
+            handledTaskIdentifiers.insert(taskIdentifier)
 
-            let dest = FileManager.default.temporaryDirectory
-                .appendingPathComponent(
-                    "aulycShot-update-\(UUID().uuidString).\(downloadedFileExtension)"
-                )
-            do {
-                try FileManager.default.moveItem(at: location, to: dest)
-                guard try Self.sha256(of: dest) == expectedSHA256 else {
-                    try? FileManager.default.removeItem(at: dest)
-                    retryDownload(after: InstallError.checksumMismatch)
-                    return
-                }
-                deliver(.success(dest))
-            } catch {
-                try? FileManager.default.removeItem(at: dest)
+            switch preservedLocation {
+            case .failure(let error):
                 retryDownload(after: error)
+            case .success(let destination):
+                do {
+                    guard try Self.sha256(of: destination) == expectedSHA256 else {
+                        try? FileManager.default.removeItem(at: destination)
+                        retryDownload(after: InstallError.checksumMismatch)
+                        return
+                    }
+                    deliver(.success(destination))
+                } catch {
+                    try? FileManager.default.removeItem(at: destination)
+                    retryDownload(after: error)
+                }
             }
         }
     }
