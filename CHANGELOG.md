@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Extract editor canvas geometry, editor chrome layout, and image-merging window controls into focused collaborators with dedicated regression tests
+- Make concurrency ownership explicit for AppKit and ScreenCaptureKit collaborators while retaining runtime queue preconditions for intentionally unchecked `Sendable` types
+
+### Fixed
+
+- Remove paused intervals from resumed recording sample timestamps so exported videos do not contain frozen gaps
+- Keep recording writer mutation queue-confined and completion delivery single-shot across preparation, frame appends, pause and resume, stop, and cancellation races
+
 ## [1.8.8] - 2026-08-03
 
 ### Fixed

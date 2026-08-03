@@ -163,7 +163,7 @@ formal installation is a separate, explicitly authorized `make install-release` 
 
 ## Dual-mirror release policy
 
-- Explicit policy: `aulyc-dual-mirror-v1` `1.2.0`; the Release Profile remains
+- Explicit policy: `aulyc-dual-mirror-v1` `1.6.0`; the Release Profile remains
   `macos-arm64-app`.
 - Project adapter: `scripts/dual-mirror-release.sh` only binds project ID
   `aulycshot`; `scripts/publish-update-mirrors.sh` composes the central

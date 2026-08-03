@@ -15,13 +15,13 @@
       "type": "macos-arm64-app"
     }
   ],
-  "coreVersion": "3.0.0",
+  "coreVersion": "3.1.0",
   "exceptions": [],
   "projectId": "aulycshot",
   "releasePolicies": [
     {
       "id": "aulyc-dual-mirror-v1",
-      "version": "1.2.0"
+      "version": "1.6.0"
     }
   ],
   "releaseSignals": {
@@ -176,6 +176,13 @@
     },
     {
       "evidence": [
+        "AGENTS.md#dual-mirror-release-policy",
+        "docs/DUAL_MIRROR_RELEASE.md"
+      ],
+      "ruleId": "REL-017"
+    },
+    {
+      "evidence": [
         "docs/DUAL_MIRROR_RELEASE.md"
       ],
       "ruleId": "DMR-001"
@@ -229,6 +236,20 @@
         "docs/DUAL_MIRROR_RELEASE.md"
       ],
       "ruleId": "DMR-008"
+    },
+    {
+      "evidence": [
+        "AGENTS.md#dual-mirror-release-policy",
+        "docs/DUAL_MIRROR_RELEASE.md"
+      ],
+      "ruleId": "DMR-009"
+    },
+    {
+      "evidence": [
+        "AGENTS.md#dual-mirror-release-policy",
+        "docs/DUAL_MIRROR_RELEASE.md"
+      ],
+      "ruleId": "DMR-010"
     },
     {
       "evidence": [
@@ -286,7 +307,7 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "85cdd37b44b3468986193719e703d7afc4686cabb07160d7691571507e5675ad"
+      "sha256": "647f03b7c0cd0eec8d2205a9e39d4fdd549bd3bd9bb6a49bde82a95aae50ef05"
     },
     {
       "path": "README.md",
@@ -330,11 +351,11 @@
     },
     {
       "path": "aulycShot/Utilities/UpdateInstaller.swift",
-      "sha256": "c3989e9644f5e0ed27d1ffe16359e3ac6fc6f0e95397722cf282bc35a75efe76"
+      "sha256": "9b906509d27ea69805c8e52134959c03dad00d9b90540e02e72936276114f1ea"
     },
     {
       "path": "aulycShot/Utilities/UpdateManifest.swift",
-      "sha256": "eab61fe2f3ca1e8e50a2a4b77e48a75879d98b0907e5c60a6e0b7fbf7291720f"
+      "sha256": "ef2bf3316a8511f3ecaa62f366a898288489258eebe54b1fe591b2e9ac956d01"
     },
     {
       "path": "scripts/bundle.sh",
@@ -398,7 +419,7 @@
     },
     {
       "path": "Tests/aulycShotTests/UpdateManifestTests.swift",
-      "sha256": "2c9687b88bfff1e72085bb98ef2ae280eade6e54590858da5fbddfa5bfc56487"
+      "sha256": "084ee9c6b90e68707fb0905ed1cfe394cdfeb1ad54c3cb7ea304c9886100c9ae"
     },
     {
       "path": "Tests/test_icon_assets.py",
@@ -410,7 +431,7 @@
     },
     {
       "path": "docs/DUAL_MIRROR_RELEASE.md",
-      "sha256": "6b3113119049af4c0e84132d975783429dd5059594e19bb6e117eb729c7da64c"
+      "sha256": "d289ec5fec61f7e82c339811ec183d125e966d2c3dfe43a1cc779968a0eb361b"
     },
     {
       "path": "scripts/dual-mirror-release.sh",
