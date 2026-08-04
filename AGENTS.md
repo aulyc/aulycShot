@@ -72,10 +72,12 @@ formal installation is a separate, explicitly authorized `make install-release` 
 ## Versioning and Release Profile
 
 - Release profile: `macos-arm64-app` 2.0.0
-- Distribution: private GitHub repository `aulyc/aulycShot` remains the sole
-  source authority; the same Developer ID DMG is published through the
-  optional `aulyc-dual-mirror-v1` public `aulyc/aulycShot-releases`
-  repositories on GitHub and Gitee
+- Distribution migration: target topology makes public GitHub repository
+  `aulyc/aulycShot` the sole source authority and GitHub Release repository;
+  Gitee `aulyc/aulycShot` remains release-only with no source push. Until a
+  compatibility version is formally published through the old channel, the
+  current private source and public `aulyc/aulycShot-releases` mirrors remain
+  authoritative
 - Architecture: Apple Silicon `arm64` only. Release gates require both the App
   and share extension to contain exactly the `arm64` slice
 - Authoritative version and build source: `aulycShot/App/Info.plist`
@@ -145,10 +147,10 @@ formal installation is a separate, explicitly authorized `make install-release` 
   uses the central gate for one atomic, non-force branch and annotated-tag push,
   remote ref readback and provenance finalization, then delegates public
   GitHub/Gitee publication and readback to the central dual-mirror tool
-- The canonical GitHub source repository remains private. Public mirror
-  repositories contain only formal artifacts, checksums, provenance, release
-  notes, and the shared update manifest; they are not additional source
-  authorities
+- The canonical GitHub source repository remains private until the migration
+  compatibility version and public-source audit pass. After cutover it is the
+  only public source authority and GitHub Release repository; Gitee remains a
+  release-only distribution repository and must point users to GitHub source
 - Both mirrors must receive the same already-notarized DMG, checksum,
   provenance, provenance checksum and `latest.json`. The manifest binds
   version, build, Commit, Bundle ID, architecture, artifact/provenance
@@ -171,6 +173,10 @@ formal installation is a separate, explicitly authorized `make install-release` 
 - Full mapping and retry contract: `docs/DUAL_MIRROR_RELEASE.md`.
 - The updater loads the central `latest.json` Schema, downloads and verifies
   the release provenance before the DMG, then verifies the installed App.
+- During channel migration, the updater tries the new GitHub and Gitee
+  manifests before the legacy GitHub and Gitee compatibility manifests.
+  Publish and verify a compatibility version through the legacy channel before
+  changing repository visibility or the central channel mapping.
 - Only an explicitly authorized `publish` may write remote state. One-sided
   failure records partial/failed state and retries the same immutable plan;
   never push source to Gitee or overwrite an old release.

@@ -49,6 +49,39 @@ final class UpdateManifestTests: XCTestCase {
         )
     }
 
+    func testManifestAcceptsPublicSourceReleaseRepositories() throws {
+        let manifest = try UpdateManifest.decodeValidated(
+            from: manifestData(
+                githubRepository: "aulycShot",
+                giteeRepository: "aulycShot"
+            )
+        )
+
+        XCTAssertEqual(
+            manifest.releasePageURL.absoluteString,
+            "https://github.com/aulyc/aulycShot/releases/tag/1.7.4"
+        )
+        XCTAssertEqual(
+            manifest.orderedDownloadURLs.map(\.path),
+            [
+                "/aulyc/aulycShot/releases/download/1.7.4/aulycShot-1.7.4-build.502-arm64.dmg",
+                "/aulyc/aulycShot/releases/download/1.7.4/aulycShot-1.7.4-build.502-arm64.dmg",
+            ]
+        )
+    }
+
+    func testDefaultManifestURLsPreferNewRepositoriesThenLegacyCompatibility() {
+        XCTAssertEqual(
+            UpdateManifestLoader.defaultURLs.map(\.absoluteString),
+            [
+                "https://raw.githubusercontent.com/aulyc/aulycShot/release-channel/latest.json",
+                "https://gitee.com/aulyc/aulycShot/raw/main/latest.json",
+                "https://raw.githubusercontent.com/aulyc/aulycShot-releases/main/latest.json",
+                "https://gitee.com/aulyc/aulycShot-releases/raw/main/latest.json",
+            ]
+        )
+    }
+
     func testManifestRejectsReversedDownloadOrder() {
         XCTAssertThrowsError(
             try UpdateManifest.decodeValidated(
@@ -270,27 +303,34 @@ final class UpdateManifestTests: XCTestCase {
 
     private func manifestData(
         downloadOrder: [UpdateManifest.Source] = [.github, .gitee],
-        githubURL: String = "https://github.com/aulyc/aulycShot-releases/releases/download/1.7.4/aulycShot-1.7.4-build.502-arm64.dmg",
+        githubURL: String? = nil,
+        githubRepository: String = "aulycShot-releases",
+        giteeRepository: String = "aulycShot-releases",
         policy: String = "aulyc-dual-mirror-v1",
         teamIdentifier: String = UpdateManifest.expectedTeamIdentifier,
         minimumSystemVersion: String = UpdateManifest.expectedMinimumSystemVersion
     ) -> Data {
+        let resolvedGitHubURL = githubURL ?? (
+            "https://github.com/aulyc/\(githubRepository)/releases/download/"
+            + "1.7.4/aulycShot-1.7.4-build.502-arm64.dmg"
+        )
         let giteeURL = (
-            "https://gitee.com/aulyc/aulycShot-releases/releases/download/"
+            "https://gitee.com/aulyc/\(giteeRepository)/releases/download/"
             + "1.7.4/aulycShot-1.7.4-build.502-arm64.dmg"
         )
         let downloads = downloadOrder.map { source -> [String: String] in
             [
                 "source": source.rawValue,
-                "url": source == .github ? githubURL : giteeURL,
+                "url": source == .github ? resolvedGitHubURL : giteeURL,
             ]
         }
         let provenanceFile = "aulycShot-1.7.4-build.502-arm64.release-provenance.json"
         let provenanceDownloads = downloadOrder.map { source -> [String: String] in
             let host = source == .github ? "github.com" : "gitee.com"
+            let repository = source == .github ? githubRepository : giteeRepository
             return [
                 "source": source.rawValue,
-                "url": "https://\(host)/aulyc/aulycShot-releases/releases/download/1.7.4/\(provenanceFile)",
+                "url": "https://\(host)/aulyc/\(repository)/releases/download/1.7.4/\(provenanceFile)",
             ]
         }
         let value: [String: Any] = [
@@ -308,7 +348,7 @@ final class UpdateManifestTests: XCTestCase {
             "pluginIdentifier": NSNull(),
             "teamIdentifier": teamIdentifier,
             "minimumSystemVersion": minimumSystemVersion,
-            "releasePageURL": "https://github.com/aulyc/aulycShot-releases/releases/tag/1.7.4",
+            "releasePageURL": "https://github.com/aulyc/\(githubRepository)/releases/tag/1.7.4",
             "artifact": [
                 "file": "aulycShot-1.7.4-build.502-arm64.dmg",
                 "sha256": String(repeating: "b", count: 64),

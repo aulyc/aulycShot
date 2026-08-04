@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Prepare the updater and public documentation for GitHub source Releases and a release-only Gitee mirror while retaining legacy mirror compatibility during migration
+
 ## [1.8.9] - 2026-08-04
 
 ### Changed

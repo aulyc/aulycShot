@@ -43,6 +43,7 @@ struct UpdateManifest: Decodable, Equatable, Sendable {
     static let expectedBundleIdentifier = "com.aulyc.aulycshot"
     static let expectedTeamIdentifier = "M9M7M2ARFD"
     static let expectedMinimumSystemVersion = "14.0"
+    private static let releaseRepositories = ["aulycShot", "aulycShot-releases"]
 
     let schemaVersion: Int
     let policy: String
@@ -134,27 +135,27 @@ struct UpdateManifest: Decodable, Equatable, Sendable {
     }
 
     private func isSecureReleasePage(_ url: URL) -> Bool {
-        url.scheme == "https"
-            && url.host?.lowercased() == "github.com"
-            && url.path == "/aulyc/aulycShot-releases/releases/tag/\(tag)"
-            && url.query == nil
-            && url.fragment == nil
+        guard url.scheme == "https",
+              url.host?.lowercased() == "github.com",
+              url.query == nil,
+              url.fragment == nil
+        else {
+            return false
+        }
+        return Self.releaseRepositories.contains { repository in
+            url.path == "/aulyc/\(repository)/releases/tag/\(tag)"
+        }
     }
 
     private static func isExpectedDownloadURL(
         _ url: URL,
-        source: Source,
         tag: String,
         artifactFile: String
     ) -> Bool {
         guard url.query == nil, url.fragment == nil else { return false }
-        switch source {
-        case .github:
-            return url.path
-                == "/aulyc/aulycShot-releases/releases/download/\(tag)/\(artifactFile)"
-        case .gitee:
-            return url.path
-                == "/aulyc/aulycShot-releases/releases/download/\(tag)/\(artifactFile)"
+        return releaseRepositories.contains { repository in
+            url.path
+                == "/aulyc/\(repository)/releases/download/\(tag)/\(artifactFile)"
         }
     }
 
@@ -167,7 +168,6 @@ struct UpdateManifest: Decodable, Equatable, Sendable {
                   download.url.host?.lowercased() == download.source.expectedHost,
                   Self.isExpectedDownloadURL(
                     download.url,
-                    source: download.source,
                     tag: tag,
                     artifactFile: downloadable.file
                   )
@@ -178,7 +178,7 @@ struct UpdateManifest: Decodable, Equatable, Sendable {
     }
 }
 
-/// Loads the same update manifest from ordered mirrors.
+/// Loads the same update manifest from ordered mirrors and compatibility URLs.
 ///
 /// A transport error, non-200 response, or invalid document advances to the
 /// next mirror. A valid response is authoritative even when it reports that
@@ -190,6 +190,8 @@ final class UpdateManifestLoader: Sendable {
     }
 
     static let defaultURLs = [
+        URL(string: "https://raw.githubusercontent.com/aulyc/aulycShot/release-channel/latest.json")!,
+        URL(string: "https://gitee.com/aulyc/aulycShot/raw/main/latest.json")!,
         URL(string: "https://raw.githubusercontent.com/aulyc/aulycShot-releases/main/latest.json")!,
         URL(string: "https://gitee.com/aulyc/aulycShot-releases/raw/main/latest.json")!,
     ]

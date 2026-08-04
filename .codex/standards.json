@@ -307,11 +307,11 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "647f03b7c0cd0eec8d2205a9e39d4fdd549bd3bd9bb6a49bde82a95aae50ef05"
+      "sha256": "3dcb8fb0379d26a4c62b5da4fe0886e8c2250b78201b71b742a113a5804b432b"
     },
     {
       "path": "README.md",
-      "sha256": "2ac1b2a47cb1443aafa9e730fac77fdda2c2cee311289f03ecd8529dcbc46fc4"
+      "sha256": "9cbe0163a9db2bf5e998a22452b86c4b7a8eb797e3f84c508d794e2625bd7d50"
     },
     {
       "path": "docs/ICON_ASSETS.md",
@@ -319,7 +319,7 @@
     },
     {
       "path": "docs/RELEASE.md",
-      "sha256": "8a161123667858a91d0ab83a2dadcf72589b793ddff976a59e821b9f1e488ee6"
+      "sha256": "b6d4044d828f45d91ce5259a446a8c41f3de1c88470468770f013d82d6dc8aec"
     },
     {
       "path": "design/icon-assets.generated.json",
@@ -355,7 +355,7 @@
     },
     {
       "path": "aulycShot/Utilities/UpdateManifest.swift",
-      "sha256": "ef2bf3316a8511f3ecaa62f366a898288489258eebe54b1fe591b2e9ac956d01"
+      "sha256": "843794c6ae2ad59ff9ecc4ab97cd48c2db07385e3a5949c6513bfd3913c9f872"
     },
     {
       "path": "scripts/bundle.sh",
@@ -379,15 +379,15 @@
     },
     {
       "path": "scripts/release_tool.py",
-      "sha256": "b82ddd4ee7b9387a691471a4138b40e841dbb9a6dc352b963e8dc9bec63e3ded"
+      "sha256": "108a6aee744ce9abffaadca1bb8026dc975438f180134e1054b1b3e8e5fa065c"
     },
     {
       "path": "scripts/prepare-formal-release.sh",
-      "sha256": "60ad1bacca0dc7e4b0c8dfb95d21b2df5cb17a33c73d8da72dbf3179ef74e5f1"
+      "sha256": "317575d84b96820326f510acbac0e07f599ea9ade52170ad1ce3752c827a6046"
     },
     {
       "path": "scripts/release-check.sh",
-      "sha256": "2736088d5ffd69002de2dc7b45af4acd0b198acda7000a6ef8c29639eb6c2d44"
+      "sha256": "e9dc3ca7f57b672dc5089d33cfeca1ee9d6dd9e5feb06155991ee792176497d8"
     },
     {
       "path": "scripts/create-release-tag.sh",
@@ -419,7 +419,7 @@
     },
     {
       "path": "Tests/aulycShotTests/UpdateManifestTests.swift",
-      "sha256": "084ee9c6b90e68707fb0905ed1cfe394cdfeb1ad54c3cb7ea304c9886100c9ae"
+      "sha256": "1870b2f6bcbf32b7aed17c353d3cc527c626596c26163f621a5a7fb8d8a0d308"
     },
     {
       "path": "Tests/test_icon_assets.py",
@@ -427,11 +427,11 @@
     },
     {
       "path": "Tests/test_release_tool.py",
-      "sha256": "d5ce29625c44ef51c8728d533500f0529e66153176765085a5b920294b226063"
+      "sha256": "5d75eaff0ac197eb68e61e5459d5f6eb1d3c0946f0b70f1a82ac5d0d9c94632d"
     },
     {
       "path": "docs/DUAL_MIRROR_RELEASE.md",
-      "sha256": "d289ec5fec61f7e82c339811ec183d125e966d2c3dfe43a1cc779968a0eb361b"
+      "sha256": "bf360793cd0d10f53a49aeede9379ca571e3a274e218668fc2eb511eecde8099"
     },
     {
       "path": "scripts/dual-mirror-release.sh",

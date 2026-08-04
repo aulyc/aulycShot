@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/aulyc/aulycShot-releases/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/aulyc/aulycShot-releases?style=flat-square"></a>
+  <a href="https://github.com/aulyc/aulycShot/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/aulyc/aulycShot?style=flat-square"></a>
   <img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-black?style=flat-square&logo=apple">
   <img alt="Swift 5.9" src="https://img.shields.io/badge/Swift-5.9-orange?style=flat-square&logo=swift">
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square"></a>
@@ -27,7 +27,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/aulyc/aulycShot-releases/releases/latest">下载</a> ·
+  <a href="https://github.com/aulyc/aulycShot/releases/latest">下载</a> ·
   <a href="CHANGELOG.zh-CN.md">更新日志</a> ·
   <a href="https://github.com/aulyc/aulycShot/issues">Issues</a>
 </p>
@@ -39,7 +39,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/aulyc/aulycShot-releases/releases/latest"><b>下载最新版本</b></a> &nbsp;·&nbsp;
+  <a href="https://github.com/aulyc/aulycShot/releases/latest"><b>下载最新版本</b></a> &nbsp;·&nbsp;
   macOS 14+ &nbsp;·&nbsp; Apple Silicon（arm64）
 </p>
 

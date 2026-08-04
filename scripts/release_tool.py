@@ -22,6 +22,7 @@ EXTENSION_INFO_PLIST = ROOT / "aulycShot-share-extension" / "Info.plist"
 CHANGELOG = ROOT / "CHANGELOG.md"
 CHANGELOG_ZH_CN = ROOT / "CHANGELOG.zh-CN.md"
 ADOPTION = ROOT / ".codex" / "standards.json"
+GITHUB_SOURCE_URL = "https://github.com/aulyc/aulycShot"
 STABLE_SEMVER = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 SEMVER = re.compile(
     r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
@@ -438,7 +439,10 @@ def command_release_notes(args: argparse.Namespace) -> None:
     if args.channel == "github":
         notes = f"## 中文\n\n{chinese}\n---\n\n## English\n\n{english}"
     elif args.channel == "gitee":
-        notes = chinese
+        notes = (
+            f"{chinese}\n---\n\n"
+            f"源码：[GitHub aulyc/aulycShot]({GITHUB_SOURCE_URL})\n"
+        )
     else:
         notes = english
     args.output.write_text(notes, encoding="utf-8")

@@ -233,7 +233,12 @@ class ReleaseToolTests(unittest.TestCase):
         )
 
         notes = output.read_text(encoding="utf-8")
-        self.assertEqual(notes, "### 修复\n\n- 之前的版本\n")
+        self.assertEqual(
+            notes,
+            "### 修复\n\n- 之前的版本\n\n"
+            "---\n\n源码：[GitHub aulyc/aulycShot]"
+            "(https://github.com/aulyc/aulycShot)\n",
+        )
         self.assertNotIn("Previous", notes)
 
     def test_english_release_notes_are_english_only(self):
