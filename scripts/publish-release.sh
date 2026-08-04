@@ -27,4 +27,4 @@ python3 scripts/release_tool.py release-notes \
 AULYC_STANDARDS_ROOT="${standards_root}" \
   bash scripts/publish-update-mirrors.sh \
     "${provenance}" "${notes_zh_cn}" "${notes_en}"
-echo "Published the private source refs and verified both public release mirrors for ${version}"
+echo "Published the public source refs and verified both public release channels for ${version}"

@@ -43,7 +43,7 @@ struct UpdateManifest: Decodable, Equatable, Sendable {
     static let expectedBundleIdentifier = "com.aulyc.aulycshot"
     static let expectedTeamIdentifier = "M9M7M2ARFD"
     static let expectedMinimumSystemVersion = "14.0"
-    private static let releaseRepositories = ["aulycShot", "aulycShot-releases"]
+    private static let releaseRepository = "aulycShot"
 
     let schemaVersion: Int
     let policy: String
@@ -142,9 +142,7 @@ struct UpdateManifest: Decodable, Equatable, Sendable {
         else {
             return false
         }
-        return Self.releaseRepositories.contains { repository in
-            url.path == "/aulyc/\(repository)/releases/tag/\(tag)"
-        }
+        return url.path == "/aulyc/\(Self.releaseRepository)/releases/tag/\(tag)"
     }
 
     private static func isExpectedDownloadURL(
@@ -153,10 +151,8 @@ struct UpdateManifest: Decodable, Equatable, Sendable {
         artifactFile: String
     ) -> Bool {
         guard url.query == nil, url.fragment == nil else { return false }
-        return releaseRepositories.contains { repository in
-            url.path
-                == "/aulyc/\(repository)/releases/download/\(tag)/\(artifactFile)"
-        }
+        return url.path
+            == "/aulyc/\(releaseRepository)/releases/download/\(tag)/\(artifactFile)"
     }
 
     private func validateDownloads(_ downloadable: Artifact) throws {
@@ -178,7 +174,7 @@ struct UpdateManifest: Decodable, Equatable, Sendable {
     }
 }
 
-/// Loads the same update manifest from ordered mirrors and compatibility URLs.
+/// Loads the same update manifest from the ordered GitHub and Gitee mirrors.
 ///
 /// A transport error, non-200 response, or invalid document advances to the
 /// next mirror. A valid response is authoritative even when it reports that
@@ -192,8 +188,6 @@ final class UpdateManifestLoader: Sendable {
     static let defaultURLs = [
         URL(string: "https://raw.githubusercontent.com/aulyc/aulycShot/release-channel/latest.json")!,
         URL(string: "https://gitee.com/aulyc/aulycShot/raw/main/latest.json")!,
-        URL(string: "https://raw.githubusercontent.com/aulyc/aulycShot-releases/main/latest.json")!,
-        URL(string: "https://gitee.com/aulyc/aulycShot-releases/raw/main/latest.json")!,
     ]
 
     private let session: URLSession

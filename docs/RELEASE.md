@@ -6,7 +6,7 @@
 |---|---|
 | Release Profile | `macos-arm64-app` 2.0.0 |
 | 架构 | Apple Silicon `arm64` only |
-| 分发渠道 | 迁移中：目标为公开 GitHub 源码与 Release；Gitee 同名仓仅承载正式产物 |
+| 分发渠道 | 公开 GitHub 源码与 Release；Gitee 同名仓仅承载正式产物 |
 | GitHub | `aulyc/aulycShot` / `origin` / `main` |
 | 唯一版本源 | `aulycShot/App/Info.plist` |
 | App Bundle ID | `com.aulyc.aulycshot` |
@@ -20,17 +20,9 @@ Bundle ID、entitlements、Developer ID、Hardened Runtime 和公证信任。出
 当前不发布测试版，也不触发 Homebrew。渠道切换完成后，正式源码 branch/tag 和
 GitHub Release 都位于公开 `aulyc/aulycShot`；同一个已签名、公证的 DMG 会原样
 发布到该 GitHub Release 与仅分发用途的 Gitee `aulyc/aulycShot`。两端保存完全
-一致的 `latest.json`，应用先访问新 GitHub、失败后访问新 Gitee，再使用旧镜像
-完成迁移兼容。
+一致的 `latest.json`，应用先访问 GitHub，失败后访问 Gitee。
 
-## 渠道迁移状态
-
-迁移版本采用两阶段发布。第一阶段通过旧 `aulyc/aulycShot-releases`
-GitHub/Gitee 映射发布并回读支持新旧地址的同一正式版本；第二阶段才把 GitHub
-主仓改为 public、创建 Gitee `aulyc/aulycShot` 分发仓、切换中央非敏感渠道登记，
-并把同一份已验证正式产物发布到新渠道。
-
-目标地址：
+## 发布渠道
 
 ```text
 GitHub Release  https://github.com/aulyc/aulycShot/releases
@@ -39,8 +31,8 @@ Gitee Release   https://gitee.com/aulyc/aulycShot/releases
 Gitee manifest  https://gitee.com/aulyc/aulycShot/raw/main/latest.json
 ```
 
-旧地址在迁移完成后继续公开只读，避免旧版本客户端失去更新入口。不得删除旧
-Release、附件或 `latest.json`。
+`1.8.10` 已完成公开渠道迁移。唯一使用中的客户端升级后，`1.8.11` 移除旧
+`aulycShot-releases` 兼容地址；新版本发布并回读成功后删除旧 GitHub/Gitee 仓库。
 
 ## 版本和发布提交
 
@@ -165,8 +157,8 @@ make publish-release RELEASE_PROVENANCE=/absolute/path/aulycShot-....release-pro
 推送 `main` 和 annotated tag，
 回读远端 branch 与 peeled tag Commit，补齐 provenance 的远端源码字段并刷新其
 SHA-256。只有远端标签和最终 provenance 已验证后，才进入中央双镜像
-`prepare -> preflight -> publish -> verify`。迁移版本仍使用切换前的中央映射；
-切换完成后的正式版本由同一个公开 GitHub 源码仓同时承担 GitHub Release 角色。
+`prepare -> preflight -> publish -> verify`。公开 GitHub 源码仓同时承担 GitHub
+Release 角色。
 
 发布说明按平台生成：中央工具把项目提供的中文和英文正文组合为公开 GitHub
 中文在前、英文在后的双语 Markdown；Gitee 只使用简体中文。项目原始正文生成
@@ -205,8 +197,8 @@ https://gitee.com/aulyc/aulycShot/raw/main/latest.json
 
 清单绑定正式版本、build、tag、Commit、arm64、Bundle ID、DMG SHA-256、
 provenance SHA-256，并分别列出 GitHub、Gitee 下载地址。应用先读取新 GitHub
-清单，失败后读取新 Gitee，再尝试两个旧兼容清单；随后先下载并验证 provenance，
-再按清单内固定的 GitHub、Gitee 顺序下载 DMG。任一镜像的 SHA-256 不匹配都会拒绝；
+清单，失败后读取 Gitee；随后先下载并验证 provenance，再按清单内固定的
+GitHub、Gitee 顺序下载 DMG。任一镜像的 SHA-256 不匹配都会拒绝；
 provenance 必须再次绑定唯一 GitHub 源码仓库、远端 Commit/tag 和同一 DMG，解包后的
 App 还必须通过 Developer ID、固定 Team ID、Bundle ID、最低系统、版本/build、
 Commit、Hardened Runtime、arm64-only、嵌套扩展签名和 Gatekeeper 验证。

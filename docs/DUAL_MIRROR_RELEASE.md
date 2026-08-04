@@ -12,13 +12,12 @@ DMG checksum、最终 provenance、provenance checksum 和 `latest.json`。
 属于公开渠道合同；`obsidian-community` / `obsidian-managed` 及其三文件附件
 规则不适用于本 macOS App。构建目录和其他本地验证证据不会作为额外公开附件。
 
-应用内更新器优先读取新 GitHub manifest，失败后读取新 Gitee；迁移期间再依次
-尝试旧 GitHub 和旧 Gitee manifest。无论来源均验证
+应用内更新器优先读取 GitHub manifest，失败后读取 Gitee。无论来源均验证
 版本、正整数 build、Commit、Bundle ID、arm64、DMG SHA-256、provenance
 SHA-256、Developer ID、公证和发布产物身份。installed-runtime 只在明确请求
 安装时验证；Gitee 只改变传输来源，不降低验证要求。
 
-## 渠道迁移
+## 当前渠道
 
 新地址为：
 
@@ -29,11 +28,9 @@ Gitee Release   https://gitee.com/aulyc/aulycShot/releases
 Gitee manifest  https://gitee.com/aulyc/aulycShot/raw/main/latest.json
 ```
 
-切换前必须先通过旧 `aulycShot-releases` 渠道正式发布一个包含新旧地址兼容能力的
-版本。该版本回读验证成功后，才能完成 GitHub 公开审计、创建 Gitee 同名分发仓、
-切换中央渠道映射，并把同一正式版本及完全一致的产物发布到新地址。旧
-GitHub/Gitee 镜像继续保持公开、只读和不可覆盖，供尚未升级的客户端读取；不得
-先删除或改写旧清单。
+`1.8.10` 已完成公开渠道迁移。唯一使用中的客户端升级后，`1.8.11` 仅保留上述
+GitHub/Gitee 地址，并在该版本完整发布和回读后删除旧 `aulycShot-releases`
+仓库。
 
 项目现有流程仍负责 DMG、最终 provenance、Changelog、签名、公证和发布产物
 验证。

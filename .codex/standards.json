@@ -307,7 +307,7 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "3dcb8fb0379d26a4c62b5da4fe0886e8c2250b78201b71b742a113a5804b432b"
+      "sha256": "c18740bd983b945b59cbee87a032d385e48e47492075a0bb18180c22b05f26e2"
     },
     {
       "path": "README.md",
@@ -319,7 +319,7 @@
     },
     {
       "path": "docs/RELEASE.md",
-      "sha256": "b6d4044d828f45d91ce5259a446a8c41f3de1c88470468770f013d82d6dc8aec"
+      "sha256": "1b8a8ccef1c8496b874c76ec344328763333a81bbc76004a371b2cc2b74f583e"
     },
     {
       "path": "design/icon-assets.generated.json",
@@ -355,7 +355,7 @@
     },
     {
       "path": "aulycShot/Utilities/UpdateManifest.swift",
-      "sha256": "843794c6ae2ad59ff9ecc4ab97cd48c2db07385e3a5949c6513bfd3913c9f872"
+      "sha256": "c6b4ed44233ccbd4a251f3a1a2dded7f4a357719c25de44f983f74f8a02aa4eb"
     },
     {
       "path": "scripts/bundle.sh",
@@ -411,7 +411,7 @@
     },
     {
       "path": "scripts/publish-release.sh",
-      "sha256": "e5926c52dfda8ef77db24783912eda5c9433d7cfa8b877323e301635887c24ca"
+      "sha256": "eb87b5b77f30ba31d236e224f4e16f66ddae1466a069a794f7213b2af6b619cd"
     },
     {
       "path": "scripts/publish-update-mirrors.sh",
@@ -419,7 +419,7 @@
     },
     {
       "path": "Tests/aulycShotTests/UpdateManifestTests.swift",
-      "sha256": "1870b2f6bcbf32b7aed17c353d3cc527c626596c26163f621a5a7fb8d8a0d308"
+      "sha256": "2b24a5e13c668a8e1d12eea133abd618683cbcd9d4aabcd5238e75398dde2729"
     },
     {
       "path": "Tests/test_icon_assets.py",
@@ -431,7 +431,7 @@
     },
     {
       "path": "docs/DUAL_MIRROR_RELEASE.md",
-      "sha256": "bf360793cd0d10f53a49aeede9379ca571e3a274e218668fc2eb511eecde8099"
+      "sha256": "00c41f812ce731eff0adc0b081e52fa88876c0b08e35b5e5c798ffebfb9494cc"
     },
     {
       "path": "scripts/dual-mirror-release.sh",

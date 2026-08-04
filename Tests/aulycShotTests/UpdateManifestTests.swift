@@ -49,13 +49,8 @@ final class UpdateManifestTests: XCTestCase {
         )
     }
 
-    func testManifestAcceptsPublicSourceReleaseRepositories() throws {
-        let manifest = try UpdateManifest.decodeValidated(
-            from: manifestData(
-                githubRepository: "aulycShot",
-                giteeRepository: "aulycShot"
-            )
-        )
+    func testManifestAcceptsPublicSourceReleaseRepository() throws {
+        let manifest = try UpdateManifest.decodeValidated(from: manifestData())
 
         XCTAssertEqual(
             manifest.releasePageURL.absoluteString,
@@ -70,16 +65,27 @@ final class UpdateManifestTests: XCTestCase {
         )
     }
 
-    func testDefaultManifestURLsPreferNewRepositoriesThenLegacyCompatibility() {
+    func testDefaultManifestURLsUseCurrentGitHubThenGitee() {
         XCTAssertEqual(
             UpdateManifestLoader.defaultURLs.map(\.absoluteString),
             [
                 "https://raw.githubusercontent.com/aulyc/aulycShot/release-channel/latest.json",
                 "https://gitee.com/aulyc/aulycShot/raw/main/latest.json",
-                "https://raw.githubusercontent.com/aulyc/aulycShot-releases/main/latest.json",
-                "https://gitee.com/aulyc/aulycShot-releases/raw/main/latest.json",
             ]
         )
+    }
+
+    func testManifestRejectsRetiredReleaseRepository() {
+        XCTAssertThrowsError(
+            try UpdateManifest.decodeValidated(
+                from: manifestData(
+                    githubRepository: "aulycShot-releases",
+                    giteeRepository: "aulycShot-releases"
+                )
+            )
+        ) { error in
+            XCTAssertEqual(error as? UpdateManifest.ValidationError, .insecureURL)
+        }
     }
 
     func testManifestRejectsReversedDownloadOrder() {
@@ -98,7 +104,7 @@ final class UpdateManifestTests: XCTestCase {
     func testManifestRejectsHTTPDownload() {
         XCTAssertThrowsError(
             try UpdateManifest.decodeValidated(
-                from: manifestData(githubURL: "http://github.com/aulyc/aulycShot-releases/releases/download/1.7.4/aulycShot-1.7.4-build.502-arm64.dmg")
+                from: manifestData(githubURL: "http://github.com/aulyc/aulycShot/releases/download/1.7.4/aulycShot-1.7.4-build.502-arm64.dmg")
             )
         ) { error in
             XCTAssertEqual(error as? UpdateManifest.ValidationError, .insecureURL)
@@ -304,8 +310,8 @@ final class UpdateManifestTests: XCTestCase {
     private func manifestData(
         downloadOrder: [UpdateManifest.Source] = [.github, .gitee],
         githubURL: String? = nil,
-        githubRepository: String = "aulycShot-releases",
-        giteeRepository: String = "aulycShot-releases",
+        githubRepository: String = "aulycShot",
+        giteeRepository: String = "aulycShot",
         policy: String = "aulyc-dual-mirror-v1",
         teamIdentifier: String = UpdateManifest.expectedTeamIdentifier,
         minimumSystemVersion: String = UpdateManifest.expectedMinimumSystemVersion
