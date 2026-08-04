@@ -118,7 +118,7 @@ bash scripts/rebuild-and-open.sh
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=aulyc/aulycShot&type=Date)](https://star-history.com/#aulyc/aulycShot&Date)
+[aulycShot Star History 보기](https://www.star-history.com/?repos=aulyc%2FaulycShot&type=date&legend=top-left)
 
 ## 라이선스
 

@@ -120,7 +120,7 @@ Les réglages couvrent la langue, l'icône de barre des menus, le lancement à l
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=aulyc/aulycShot&type=Date)](https://star-history.com/#aulyc/aulycShot&Date)
+[Voir l’historique des étoiles de aulycShot](https://www.star-history.com/?repos=aulyc%2FaulycShot&type=date&legend=top-left)
 
 ## Licence
 

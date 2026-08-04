@@ -193,7 +193,12 @@ bash scripts/rebuild-and-open.sh
 
 ## 致謝
 
-感謝 Linux.do 社群在測試、回饋和討論中的支持。
+1. 感謝偉大的 AI 時代，讓更多想法得以更快成為現實
+2. 致敬 Codex 與 Claude，在創作與開發中持續並肩協作
+3. 感謝 [Linux.do](https://linux.do) 社群在測試、回饋與討論中的支持
+4. 感謝每一位提交需求、回報問題和提出改進建議的使用者
+5. 感謝開源社群與開發工具帶來的啟發和幫助
+6. 感謝 aulyc 一路以來的堅持與靈感
 
 ## 第三方授權條款
 
@@ -201,7 +206,7 @@ bash scripts/rebuild-and-open.sh
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=aulyc/aulycShot&type=Date)](https://star-history.com/#aulyc/aulycShot&Date)
+[查看 aulycShot 的 Star History](https://www.star-history.com/?repos=aulyc%2FaulycShot&type=date&legend=top-left)
 
 ## License
 

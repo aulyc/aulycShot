@@ -118,7 +118,7 @@ Bạn có thể đổi ngôn ngữ, biểu tượng thanh menu, khởi chạy kh
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=aulyc/aulycShot&type=Date)](https://star-history.com/#aulyc/aulycShot&Date)
+[Xem Star History của aulycShot](https://www.star-history.com/?repos=aulyc%2FaulycShot&type=date&legend=top-left)
 
 ## Giấy phép
 

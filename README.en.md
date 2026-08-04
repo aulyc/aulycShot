@@ -193,7 +193,12 @@ bash scripts/rebuild-and-open.sh
 
 ## Acknowledgments
 
-Thanks to the [Linux.do](https://linux.do) community for testing, feedback, and discussion.
+1. Thanks to the remarkable age of AI for helping more ideas become reality faster
+2. A tribute to Codex and Claude for their continued partnership in creation and development
+3. Thanks to the [Linux.do](https://linux.do) community for testing, feedback, and discussion
+4. Thanks to everyone who submits requests, reports issues, and suggests improvements
+5. Thanks to the open-source community and developer tools for inspiration and support
+6. Thanks to aulyc for the persistence and inspiration behind this journey
 
 ## Third-Party Licenses
 
@@ -201,7 +206,7 @@ Thanks to the [Linux.do](https://linux.do) community for testing, feedback, and 
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=aulyc/aulycShot&type=Date)](https://star-history.com/#aulyc/aulycShot&Date)
+[View aulycShot Star History](https://www.star-history.com/?repos=aulyc%2FaulycShot&type=date&legend=top-left)
 
 ## License
 
