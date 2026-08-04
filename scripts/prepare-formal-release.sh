@@ -13,7 +13,7 @@ cd "$ROOT"
 python3 "$STANDARDS_ROOT/scripts/formal_release_git.py" preflight --path "$ROOT"
 python3 scripts/release_tool.py prepare --version "$TARGET_VERSION" --build "$TARGET_BUILD"
 
-CHANGED="$(git diff --name-only | sort)"
+CHANGED="$(git diff --name-only | LC_ALL=C sort)"
 [[ "$CHANGED" == $'CHANGELOG.md\nCHANGELOG.zh-CN.md\naulycShot/App/Info.plist' ]] || {
     echo "error: release preparation changed unexpected files" >&2
     printf '%s\n' "$CHANGED" >&2

@@ -13,7 +13,7 @@ HEAD_COMMIT="$(git rev-parse HEAD)"
 [[ -z "$(git status --porcelain=v1 --untracked-files=all)" ]] || { echo "error: release check requires a clean worktree" >&2; exit 1; }
 [[ "$(git log -1 --pretty=%s)" == "chore: release $VERSION" ]] || { echo "error: HEAD is not the dedicated release metadata commit" >&2; exit 1; }
 
-CHANGED="$(git diff-tree --no-commit-id --name-only -r HEAD | sort)"
+CHANGED="$(git diff-tree --no-commit-id --name-only -r HEAD | LC_ALL=C sort)"
 [[ "$CHANGED" == $'CHANGELOG.md\nCHANGELOG.zh-CN.md\naulycShot/App/Info.plist' ]] || {
     echo "error: release metadata commit contains unexpected files" >&2
     printf '%s\n' "$CHANGED" >&2
