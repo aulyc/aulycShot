@@ -1,0 +1,45 @@
+{
+  "$schema": "urn:codex-engineering-standards:dual-mirror-latest:1",
+  "architecture": "arm64",
+  "artifact": {
+    "downloads": [
+      {
+        "source": "github",
+        "url": "https://github.com/aulyc/aulycShot/releases/download/1.8.10/aulycShot-1.8.10-build.512-arm64.dmg"
+      },
+      {
+        "source": "gitee",
+        "url": "https://gitee.com/aulyc/aulycShot/releases/download/1.8.10/aulycShot-1.8.10-build.512-arm64.dmg"
+      }
+    ],
+    "file": "aulycShot-1.8.10-build.512-arm64.dmg",
+    "sha256": "cf8a678409b7d5eb2fd134e13022cd9699b825b247f45072889095ce24ab360d"
+  },
+  "buildNumber": 512,
+  "bundleIdentifier": "com.aulyc.aulycshot",
+  "commit": "2b99b273b4b21c694430d2b668e3b9ef30eafa73",
+  "minimumSystemVersion": "14.0",
+  "pluginIdentifier": null,
+  "policy": "aulyc-dual-mirror-v1",
+  "provenance": {
+    "downloads": [
+      {
+        "source": "github",
+        "url": "https://github.com/aulyc/aulycShot/releases/download/1.8.10/aulycShot-1.8.10-build.512-arm64.release-provenance.json"
+      },
+      {
+        "source": "gitee",
+        "url": "https://gitee.com/aulyc/aulycShot/releases/download/1.8.10/aulycShot-1.8.10-build.512-arm64.release-provenance.json"
+      }
+    ],
+    "file": "aulycShot-1.8.10-build.512-arm64.release-provenance.json",
+    "sha256": "4aa1054501dcb86d682e2a7f5e2e5297620154f1ecbff556a4d2cf8b878a7103"
+  },
+  "releaseChannel": "formal",
+  "releasePageURL": "https://github.com/aulyc/aulycShot/releases/tag/1.8.10",
+  "releaseProfile": "macos-arm64-app",
+  "schemaVersion": 1,
+  "tag": "1.8.10",
+  "teamIdentifier": "M9M7M2ARFD",
+  "version": "1.8.10"
+}
