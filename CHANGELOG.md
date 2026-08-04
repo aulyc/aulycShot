@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.11] - 2026-08-04
+
 ### Changed
 
 - Remove the retired `aulycShot-releases` compatibility endpoints after the sole deployment migrated to the public GitHub and Gitee channels
