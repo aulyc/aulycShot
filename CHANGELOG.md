@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.12] - 2026-08-05
+
 ### Changed
 
 - Adopt compact dual-mirror releases: each GitHub and Gitee Release now contains only the notarized DMG, while Schema v2 update metadata stores immutable provenance separately; updating from 1.8.11 requires one manual Release download

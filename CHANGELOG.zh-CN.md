@@ -5,6 +5,8 @@
 
 ## [Unreleased]
 
+## [1.8.12] - 2026-08-05
+
 ### 改进
 
 - 采用简洁双镜像发布：GitHub 与 Gitee Release 均只保留已公证的 DMG，Schema v2 更新元数据单独保存不可变溯源；从 1.8.11 升级本次版本需手动下载一次 Release
