@@ -19,8 +19,9 @@ Bundle ID、entitlements、Developer ID、Hardened Runtime 和公证信任。出
 
 当前不发布测试版，也不触发 Homebrew。渠道切换完成后，正式源码 branch/tag 和
 GitHub Release 都位于公开 `aulyc/aulycShot`；同一个已签名、公证的 DMG 会原样
-发布到该 GitHub Release 与仅分发用途的 Gitee `aulyc/aulycShot`。两端保存完全
-一致的 `latest.json`，应用先访问 GitHub，失败后访问 Gitee。
+发布到该 GitHub Release 与仅分发用途的 Gitee `aulyc/aulycShot`。两端 Release
+均只包含该 DMG；两端更新渠道保存完全一致的 Schema v2 `latest.json` 和按版本
+不可覆盖的 provenance，应用先访问 GitHub，失败后访问 Gitee。
 
 ## 发布渠道
 
@@ -31,8 +32,10 @@ Gitee Release   https://gitee.com/aulyc/aulycShot/releases
 Gitee manifest  https://gitee.com/aulyc/aulycShot/raw/main/latest.json
 ```
 
-`1.8.10` 已完成公开渠道迁移。唯一使用中的客户端升级后，`1.8.11` 移除旧
-`aulycShot-releases` 兼容地址；新版本发布并回读成功后删除旧 GitHub/Gitee 仓库。
+`1.8.10` 已完成公开渠道迁移，`1.8.11` 已移除旧 `aulycShot-releases` 兼容仓库。
+`1.8.12` 采用 `aulyc-dual-mirror-v1` 1.7.0 的 `macos-compact` 模式和 Schema v2。
+由于 `1.8.11` 只识别 Schema v1，这次需要从 Release 手动更新；`1.8.12` 同时保留
+v1 读取能力并支持 v2，之后继续使用应用内自动更新。
 
 ## 版本和发布提交
 
@@ -47,12 +50,12 @@ make version-check
 工作区干净；随后执行：
 
 ```bash
-make prepare-formal-release TARGET_VERSION=1.6.13 TARGET_BUILD=495
+make prepare-formal-release TARGET_VERSION=1.8.12 TARGET_BUILD=514
 ```
 
 该入口先执行中央 GitHub preflight，再只修改 `aulycShot/App/Info.plist`、
 英文 `CHANGELOG.md` 和简体中文 `CHANGELOG.zh-CN.md`，并创建独立的
-`chore: release 1.6.13` 元数据提交。两份 Changelog 的 `Unreleased` 都必须
+`chore: release 1.8.12` 元数据提交。两份 Changelog 的 `Unreleased` 都必须
 包含对应内容，缺少任一语言都会阻断正式版本准备。
 
 ## 标签前门禁
@@ -172,8 +175,7 @@ python3 scripts/release_tool.py release-notes \
 ```
 
 随后 `scripts/publish-update-mirrors.sh` 只做项目验证和参数映射，并调用中央
-`scripts/dual_mirror_release.py`。两端发布完全相同的 DMG、DMG checksum、最终
-provenance、provenance checksum 和 `latest.json`：
+`scripts/dual_mirror_release.py`。两端 Release 只发布完全相同的 DMG：
 
 ```text
 GitHub  https://github.com/aulyc/aulycShot
@@ -181,23 +183,27 @@ Gitee  https://gitee.com/aulyc/aulycShot
 ```
 
 两个仓库都必须公开。GitHub 同时保存源码、权威标签和正式 Release；Gitee 只保存
-正式安装包、校验和、provenance、简体中文发布说明和更新清单，并用仓库说明指向
-GitHub 源码。GitHub Release 由中央客户端通过 `gh` 管理；Gitee 由同一中央客户端使用
+正式安装包、简体中文发布说明和更新元数据，并用仓库说明指向 GitHub 源码。DMG
+checksum 和 provenance checksum 保留在本地 `verificationEvidence`，不上传为 Release
+附件。GitHub Release 由中央客户端通过 `gh` 管理；Gitee 由同一中央客户端使用
 宿主机环境中的 `GITEE_ACCESS_TOKEN` 调用官方 OpenAPI。项目不再保存自己的
 Gitee API 客户端。令牌不能写入仓库、日志、计划、状态、App、provenance 或
 命令行参数。
 
-镜像上传完成后，发布脚本生成同一份 `latest.json`，写入 GitHub 的独立
-`release-channel` 分支和 Gitee 的 `main`：
+两端 DMG Release 完成后，发布脚本先把最终 provenance 以
+`updates/<version>/<file>` 写入 Gitee `main`，再更新 Gitee `latest.json`；随后以
+同一路径写入 GitHub `release-channel`，再更新 GitHub `latest.json`，最后逐字节
+回读两端。版本化 provenance 只能创建或复用完全相同的内容，不得覆盖。
 
 ```text
 https://raw.githubusercontent.com/aulyc/aulycShot/release-channel/latest.json
 https://gitee.com/aulyc/aulycShot/raw/main/latest.json
 ```
 
-清单绑定正式版本、build、tag、Commit、arm64、Bundle ID、DMG SHA-256、
-provenance SHA-256，并分别列出 GitHub、Gitee 下载地址。应用先读取新 GitHub
-清单，失败后读取 Gitee；随后先下载并验证 provenance，再按清单内固定的
+Schema v2 清单绑定正式版本、build、tag、Commit、arm64、Bundle ID、Team ID、
+最低系统、DMG SHA-256、provenance SHA-256，并分别列出 GitHub/Gitee 的 Release
+DMG 地址与 raw 版本化 provenance 地址。应用先读取新 GitHub 清单，失败后读取
+Gitee；随后先下载并验证 provenance，再按清单内固定的
 GitHub、Gitee 顺序下载 DMG。任一镜像的 SHA-256 不匹配都会拒绝；
 provenance 必须再次绑定唯一 GitHub 源码仓库、远端 Commit/tag 和同一 DMG，解包后的
 App 还必须通过 Developer ID、固定 Team ID、Bundle ID、最低系统、版本/build、
@@ -225,8 +231,8 @@ make publish-update-mirrors RELEASE_PROVENANCE=/absolute/path/aulycShot-....rele
 - provenance 的 Profile ID/版本与 `.codex/standards.json` 不一致，或 provenance
   与 Git、DMG、挂载 App、已安装 App、远端回读不一致
 - 目标版本、标签、GitHub Release 或任一正式产物已经存在
-- 任一公开镜像缺失、不是 public、已有冲突版本、DMG 回读哈希不一致，或两个
-  `latest.json` 不能证明内容相同
-- `GITEE_ACCESS_TOKEN` 不可用，或 Gitee Release 附件/清单写入与回读失败
+- 任一公开镜像缺失、不是 public、已有冲突版本、Release 不是仅含同一 DMG、DMG
+  回读哈希不一致，或两个版本化 provenance / `latest.json` 不能证明内容相同
+- `GITEE_ACCESS_TOKEN` 不可用，或 Gitee Release / 更新元数据写入与回读失败
 
 标签或产物公开后禁止覆盖。任何内容变化都必须使用新的 PATCH 版本和更大的 build。

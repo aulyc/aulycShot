@@ -45,8 +45,43 @@ final class UpdateManifestTests: XCTestCase {
         )
         XCTAssertEqual(
             manifest.orderedProvenanceURLs.map(\.host),
+            ["raw.githubusercontent.com", "gitee.com"]
+        )
+    }
+
+    func testLegacyV1ManifestRemainsSupported() throws {
+        let manifest = try UpdateManifest.decodeValidated(
+            from: manifestData(schemaVersion: 1)
+        )
+
+        XCTAssertEqual(manifest.schemaVersion, 1)
+        XCTAssertEqual(
+            manifest.orderedProvenanceURLs.map(\.host),
             ["github.com", "gitee.com"]
         )
+    }
+
+    func testV2ManifestRejectsReleaseAttachmentProvenanceURLs() {
+        XCTAssertThrowsError(
+            try UpdateManifest.decodeValidated(
+                from: manifestData(useReleaseProvenanceURLs: true)
+            )
+        ) { error in
+            XCTAssertEqual(error as? UpdateManifest.ValidationError, .insecureURL)
+        }
+    }
+
+    func testV2ManifestRequiresStableMacIdentityFields() {
+        XCTAssertThrowsError(
+            try UpdateManifest.decodeValidated(
+                from: manifestData(teamIdentifier: nil)
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? UpdateManifest.ValidationError,
+                .unexpectedReleaseIdentity
+            )
+        }
     }
 
     func testManifestAcceptsPublicSourceReleaseRepository() throws {
@@ -313,8 +348,10 @@ final class UpdateManifestTests: XCTestCase {
         githubRepository: String = "aulycShot",
         giteeRepository: String = "aulycShot",
         policy: String = "aulyc-dual-mirror-v1",
-        teamIdentifier: String = UpdateManifest.expectedTeamIdentifier,
-        minimumSystemVersion: String = UpdateManifest.expectedMinimumSystemVersion
+        teamIdentifier: String? = UpdateManifest.expectedTeamIdentifier,
+        minimumSystemVersion: String? = UpdateManifest.expectedMinimumSystemVersion,
+        schemaVersion: Int = 2,
+        useReleaseProvenanceURLs: Bool = false
     ) -> Data {
         let resolvedGitHubURL = githubURL ?? (
             "https://github.com/aulyc/\(githubRepository)/releases/download/"
@@ -332,16 +369,25 @@ final class UpdateManifestTests: XCTestCase {
         }
         let provenanceFile = "aulycShot-1.7.4-build.502-arm64.release-provenance.json"
         let provenanceDownloads = downloadOrder.map { source -> [String: String] in
-            let host = source == .github ? "github.com" : "gitee.com"
             let repository = source == .github ? githubRepository : giteeRepository
+            if schemaVersion == 1 || useReleaseProvenanceURLs {
+                let host = source == .github ? "github.com" : "gitee.com"
+                return [
+                    "source": source.rawValue,
+                    "url": "https://\(host)/aulyc/\(repository)/releases/download/1.7.4/\(provenanceFile)",
+                ]
+            }
+            let url = source == .github
+                ? "https://raw.githubusercontent.com/aulyc/\(repository)/release-channel/updates/1.7.4/\(provenanceFile)"
+                : "https://gitee.com/aulyc/\(repository)/raw/main/updates/1.7.4/\(provenanceFile)"
             return [
                 "source": source.rawValue,
-                "url": "https://\(host)/aulyc/\(repository)/releases/download/1.7.4/\(provenanceFile)",
+                "url": url,
             ]
         }
         let value: [String: Any] = [
-            "$schema": "urn:codex-engineering-standards:dual-mirror-latest:1",
-            "schemaVersion": 1,
+            "$schema": "urn:codex-engineering-standards:dual-mirror-latest:\(schemaVersion)",
+            "schemaVersion": schemaVersion,
             "policy": policy,
             "releaseProfile": "macos-arm64-app",
             "releaseChannel": "formal",
@@ -352,8 +398,8 @@ final class UpdateManifestTests: XCTestCase {
             "architecture": "arm64",
             "bundleIdentifier": UpdateManifest.expectedBundleIdentifier,
             "pluginIdentifier": NSNull(),
-            "teamIdentifier": teamIdentifier,
-            "minimumSystemVersion": minimumSystemVersion,
+            "teamIdentifier": teamIdentifier ?? NSNull(),
+            "minimumSystemVersion": minimumSystemVersion ?? NSNull(),
             "releasePageURL": "https://github.com/aulyc/\(githubRepository)/releases/tag/1.7.4",
             "artifact": [
                 "file": "aulycShot-1.7.4-build.502-arm64.dmg",

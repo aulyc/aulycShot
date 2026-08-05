@@ -147,11 +147,14 @@ formal installation is a separate, explicitly authorized `make install-release` 
 - The canonical GitHub source repository is the only public source authority
   and GitHub Release repository; Gitee remains a release-only distribution
   repository and must point users to GitHub source
-- Both mirrors must receive the same already-notarized DMG, checksum,
-  provenance, provenance checksum and `latest.json`. The manifest binds
-  version, build, Commit, Bundle ID, architecture, artifact/provenance
-  SHA-256, and fixed GitHub-then-Gitee download order; Team ID and minimum
-  system are independently checked against the downloaded App/provenance.
+- Both Releases must contain only the same already-notarized DMG. Checksum
+  sidecars remain local verification evidence; final provenance is stored at
+  the immutable `updates/<version>/...release-provenance.json` path in both
+  update-feed branches alongside the movable Schema v2 `latest.json`. The
+  manifest binds version, build, Commit, Bundle ID, architecture,
+  artifact/provenance SHA-256, and fixed GitHub-then-Gitee download order;
+  Team ID and minimum system are independently checked against the downloaded
+  App/provenance.
 - Public GitHub Release descriptions are Chinese-first/English-second; the
   Gitee Release description uses the matching Simplified Chinese notes.
 - `GITEE_ACCESS_TOKEN` is a host credential read only by the central client; it
@@ -161,14 +164,15 @@ formal installation is a separate, explicitly authorized `make install-release` 
 
 ## Dual-mirror release policy
 
-- Explicit policy: `aulyc-dual-mirror-v1` `1.6.0`; the Release Profile remains
+- Explicit policy: `aulyc-dual-mirror-v1` `1.7.0`; the Release Profile remains
   `macos-arm64-app`.
 - Project adapter: `scripts/dual-mirror-release.sh` only binds project ID
   `aulycshot`; `scripts/publish-update-mirrors.sh` composes the central
   `prepare`, `preflight`, `publish`, and `verify` phases.
 - Full mapping and retry contract: `docs/DUAL_MIRROR_RELEASE.md`.
-- The updater loads the central `latest.json` Schema, downloads and verifies
-  the release provenance before the DMG, then verifies the installed App.
+- The updater accepts legacy Schema v1 manifests and current Schema v2
+  manifests, including raw versioned provenance URLs. It downloads and
+  verifies release provenance before the DMG, then verifies the installed App.
 - The updater tries the GitHub manifest first and the Gitee manifest second;
   retired compatibility repositories are not valid release identities or
   update endpoints

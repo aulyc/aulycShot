@@ -43,8 +43,11 @@ struct UpdateManifest: Decodable, Equatable, Sendable {
     static let expectedBundleIdentifier = "com.aulyc.aulycshot"
     static let expectedTeamIdentifier = "M9M7M2ARFD"
     static let expectedMinimumSystemVersion = "14.0"
+    private static let schemaV1 = "urn:codex-engineering-standards:dual-mirror-latest:1"
+    private static let schemaV2 = "urn:codex-engineering-standards:dual-mirror-latest:2"
     private static let releaseRepository = "aulycShot"
 
+    let schema: String
     let schemaVersion: Int
     let policy: String
     let releaseProfile: String
@@ -62,6 +65,26 @@ struct UpdateManifest: Decodable, Equatable, Sendable {
     let artifact: Artifact
     let provenance: Artifact
 
+    private enum CodingKeys: String, CodingKey {
+        case schema = "$schema"
+        case schemaVersion
+        case policy
+        case releaseProfile
+        case releaseChannel
+        case version
+        case buildNumber
+        case tag
+        case commit
+        case architecture
+        case bundleIdentifier
+        case pluginIdentifier
+        case teamIdentifier
+        case minimumSystemVersion
+        case releasePageURL
+        case artifact
+        case provenance
+    }
+
     static func decodeValidated(from data: Data) throws -> UpdateManifest {
         let manifest = try JSONDecoder().decode(UpdateManifest.self, from: data)
         try manifest.validate()
@@ -69,7 +92,21 @@ struct UpdateManifest: Decodable, Equatable, Sendable {
     }
 
     func validate() throws {
-        guard schemaVersion == 1 else {
+        switch schemaVersion {
+        case 1:
+            guard schema == Self.schemaV1 else {
+                throw ValidationError.unsupportedSchema
+            }
+        case 2:
+            guard schema == Self.schemaV2 else {
+                throw ValidationError.unsupportedSchema
+            }
+            guard teamIdentifier == Self.expectedTeamIdentifier,
+                  minimumSystemVersion == Self.expectedMinimumSystemVersion
+            else {
+                throw ValidationError.unexpectedReleaseIdentity
+            }
+        default:
             throw ValidationError.unsupportedSchema
         }
         guard policy == "aulyc-dual-mirror-v1",
@@ -108,8 +145,12 @@ struct UpdateManifest: Decodable, Equatable, Sendable {
         guard isSecureReleasePage(releasePageURL) else {
             throw ValidationError.insecureURL
         }
-        try validateDownloads(artifact)
-        try validateDownloads(provenance)
+        try validateReleaseDownloads(artifact)
+        if schemaVersion == 1 {
+            try validateReleaseDownloads(provenance)
+        } else {
+            try validateUpdateFeedDownloads(provenance)
+        }
     }
 
     var orderedDownloadURLs: [URL] {
@@ -155,7 +196,7 @@ struct UpdateManifest: Decodable, Equatable, Sendable {
             == "/aulyc/\(releaseRepository)/releases/download/\(tag)/\(artifactFile)"
     }
 
-    private func validateDownloads(_ downloadable: Artifact) throws {
+    private func validateReleaseDownloads(_ downloadable: Artifact) throws {
         guard downloadable.downloads.map(\.source) == Source.allCases else {
             throw ValidationError.invalidDownloadSources
         }
@@ -167,6 +208,32 @@ struct UpdateManifest: Decodable, Equatable, Sendable {
                     tag: tag,
                     artifactFile: downloadable.file
                   )
+            else {
+                throw ValidationError.insecureURL
+            }
+        }
+    }
+
+    private func validateUpdateFeedDownloads(_ downloadable: Artifact) throws {
+        guard downloadable.downloads.map(\.source) == Source.allCases else {
+            throw ValidationError.invalidDownloadSources
+        }
+        for download in downloadable.downloads {
+            let expectedHost: String
+            let expectedPath: String
+            switch download.source {
+            case .github:
+                expectedHost = "raw.githubusercontent.com"
+                expectedPath = "/aulyc/\(Self.releaseRepository)/release-channel/updates/\(tag)/\(downloadable.file)"
+            case .gitee:
+                expectedHost = "gitee.com"
+                expectedPath = "/aulyc/\(Self.releaseRepository)/raw/main/updates/\(tag)/\(downloadable.file)"
+            }
+            guard download.url.scheme == "https",
+                  download.url.host?.lowercased() == expectedHost,
+                  download.url.path == expectedPath,
+                  download.url.query == nil,
+                  download.url.fragment == nil
             else {
                 throw ValidationError.insecureURL
             }
