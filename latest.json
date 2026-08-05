@@ -1,23 +1,23 @@
 {
-  "$schema": "urn:codex-engineering-standards:dual-mirror-latest:1",
+  "$schema": "urn:codex-engineering-standards:dual-mirror-latest:2",
   "architecture": "arm64",
   "artifact": {
     "downloads": [
       {
         "source": "github",
-        "url": "https://github.com/aulyc/aulycShot/releases/download/1.8.11/aulycShot-1.8.11-build.513-arm64.dmg"
+        "url": "https://github.com/aulyc/aulycShot/releases/download/1.8.12/aulycShot-1.8.12-build.514-arm64.dmg"
       },
       {
         "source": "gitee",
-        "url": "https://gitee.com/aulyc/aulycShot/releases/download/1.8.11/aulycShot-1.8.11-build.513-arm64.dmg"
+        "url": "https://gitee.com/aulyc/aulycShot/releases/download/1.8.12/aulycShot-1.8.12-build.514-arm64.dmg"
       }
     ],
-    "file": "aulycShot-1.8.11-build.513-arm64.dmg",
-    "sha256": "ebf675ad930e4a5c2e5a1b14ac564b53b31b6de1a82cac60b0611b6bccb7d517"
+    "file": "aulycShot-1.8.12-build.514-arm64.dmg",
+    "sha256": "6f726a31b67ad55bf48861ae5f9b65aee8511a529049ecc6b224262c563e0ebf"
   },
-  "buildNumber": 513,
+  "buildNumber": 514,
   "bundleIdentifier": "com.aulyc.aulycshot",
-  "commit": "37505e18c83b0d5e811e2e3567c3952c2e8e1ad0",
+  "commit": "9491d92807f11b54c4bf7a9bc32baf32a9b4d55c",
   "minimumSystemVersion": "14.0",
   "pluginIdentifier": null,
   "policy": "aulyc-dual-mirror-v1",
@@ -25,21 +25,21 @@
     "downloads": [
       {
         "source": "github",
-        "url": "https://github.com/aulyc/aulycShot/releases/download/1.8.11/aulycShot-1.8.11-build.513-arm64.release-provenance.json"
+        "url": "https://raw.githubusercontent.com/aulyc/aulycShot/release-channel/updates/1.8.12/aulycShot-1.8.12-build.514-arm64.release-provenance.json"
       },
       {
         "source": "gitee",
-        "url": "https://gitee.com/aulyc/aulycShot/releases/download/1.8.11/aulycShot-1.8.11-build.513-arm64.release-provenance.json"
+        "url": "https://gitee.com/aulyc/aulycShot/raw/main/updates/1.8.12/aulycShot-1.8.12-build.514-arm64.release-provenance.json"
       }
     ],
-    "file": "aulycShot-1.8.11-build.513-arm64.release-provenance.json",
-    "sha256": "cba1aa6cf4e985bc38ca5cdaff834dad454f0a4dd88f9691a6395a2a5196380a"
+    "file": "aulycShot-1.8.12-build.514-arm64.release-provenance.json",
+    "sha256": "1ece685413da9b6295c2894ff78afdf0bab7e6141ee9c404d0b9bff2a506ac56"
   },
   "releaseChannel": "formal",
-  "releasePageURL": "https://github.com/aulyc/aulycShot/releases/tag/1.8.11",
+  "releasePageURL": "https://github.com/aulyc/aulycShot/releases/tag/1.8.12",
   "releaseProfile": "macos-arm64-app",
-  "schemaVersion": 1,
-  "tag": "1.8.11",
+  "schemaVersion": 2,
+  "tag": "1.8.12",
   "teamIdentifier": "M9M7M2ARFD",
-  "version": "1.8.11"
+  "version": "1.8.12"
 }
