@@ -1,20 +1,206 @@
 import AppKit
+import Carbon
+
+enum StatusMenuScreenshotEventPolicy {
+    static func shouldCapture(
+        eventType: CGEventType,
+        keyCode: UInt32,
+        flags: CGEventFlags,
+        configuredHotkey: (keyCode: UInt32, modifiers: UInt32)?
+    ) -> Bool {
+        guard eventType == .keyDown, let configuredHotkey else { return false }
+        return keyCode == configuredHotkey.keyCode
+            && carbonModifiers(from: flags) == configuredHotkey.modifiers
+    }
+
+    private static func carbonModifiers(from flags: CGEventFlags) -> UInt32 {
+        var modifiers: UInt32 = 0
+        if flags.contains(.maskCommand) { modifiers |= UInt32(cmdKey) }
+        if flags.contains(.maskShift) { modifiers |= UInt32(shiftKey) }
+        if flags.contains(.maskAlternate) { modifiers |= UInt32(optionKey) }
+        if flags.contains(.maskControl) { modifiers |= UInt32(controlKey) }
+        return modifiers
+    }
+}
+
+private final class StatusMenuScreenshotEventTap {
+    private let configuredHotkey: (keyCode: UInt32, modifiers: UInt32)
+    private let onMatch: @MainActor () -> Void
+    private var eventTap: CFMachPort?
+    private var runLoopSource: CFRunLoopSource?
+
+    init(
+        configuredHotkey: (keyCode: UInt32, modifiers: UInt32),
+        onMatch: @escaping @MainActor () -> Void
+    ) {
+        self.configuredHotkey = configuredHotkey
+        self.onMatch = onMatch
+    }
+
+    @discardableResult
+    func start() -> Bool {
+        guard eventTap == nil else { return true }
+        let mask = CGEventMask(1) << CGEventType.keyDown.rawValue
+        guard let tap = CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            options: .defaultTap,
+            eventsOfInterest: mask,
+            callback: { _, type, event, refcon in
+                guard let refcon else { return Unmanaged.passUnretained(event) }
+                let detector = Unmanaged<StatusMenuScreenshotEventTap>
+                    .fromOpaque(refcon)
+                    .takeUnretainedValue()
+                return detector.handleTappedEvent(type: type, event: event)
+            },
+            userInfo: Unmanaged.passUnretained(self).toOpaque()
+        ) else {
+            return false
+        }
+
+        let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
+        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+        CGEvent.tapEnable(tap: tap, enable: true)
+        eventTap = tap
+        runLoopSource = source
+        return true
+    }
+
+    func stop() {
+        if let eventTap {
+            CGEvent.tapEnable(tap: eventTap, enable: false)
+        }
+        if let runLoopSource {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
+        }
+        if let eventTap {
+            CFMachPortInvalidate(eventTap)
+        }
+        eventTap = nil
+        runLoopSource = nil
+    }
+
+    private func handleTappedEvent(
+        type: CGEventType,
+        event: CGEvent
+    ) -> Unmanaged<CGEvent>? {
+        let passthrough = Unmanaged.passUnretained(event)
+        switch type {
+        case .tapDisabledByTimeout, .tapDisabledByUserInput:
+            if let eventTap {
+                CGEvent.tapEnable(tap: eventTap, enable: true)
+            }
+            return passthrough
+        case .keyDown:
+            let keyCode = UInt32(event.getIntegerValueField(.keyboardEventKeycode))
+            guard StatusMenuScreenshotEventPolicy.shouldCapture(
+                eventType: type,
+                keyCode: keyCode,
+                flags: event.flags,
+                configuredHotkey: configuredHotkey
+            ) else {
+                return passthrough
+            }
+
+            if let eventTap {
+                CGEvent.tapEnable(tap: eventTap, enable: false)
+            }
+            guard Thread.isMainThread else { return passthrough }
+            MainActor.assumeIsolated {
+                onMatch()
+            }
+            return nil
+        default:
+            return passthrough
+        }
+    }
+
+    deinit {
+        stop()
+    }
+}
+
+/// Starts screenshot capture while AppKit is still tracking the status menu.
+/// A session event tap intercepts the configured shortcut before NSMenu's
+/// tracking loop can consume it or dismiss the menu.
+@MainActor
+final class StatusMenuScreenshotPreflight: NSObject, NSMenuDelegate {
+    private weak var menu: NSMenu?
+    private let onTakeScreenshot: (CaptureEventTrackingDismissal) -> Bool
+    private var shortcutTap: StatusMenuScreenshotEventTap?
+
+    init(
+        menu: NSMenu,
+        onTakeScreenshot: @escaping (CaptureEventTrackingDismissal) -> Bool
+    ) {
+        self.menu = menu
+        self.onTakeScreenshot = onTakeScreenshot
+        super.init()
+        menu.delegate = self
+    }
+
+    deinit {
+        shortcutTap?.stop()
+    }
+
+    func menuWillOpen(_ menu: NSMenu) {
+        guard menu === self.menu else { return }
+        installShortcutTap()
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        guard menu === self.menu else { return }
+        removeShortcutTap()
+    }
+
+    private func installShortcutTap() {
+        removeShortcutTap()
+        guard let configuredHotkey = HotkeyManager.shared.currentHotkey() else { return }
+
+        let tap = StatusMenuScreenshotEventTap(
+            configuredHotkey: configuredHotkey
+        ) { [weak self] in
+            self?.captureOpenMenu()
+        }
+        guard tap.start() else { return }
+        shortcutTap = tap
+    }
+
+    private func removeShortcutTap() {
+        shortcutTap?.stop()
+        shortcutTap = nil
+    }
+
+    private func captureOpenMenu() {
+        guard let activeMenu = menu else { return }
+        let dismissal = CaptureEventTrackingDismissal { [weak activeMenu] in
+            activeMenu?.cancelTrackingWithoutAnimation()
+        }
+        if !onTakeScreenshot(dismissal) {
+            dismissal.perform()
+        }
+    }
+}
 
 @MainActor
 class StatusBarController: NSObject {
     private var statusItem: NSStatusItem
+    private var screenshotPreflight: StatusMenuScreenshotPreflight?
     private let onTakeScreenshot: () -> Void
+    private let onTakeStatusMenuScreenshot: (CaptureEventTrackingDismissal) -> Bool
     private let onRecord: () -> Void
     private let onMergeImages: () -> Void
     private let onOpenSettings: () -> Void
 
     init(
         onTakeScreenshot: @escaping () -> Void,
+        onTakeStatusMenuScreenshot: @escaping (CaptureEventTrackingDismissal) -> Bool,
         onRecord: @escaping () -> Void,
         onMergeImages: @escaping () -> Void,
         onOpenSettings: @escaping () -> Void
     ) {
         self.onTakeScreenshot = onTakeScreenshot
+        self.onTakeStatusMenuScreenshot = onTakeStatusMenuScreenshot
         self.onRecord = onRecord
         self.onMergeImages = onMergeImages
         self.onOpenSettings = onOpenSettings
@@ -85,6 +271,11 @@ class StatusBarController: NSObject {
         menu.addItem(quitItem)
 
         statusItem.menu = menu
+        screenshotPreflight = StatusMenuScreenshotPreflight(
+            menu: menu
+        ) { [weak self] dismissal in
+            self?.onTakeStatusMenuScreenshot(dismissal) ?? false
+        }
 
     }
 

@@ -124,6 +124,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             onTakeScreenshot: { [weak self] in
                 self?.performWhenInitialized { $0.handleTrigger() }
             },
+            onTakeStatusMenuScreenshot: { [weak self] dismissal in
+                guard let self else { return false }
+                guard self.appInitialized else {
+                    self.showStartupDialog()
+                    return false
+                }
+                return self.handleTrigger(eventTrackingDismissal: dismissal)
+            },
             onRecord: { [weak self] in
                 self?.performWhenInitialized { $0.handleRecordingTrigger() }
             },
@@ -323,7 +331,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
-    func handleTrigger(fromShortcut: Bool = false) {
+    @discardableResult
+    func handleTrigger(
+        fromShortcut: Bool = false,
+        eventTrackingDismissal: CaptureEventTrackingDismissal? = nil
+    ) -> Bool {
+        var didBeginCapture = false
         AppActivityEntryRouter.routeScreenshot(
             availability: activityAvailability,
             beginCapture: { [self] in
@@ -334,12 +347,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 if fromShortcut {
                     UpdateChecker.shared.checkFromScreenshotShortcutIfDue()
                 }
-                startCapture()
+                didBeginCapture = startCapture(
+                    eventTrackingDismissal: eventTrackingDismissal
+                )
             },
             stopRecording: { [self] in
                 stopRecordingAndSave()
             }
         )
+        return didBeginCapture
     }
 
     func handleRecordingTrigger() {
@@ -492,11 +508,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         ImageMergeLauncher.shared.openFromShortcutSources()
     }
 
-    func startCapture(postCaptureAction: OverlayWindowController.PostCaptureAction = .edit) {
-        guard activityAvailability.canBeginActivity else { return }
+    @discardableResult
+    func startCapture(
+        postCaptureAction: OverlayWindowController.PostCaptureAction = .edit,
+        eventTrackingDismissal: CaptureEventTrackingDismissal? = nil
+    ) -> Bool {
+        guard activityAvailability.canBeginActivity else { return false }
         let focusRestorer = SourceAppFocusRestorer.captureFrontmostApplication()
         overlayController = OverlayWindowController(
             postCaptureAction: postCaptureAction,
+            eventTrackingDismissal: eventTrackingDismissal,
             onRecordingSelection: { [weak self] rect, screen in
                 self?.beginRecording(rect: rect, screen: screen)
             },
@@ -512,6 +533,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         )
         overlayController?.activate()
         applyHotkeyState()
+        return true
     }
 
     private func handleEditCompletion(_ finalImage: NSImage?) {

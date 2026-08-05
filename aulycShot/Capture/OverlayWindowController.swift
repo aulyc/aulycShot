@@ -31,6 +31,40 @@ enum OverlayCancellationPolicy {
 }
 
 @MainActor
+final class CaptureEventTrackingDismissal {
+    private var action: (() -> Void)?
+
+    init(action: @escaping () -> Void) {
+        self.action = action
+    }
+
+    func perform() {
+        let action = action
+        self.action = nil
+        action?()
+    }
+}
+
+@MainActor
+enum OverlayEventTrackingTransition {
+    static func perform(
+        statusMenuDismissal: CaptureEventTrackingDismissal?,
+        presentOverlay: @escaping () -> Void,
+        dismissUnknownSurface: () -> Void,
+        scheduleOverlay: (@escaping () -> Void) -> Void
+    ) {
+        if let statusMenuDismissal {
+            presentOverlay()
+            statusMenuDismissal.perform()
+            return
+        }
+
+        dismissUnknownSurface()
+        scheduleOverlay(presentOverlay)
+    }
+}
+
+@MainActor
 enum OverlayPresentationPolicy {
     static let windowLevel = NSWindow.Level.screenSaver
     static let hidesOnDeactivate = false
@@ -119,6 +153,7 @@ class OverlayWindowController {
     private let onRecordingSelection: ((NSRect, NSScreen) -> Void)?
     private let onSuspend: ((SuspendedEditDraft) -> Void)?
     private let postCaptureAction: PostCaptureAction
+    private let eventTrackingDismissal: CaptureEventTrackingDismissal?
 
     /// Image-edit mode: when set, `activate()` skips the user's drag-to-select
     /// step and immediately opens the editor on the supplied image, sized to
@@ -179,6 +214,7 @@ class OverlayWindowController {
 
     init(
         postCaptureAction: PostCaptureAction = .edit,
+        eventTrackingDismissal: CaptureEventTrackingDismissal? = nil,
         onRecordingSelection: ((NSRect, NSScreen) -> Void)? = nil,
         onRequestFocusReturn: (() -> Void)? = nil,
         onSuspend: ((SuspendedEditDraft) -> Void)? = nil,
@@ -188,6 +224,7 @@ class OverlayWindowController {
         self.presetSource = nil
         self.suspendedDraft = nil
         self.postCaptureAction = postCaptureAction
+        self.eventTrackingDismissal = eventTrackingDismissal
         self.onRecordingSelection = onRecordingSelection
         self.onRequestFocusReturn = onRequestFocusReturn
         self.onSuspend = onSuspend
@@ -205,6 +242,7 @@ class OverlayWindowController {
         self.presetSource = presetSource
         self.suspendedDraft = nil
         self.postCaptureAction = .edit
+        self.eventTrackingDismissal = nil
         self.onRecordingSelection = nil
         self.onRequestFocusReturn = onRequestFocusReturn
         self.onSuspend = onSuspend
@@ -222,6 +260,7 @@ class OverlayWindowController {
         self.presetSource = nil
         self.suspendedDraft = suspendedDraft
         self.postCaptureAction = .edit
+        self.eventTrackingDismissal = nil
         self.onRecordingSelection = onRecordingSelection
         self.onRequestFocusReturn = onRequestFocusReturn
         self.onSuspend = onSuspend
@@ -245,11 +284,19 @@ class OverlayWindowController {
     private func prepareAndPresentOverlay() {
         prepareScreenContext()
 
-        if Self.isRunningEventTrackingMode {
-            Self.dismissActiveEventTrackingSurface()
-            MainRunLoopScheduler.performInDefaultMode { [weak self] in
-                self?.presentOverlay()
-            }
+        if eventTrackingDismissal != nil || Self.isRunningEventTrackingMode {
+            OverlayEventTrackingTransition.perform(
+                statusMenuDismissal: eventTrackingDismissal,
+                presentOverlay: { [weak self] in
+                    self?.presentOverlay()
+                },
+                dismissUnknownSurface: {
+                    Self.dismissActiveEventTrackingSurface()
+                },
+                scheduleOverlay: { presentation in
+                    MainRunLoopScheduler.performInDefaultMode(presentation)
+                }
+            )
         } else {
             presentOverlay()
         }
