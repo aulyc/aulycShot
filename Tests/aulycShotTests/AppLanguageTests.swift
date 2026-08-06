@@ -73,19 +73,80 @@ final class AppLanguageTests: XCTestCase {
         let zh = try localization(for: "zh-Hans")
         let en = try localization(for: "en")
 
-        XCTAssertEqual(zh["aboutAcknowledgementFirst"], "1. 感谢伟大的 AI 时代，让更多想法得以更快成为现实")
-        XCTAssertEqual(zh["aboutAcknowledgementSecond"], "2. 致敬 Codex 与 Claude，在创作与开发中持续并肩协作")
-        XCTAssertEqual(zh["aboutAcknowledgementThird"], "3. 感谢开源项目 capcap，为 aulycShot 提供最初的灵感与基础")
-        XCTAssertEqual(zh["aboutAcknowledgementFourth"], "4. 感谢每一位提交需求、报告问题和提出改进建议的用户")
-        XCTAssertEqual(zh["aboutAcknowledgementFifth"], "5. 感谢开源社区与开发工具带来的启发和帮助")
-        XCTAssertEqual(zh["aboutAcknowledgementSixth"], "6. 感谢 aulyc 一路以来的坚持与灵感")
+        XCTAssertEqual(zh["aboutAcknowledgementFirst"], "1. 感谢伟大的 AI 时代，让更多想法得以更快成为现实；")
+        XCTAssertEqual(zh["aboutAcknowledgementSecond"], "2. 致敬 Codex 与 Claude，在创作与开发中持续并肩协作；")
+        XCTAssertEqual(zh["aboutAcknowledgementThird"], "3. 感谢开源项目 capcap，为 aulycShot 提供最初的灵感与基础；")
+        XCTAssertEqual(zh["aboutAcknowledgementFourth"], "4. 感谢每一位提交需求、报告问题和提出改进建议的用户；")
+        XCTAssertEqual(zh["aboutAcknowledgementFifth"], "5. 感谢开源社区与开发工具带来的启发和帮助；")
+        XCTAssertEqual(zh["aboutAcknowledgementSixth"], "6. 感谢 aulyc 一路以来的坚持与灵感。")
 
-        XCTAssertEqual(en["aboutAcknowledgementFirst"], "1. Thanks to the remarkable age of AI for helping more ideas become reality faster")
-        XCTAssertEqual(en["aboutAcknowledgementSecond"], "2. A tribute to Codex and Claude for their continued partnership in creation and development")
-        XCTAssertEqual(en["aboutAcknowledgementThird"], "3. Thanks to the open-source capcap project for providing the original inspiration and foundation for aulycShot")
-        XCTAssertEqual(en["aboutAcknowledgementFourth"], "4. Thanks to everyone who submits requests, reports issues, and suggests improvements")
-        XCTAssertEqual(en["aboutAcknowledgementFifth"], "5. Thanks to the open-source community and developer tools for inspiration and support")
-        XCTAssertEqual(en["aboutAcknowledgementSixth"], "6. Thanks to aulyc for the persistence and inspiration behind this journey")
+        XCTAssertEqual(en["aboutAcknowledgementFirst"], "1. Thanks to the remarkable age of AI for helping more ideas become reality faster;")
+        XCTAssertEqual(en["aboutAcknowledgementSecond"], "2. A tribute to Codex and Claude for their continued partnership in creation and development;")
+        XCTAssertEqual(en["aboutAcknowledgementThird"], "3. Thanks to the open-source capcap project for providing the original inspiration and foundation for aulycShot;")
+        XCTAssertEqual(en["aboutAcknowledgementFourth"], "4. Thanks to everyone who submits requests, reports issues, and suggests improvements;")
+        XCTAssertEqual(en["aboutAcknowledgementFifth"], "5. Thanks to the open-source community and developer tools for inspiration and support;")
+        XCTAssertEqual(en["aboutAcknowledgementSixth"], "6. Thanks to aulyc for the persistence and inspiration behind this journey.")
+    }
+
+    func testAboutNumberedListsUseSemicolonsAndFinalPeriods() throws {
+        let zh = try localization(for: "zh-Hans")
+        let en = try localization(for: "en")
+
+        assertListPunctuation(
+            values: [
+                zh["aboutIntroductionFirst"],
+                zh["aboutIntroductionSecond"],
+                zh["aboutIntroductionThird"],
+            ],
+            semicolon: "；",
+            period: "。"
+        )
+        assertListPunctuation(
+            values: [
+                zh["aboutAcknowledgementFirst"],
+                zh["aboutAcknowledgementSecond"],
+                zh["aboutAcknowledgementThird"],
+                zh["aboutAcknowledgementFourth"],
+                zh["aboutAcknowledgementFifth"],
+                zh["aboutAcknowledgementSixth"],
+            ],
+            semicolon: "；",
+            period: "。"
+        )
+        assertListPunctuation(
+            values: [
+                en["aboutIntroductionFirst"],
+                en["aboutIntroductionSecond"],
+                en["aboutIntroductionThird"],
+            ],
+            semicolon: ";",
+            period: "."
+        )
+        assertListPunctuation(
+            values: [
+                en["aboutAcknowledgementFirst"],
+                en["aboutAcknowledgementSecond"],
+                en["aboutAcknowledgementThird"],
+                en["aboutAcknowledgementFourth"],
+                en["aboutAcknowledgementFifth"],
+                en["aboutAcknowledgementSixth"],
+            ],
+            semicolon: ";",
+            period: "."
+        )
+    }
+
+    private func assertListPunctuation(
+        values: [String?],
+        semicolon: Character,
+        period: Character,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        for value in values.dropLast() {
+            XCTAssertEqual(value?.last, semicolon, file: file, line: line)
+        }
+        XCTAssertEqual(values.last.flatMap { $0 }?.last, period, file: file, line: line)
     }
 
     private func localization(for language: String) throws -> [String: String] {

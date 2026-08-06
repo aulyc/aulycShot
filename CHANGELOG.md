@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Add semicolons and final periods to the numbered introduction and acknowledgement lists on the About page
+
 ## [1.8.14] - 2026-08-06
 
 ### Changed
