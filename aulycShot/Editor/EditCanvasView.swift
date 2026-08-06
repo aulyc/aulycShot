@@ -38,8 +38,6 @@ class EditCanvasView: NSView {
             }
         }
     }
-    private(set) var previewImage: NSImage?
-
     // Current drawing properties (set by toolbar)
     var currentColor: NSColor = EditorStyleDefaults.primaryColor {
         didSet { activeTextField?.annotationColor = currentColor }
@@ -284,15 +282,12 @@ class EditCanvasView: NSView {
 
     private var trackingArea: NSTrackingArea?
 
-    var hasPreviewImage: Bool { previewImage != nil }
-
     override var acceptsFirstResponder: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        // While a tool is active or a preview is loaded, the canvas always
-        // captures clicks (drawing surface or scroll viewport).
-        if activeTool != .none || hasPreviewImage {
+        // While a tool is active, the canvas always captures clicks.
+        if activeTool != .none {
             return super.hitTest(point)
         }
         // In adjust mode we want to capture clicks that land on either an
@@ -362,7 +357,6 @@ class EditCanvasView: NSView {
         fileprivate let selectedIndexes: Set<Int>
         fileprivate let primarySelectedIndex: Int?
         fileprivate let history: UndoHistory<EditorSnapshot>
-        fileprivate let previewImage: NSImage?
     }
 
     /// History snapshot. Annotations are value-typed (struct) so a plain
@@ -394,17 +388,12 @@ class EditCanvasView: NSView {
             numberCounter: numberCounter,
             selectedIndexes: selectedIndexes,
             primarySelectedIndex: primarySelectedIndex,
-            history: history,
-            previewImage: previewImage
+            history: history
         )
     }
 
     func restoreState(_ state: RestorableState) {
         cancelInFlightInteraction()
-        previewImage = state.previewImage
-        if let previewImage {
-            setFrameSize(previewImage.size)
-        }
         annotations = state.annotations
         numberCounter = state.numberCounter
         history = state.history
@@ -958,7 +947,7 @@ class EditCanvasView: NSView {
         guard activeTool != .none else { return }
 
         switch activeTool {
-        case .none, .scrollCapture, .eraser:
+        case .none, .eraser:
             return
 
         case .pen:
@@ -1055,7 +1044,7 @@ class EditCanvasView: NSView {
         guard activeTool != .none else { return }
 
         switch activeTool {
-        case .none, .scrollCapture, .numbered, .text, .eraser:
+        case .none, .numbered, .text, .eraser:
             return
 
         case .pen:
@@ -1165,7 +1154,7 @@ class EditCanvasView: NSView {
         guard activeTool != .none else { return }
 
         switch activeTool {
-        case .none, .scrollCapture, .numbered, .text, .eraser:
+        case .none, .numbered, .text, .eraser:
             return
 
         case .pen:
@@ -1334,7 +1323,7 @@ class EditCanvasView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         guard let context = NSGraphicsContext.current?.cgContext else { return }
 
-        if let image = previewImage ?? overrideBaseImage ?? windowBaseImage {
+        if let image = overrideBaseImage ?? windowBaseImage {
             image.draw(in: NSRect(origin: .zero, size: bounds.size))
         }
 
@@ -1528,7 +1517,7 @@ class EditCanvasView: NSView {
     }
 
     override func scrollWheel(with event: NSEvent) {
-        guard hasPreviewImage || overrideBaseImage != nil else {
+        guard overrideBaseImage != nil else {
             super.scrollWheel(with: event)
             return
         }
@@ -1542,7 +1531,7 @@ class EditCanvasView: NSView {
         fallbackBaseImage: NSImage?,
         annotationClipMask: NSImage? = nil
     ) -> NSImage? {
-        guard let baseImage = previewImage ?? fallbackBaseImage else { return nil }
+        guard let baseImage = fallbackBaseImage else { return nil }
         return EditorCompositeRenderer.compositeImage(
             baseImage: baseImage,
             annotations: annotations,
@@ -1551,15 +1540,7 @@ class EditCanvasView: NSView {
         )
     }
 
-    func loadPreviewImage(_ image: NSImage) {
-        cancelInFlightInteraction()
-        previewImage = image
-        setFrameSize(image.size)
-        needsDisplay = true
-    }
-
     func updateViewportSize(_ size: NSSize) {
-        guard !hasPreviewImage else { return }
         setFrameSize(size)
         needsDisplay = true
     }
@@ -1567,10 +1548,6 @@ class EditCanvasView: NSView {
     // MARK: - Helpers
 
     func resolveBaseImageForEditing() -> NSImage? {
-        if let previewImage {
-            return previewImage
-        }
-
         if let overrideBaseImage {
             return overrideBaseImage
         }

@@ -175,11 +175,6 @@ enum L10n {
 
     // Toast
     static var copiedToClipboard: String { s("copiedToClipboard") }
-    static var mergedLongScreenshot: String { s("mergedLongScreenshot") }
-    static var autoScrollPermissionNeeded: String { s("autoScrollPermissionNeeded") }
-    static var cropLongScreenshotHint: String { s("cropLongScreenshotHint") }
-    static var scrollCaptureHint: String { s("scrollCaptureHint") }
-    static var scrollCaptureManualHint: String { s("scrollCaptureManualHint") }
     static var finderEditExitHint: String { s("finderEditExitHint") }
     static var clipboardEditExitHint: String { s("clipboardEditExitHint") }
     static var pinEditExitHint: String { s("pinEditExitHint") }
@@ -239,13 +234,11 @@ enum L10n {
     static var tipInsertImage: String { s("tipInsertImage") }
     static var tipUndo: String { s("tipUndo") }
     static var tipRedo: String { s("tipRedo") }
-    static var tipScrollCapture: String { s("tipScrollCapture") }
     static var tipSave: String { s("tipSave") }
     static var tipPin: String { s("tipPin") }
     static var tipRecord: String { s("tipRecord") }
     static var tipCancel: String { s("tipCancel") }
     static var tipConfirm: String { s("tipConfirm") }
-    static var tipScrollCropConfirm: String { s("tipScrollCropConfirm") }
     static var copyQRCodeContent: String { s("copyQRCodeContent") }
 
     // Text tool
@@ -266,8 +259,6 @@ enum L10n {
     static var insertImageFromFile: String { s("insertImageFromFile") }
     static var insertImageChooseFile: String { s("insertImageChooseFile") }
     static var insertImageNoClipboardImage: String { s("insertImageNoClipboardImage") }
-    static var scrollCaptureAutoScroll: String { s("scrollCaptureAutoScroll") }
-    static var scrollCaptureManualScroll: String { s("scrollCaptureManualScroll") }
 
     // Language
     static var languageHeader: String { s("languageHeader") }

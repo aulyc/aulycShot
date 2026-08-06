@@ -11,12 +11,11 @@ Excluded by product requirement:
 
 ## Inventory
 
-The audit found 20 custom theme-sensitive surfaces and 8 native AppKit dialog or sheet call sites, for 28 reviewed user-visible entry points
+The audit found 16 custom theme-sensitive surfaces and 8 native AppKit dialog or sheet call sites, for 24 reviewed user-visible entry points
 
 | Group | Surfaces | Count | Adaptation |
 | --- | --- | ---: | --- |
 | Editor chrome | Primary toolbar, side toolbar, color and size sub-toolbar, mosaic sub-toolbar, text sub-toolbar | 5 | Adaptive backgrounds, borders, icons, separators, sliders, checkboxes, and selected states |
-| Scroll capture | Hint, active control, crop confirm control, preview | 4 | Adaptive floating backgrounds and control colors |
 | Pin toolbars | Image pin toolbar, text pin toolbar | 2 | Adaptive capsule backgrounds, borders, labels, and icons |
 | Custom dialogs | Image Merge window | 1 | Adopted semantic text and surfaces, refreshed layer colors on appearance changes |
 | Transient HUDs | Toast, tooltip, cursor chip, update progress, recording HUD | 5 | Adaptive floating surfaces, borders, text, indicators, and live appearance refresh |

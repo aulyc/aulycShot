@@ -14,7 +14,7 @@ body:
     attributes:
       label: What happened? / 发生了什么？
       description: Describe the bug, and what you expected to happen instead. / 描述这个问题，以及你原本期望的行为。
-      placeholder: When I capture a scrolling area, the stitched preview is blank...
+      placeholder: When I confirm a selected area, the clipboard is empty...
     validations:
       required: true
 
@@ -26,7 +26,7 @@ body:
       placeholder: |
         1. Double-tap ⌘ to start capture
         2. Drag a region over a window
-        3. Click the scroll-stitch button
+        3. Click the green checkmark
         4. See the error
     validations:
       required: true

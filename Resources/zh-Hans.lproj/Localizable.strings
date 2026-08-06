@@ -85,11 +85,6 @@
 
 /* Toast */
 "copiedToClipboard" = "已添加到剪贴板";
-"mergedLongScreenshot" = "已合并长截图";
-"autoScrollPermissionNeeded" = "长截图需要辅助功能权限，请在系统设置 → 隐私与安全性 → 辅助功能中授权 aulycShot";
-"cropLongScreenshotHint" = "拖动上下边裁剪长图，回车或点对勾确认";
-"scrollCaptureHint" = "按任意键结束滚动";
-"scrollCaptureManualHint" = "手动滚动页面，按任意键或点击绿色按钮结束";
 "finderEditExitHint" = "从访达编辑，按 X 退出编辑";
 "clipboardEditExitHint" = "从剪贴板编辑，按 X 退出编辑";
 "pinEditExitHint" = "正在编辑钉图，按 X 退出编辑";
@@ -135,13 +130,11 @@
 "tipInsertImage" = "插入图片";
 "tipUndo" = "撤销";
 "tipRedo" = "恢复撤销";
-"tipScrollCapture" = "长截图";
 "tipSave" = "保存到文件";
 "tipPin" = "钉在屏幕";
 "tipRecord" = "录制";
 "tipCancel" = "取消";
 "tipConfirm" = "触发截图执行";
-"tipScrollCropConfirm" = "保存并编辑";
 "copyQRCodeContent" = "复制二维码内容";
 
 "textStrokeEffect" = "描边";
@@ -157,8 +150,6 @@
 "insertImageFromFile" = "从本地文件插入";
 "insertImageChooseFile" = "选择图片";
 "insertImageNoClipboardImage" = "剪贴板中没有图片";
-"scrollCaptureAutoScroll" = "自动滚动";
-"scrollCaptureManualScroll" = "手动滚动";
 
 /* Language */
 "languageHeader" = "语言";
@@ -194,7 +185,7 @@
 "aboutSystemRequirementValue" = "macOS 14+";
 "aboutIntroductionTitle" = "应用介绍";
 "aboutIntroductionFirst" = "1. aulycShot 是一款原生 macOS 菜单栏截图与录屏工具，支持智能选区、窗口截图、区域截图和屏幕录制";
-"aboutIntroductionSecond" = "2. 提供箭头、形状、文字、序号、马赛克等标注工具，并支持长截图、钉图、图片编辑与拼接";
+"aboutIntroductionSecond" = "2. 提供箭头、形状、文字、序号、马赛克等标注工具，并支持钉图、图片编辑与拼接";
 "aboutIntroductionThird" = "3. 截图、录屏和编辑均在本机完成，不包含账号系统、云端同步或遥测";
 "aboutWebsiteTitle" = "官方网站";
 "aboutWebsiteURL" = "https://www.aulyc.com";

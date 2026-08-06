@@ -101,8 +101,3 @@ class ToolButton: NSButton {
         super.draw(dirtyRect)
     }
 }
-
-/// Persistent "press any key to finish" hint shown centered near the top of
-/// the selection during auto-scroll. It is its own window so it can be
-/// excluded from the ScreenCaptureKit capture — otherwise it would be baked
-/// into every stitched frame of the long screenshot.

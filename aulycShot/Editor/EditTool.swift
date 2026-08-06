@@ -13,5 +13,4 @@ enum EditTool {
     case line
     case numbered
     case text
-    case scrollCapture
 }

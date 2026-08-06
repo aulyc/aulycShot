@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Remove scroll capture, including automatic and manual scrolling, live stitching preview, and post-stitch cropping, while preserving the separate Image Stitching Tool
+
 ## [1.8.12] - 2026-08-05
 
 ### Changed

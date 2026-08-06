@@ -2,8 +2,8 @@ import AppKit
 
 final class EditorScrollView: NSScrollView {
     weak var editorCanvasView: EditCanvasView?
-    /// When `true`, every viewport click is captured by drawing tools or a
-    /// long-screenshot preview. When `false` the scroll view
+    /// When `true`, every viewport click is captured by drawing tools or fixed
+    /// image content. When `false` the scroll view
     /// only forwards clicks that the canvas itself claimed, so empty
     /// viewport clicks fall through to the SelectionView underneath where
     /// its resize handles live.

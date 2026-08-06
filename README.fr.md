@@ -5,7 +5,7 @@
 <h1 align="center">aulycShot</h1>
 
 <p align="center">
-  Outil de capture d'écran pour la barre des menus macOS : double-cliquez sur <code>⌘</code> pour capturer, annoter, assembler une longue page et épingler.
+  Outil de capture d'écran pour la barre des menus macOS : double-cliquez sur <code>⌘</code> pour capturer, annoter et épingler.
 </p>
 
 <p align="center">
@@ -27,7 +27,7 @@
   <a href="https://github.com/aulyc/aulycShot/issues">Issues</a>
 </p>
 
-**Le moyen le plus rapide de capturer, annoter et partager des captures d'écran sur macOS.** Double-cliquez sur `⌘` depuis n'importe quelle app, capturez une fenêtre ou une zone, assemblez une page longue, puis annotez dans une fenêtre flottante. aulycShot vit dans la barre des menus, sans icône Dock, sans télémétrie, sans abonnement et sans dépendance tierce.
+**Le moyen le plus rapide de capturer, annoter et partager des captures d'écran sur macOS.** Double-cliquez sur `⌘` depuis n'importe quelle app, capturez une fenêtre ou une zone, puis annotez dans une fenêtre flottante. aulycShot vit dans la barre des menus, sans icône Dock, sans télémétrie, sans abonnement et sans dépendance tierce.
 
 <p align="center">
   <img src="images/editor.png" alt="aulycShot annotation editor" width="760" />
@@ -38,7 +38,6 @@
 - **Un raccourci, aucun frottement** : double-cliquez sur `⌘` ou utilisez votre raccourci global personnalisé.
 - **Fenêtre ou zone précise** : cliquez une fenêtre détectée, ou faites glisser une zone avec sortie Retina.
 - **Un vrai éditeur d'annotations** : flèches, numéros, texte, mosaïque, surligneur et stylo restent modifiables après placement.
-- **Capture longue** : faites défiler dans la zone sélectionnée, prévisualisez l'assemblage, puis continuez l'édition.
 - **Épingler les captures** : gardez l'image finale au-dessus des autres fenêtres comme référence.
 - **Modifier les images Finder** : sélectionnez une image dans Finder et ouvrez-la directement dans l'éditeur sans toucher au fichier d'origine.
 - **AppKit pur** : pas de SwiftUI, pas d'Electron, pas de télémétrie.
@@ -47,10 +46,7 @@
 
 <table>
 <tr>
-  <td width="50%" align="center"><img src="images/window-snap.png" alt="Smart window detection" /><br/><sub><b>Capture de fenêtre en un clic</b><br/>aulycShot détecte automatiquement les bords.</sub></td>
-</tr>
-<tr>
-  <td width="50%" align="center"><img src="images/scroll-stitch.png" alt="Scroll capture" /><br/><sub><b>Assembler les longues pages</b><br/>Faites défiler et voyez le résultat en direct.</sub></td>
+  <td width="100%" align="center"><img src="images/window-snap.png" alt="Smart window detection" /><br/><sub><b>Capture de fenêtre en un clic</b><br/>aulycShot détecte automatiquement les bords.</sub></td>
 </tr>
 </table>
 
@@ -95,7 +91,7 @@ bash scripts/rebuild-and-open.sh
 
 1. Double-cliquez sur `⌘ Command`, utilisez votre raccourci ou choisissez la capture dans la barre des menus.
 2. Cliquez une fenêtre ou faites glisser une zone.
-3. Utilisez la barre flottante pour annoter, capturer en défilement, enregistrer, épingler ou confirmer.
+3. Utilisez la barre flottante pour annoter, enregistrer, épingler ou confirmer.
 4. Cliquez la coche verte ou appuyez sur `Enter` pour copier le résultat. `Esc` ou `x` annule.
 
 ## Outils d'édition
@@ -107,7 +103,7 @@ bash scripts/rebuild-and-open.sh
 | Stylo / surligneur | Tracer à main levée ou surligner |
 | Mosaïque | Pixelliser les zones sensibles |
 | Numéro / texte | Ajouter des repères numérotés ou du texte éditable |
-| Capture longue / épingler | Finaliser et partager l'image |
+| Épingler | Garder l'image au-dessus des autres fenêtres |
 
 ## Réglages
 

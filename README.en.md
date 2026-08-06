@@ -5,7 +5,7 @@
 <h1 align="center">aulycShot</h1>
 
 <p align="center">
-  The fastest menu bar screenshot tool for macOS: double-tap <code>⌘</code> to capture, annotate, scroll-stitch, and pin.
+  The fastest menu bar screenshot tool for macOS: double-tap <code>⌘</code> to capture, annotate, and pin.
 </p>
 
 <p align="center">
@@ -27,7 +27,7 @@
   <a href="https://github.com/aulyc/aulycShot/issues">Issues</a>
 </p>
 
-**The fastest way to grab, mark up, and share screenshots on macOS.** Double-tap `⌘` from anywhere — snap to a window, drag a region, scroll-stitch a long page, then annotate in one tight floating window. Lives in your menu bar. No Dock icon, no telemetry, no subscription, no third-party dependencies.
+**The fastest way to grab, mark up, and share screenshots on macOS.** Double-tap `⌘` from anywhere, snap to a window or drag a region, then annotate in one tight floating window. Lives in your menu bar. No Dock icon, no telemetry, no subscription, no third-party dependencies.
 
 <p align="center">
   <img src="images/editor.png" alt="aulycShot annotation editor — arrows, numbered callouts, mosaic, highlighter and text layered on a screenshot in a single floating toolbar" width="760" />
@@ -43,7 +43,6 @@
 - **One shortcut, zero friction.** Double-tap `⌘` anywhere and aulycShot is on screen in milliseconds — or record any global hotkey you like.
 - **Snap-to-window or pixel-perfect region.** Hover any window for a one-click capture, or drag a region with full Retina output across every connected display.
 - **A real annotation editor.** Arrows, numbered callouts, text, mosaic, highlighter, pen — all editable, draggable, rotatable and undoable *after* you place them.
-- **Scroll-stitch long content.** Capture a scrolling area, watch the stitched preview live, and keep editing the merged result.
 - **Pin screenshots.** Keep the final image floating above any window as a ready reference.
 - **Edit Finder images too.** Select a single image file in Finder and trigger the same shortcut to load it straight into the editor — the original is never touched.
 - **Built with pure AppKit.** No SwiftUI, no Electron, no telemetry. Small, fast, and respectful of macOS.
@@ -52,15 +51,9 @@
 
 <table>
 <tr>
-  <td width="50%" align="center">
+  <td width="100%" align="center">
     <img src="images/window-snap.png" alt="Smart window detection — green dashed bounds snap to an app window" /><br/>
     <sub><b>Snap to any window in one click</b><br/>No precise dragging — aulycShot detects window bounds for you.</sub>
-  </td>
-</tr>
-<tr>
-  <td width="50%" align="center">
-    <img src="images/scroll-stitch.png" alt="Scroll capture stitching a long page into a single tall screenshot with live preview" /><br/>
-    <sub><b>Scroll-stitch long pages</b><br/>Scroll inside the selection, watch frames merge live, and keep editing the result.</sub>
   </td>
 </tr>
 </table>
@@ -72,7 +65,6 @@
 - **Multi-display support** — creates overlays on every connected screen and captures at full Retina resolution.
 - **Full annotation editor** — rectangle, ellipse, arrow, pen, highlighter, mosaic, numbered callouts, and text.
 - **Editable annotations** — move existing marks, change color and size, rotate supported annotations, bend arrows/callouts, edit text, delete marks, and use undo/redo.
-- **Scroll capture** — capture a selected scrolling area, preview the stitched image live, and merge it back into the editor.
 - **Pin to screen** — float the current screenshot above other windows as a draggable reference image.
 - **Save or copy** — save as PNG, confirm to copy PNG/TIFF data to the clipboard, or cancel without output.
 - **Custom trigger** — use the default double-tap `⌘`, or record a custom global shortcut in Settings.
@@ -129,7 +121,7 @@ The app bundle is output to the hidden path `.cache/build/aulycShot.app`; DMGs a
 
 1. Double-tap `⌘ Command`, press your custom shortcut, or choose **Take Screenshot** from the menu bar.
 2. Hover a window and click to capture it, or drag to select any region.
-3. Use the floating toolbar to annotate, start scroll capture, save, pin, cancel, or confirm.
+3. Use the floating toolbar to annotate, save, pin, cancel, or confirm.
 4. Click the green checkmark or press `Enter` to copy the final image to the clipboard. Press `Esc` or click `x` to cancel.
 
 To edit an existing image instead of taking a screenshot, click a single image file in Finder (so it's the current Finder selection), then trigger the same shortcut. aulycShot copies the file into a temporary working location and opens it in the editor with the toolbar already up. If anything other than exactly one image is selected, the shortcut behaves as a normal screenshot trigger.
@@ -147,7 +139,6 @@ To edit an existing image instead of taking a screenshot, click a single image f
 | Text | Add editable single-line text with color and 10-100 pt size controls |
 | Undo / Redo | Revert and restore editor changes |
 | Move Selection | Drag the whole selected screenshot region after selection |
-| Scroll Capture | Scroll inside the selected area, stitch frames, and continue editing the merged result |
 | Save | Save the current result as a PNG |
 | Pin | Keep the current result floating above other windows |
 | Confirm | Copy the final result to the clipboard |
@@ -168,8 +159,8 @@ Open Settings from the menu bar to configure:
 ## Project Structure
 
 - `aulycShot/App/` — app entry point, delegate, and bundle metadata
-- `aulycShot/Capture/` — overlay, selection, window detection, ScreenCaptureKit capture, scroll stitching, and clipboard
-- `aulycShot/Editor/` — annotation models, editor canvas, floating toolbar, mosaic, scroll preview, and pin windows
+- `aulycShot/Capture/` — overlay, selection, window detection, ScreenCaptureKit capture, and clipboard
+- `aulycShot/Editor/` — annotation models, editor canvas, floating toolbar, mosaic, and pin windows
 - `aulycShot/Trigger/` — double-tap `⌘` monitor and custom Carbon hotkey registration
 - `aulycShot/UI/` — menu bar controller, toast, cursor chip, and tooltips
 - `aulycShot/Settings/` — startup/settings window and preferences UI

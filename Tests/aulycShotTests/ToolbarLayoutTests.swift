@@ -30,7 +30,7 @@ final class ToolbarLayoutTests: XCTestCase {
     func testRemovedItemsAreDroppedFromPersistedLayout() {
         let layout = ToolbarLayout(dictionary: [
             "primary": ["rectangle", "moveSelection", "ocr", "beautify", "colorPicker", "emoji", "ellipse"],
-            "side": ["save"],
+            "side": ["scrollCapture", "save"],
             "hidden": [],
         ]).normalized()
 
@@ -40,6 +40,7 @@ final class ToolbarLayoutTests: XCTestCase {
         XCTAssertFalse(rawValues.contains("beautify"))
         XCTAssertFalse(rawValues.contains("colorPicker"))
         XCTAssertFalse(rawValues.contains("emoji"))
+        XCTAssertFalse(rawValues.contains("scrollCapture"))
         XCTAssertTrue(rawValues.contains("magnifier"))
         XCTAssertEqual(Set(rawValues), Set(ToolbarItemID.allCases.map(\.rawValue)))
     }
@@ -50,12 +51,12 @@ final class ToolbarLayoutTests: XCTestCase {
     }
 
     func testRuntimeToolbarButtonsExposeStableAccessibilityNames() throws {
-        let toolbar = ToolbarView(items: [.scrollCapture, .record], orientation: .vertical)
+        let toolbar = ToolbarView(items: [.save, .record], orientation: .vertical)
         let buttons = toolbar.subviews.compactMap { $0 as? ToolButton }
 
         XCTAssertEqual(buttons.count, 2)
-        XCTAssertEqual(buttons[0].identifier?.rawValue, "editor-toolbar-scrollCapture")
-        XCTAssertEqual(buttons[0].accessibilityLabel(), ToolbarItemID.scrollCapture.tooltip)
+        XCTAssertEqual(buttons[0].identifier?.rawValue, "editor-toolbar-save")
+        XCTAssertEqual(buttons[0].accessibilityLabel(), ToolbarItemID.save.tooltip)
         XCTAssertEqual(buttons[1].identifier?.rawValue, "editor-toolbar-record")
         XCTAssertEqual(buttons[1].accessibilityLabel(), ToolbarItemID.record.tooltip)
     }

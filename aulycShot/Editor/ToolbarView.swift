@@ -50,7 +50,6 @@ class ToolbarView: NSView {
     var onToolSelected: ((EditTool) -> Void)?
     var onUndo: (() -> Void)?
     var onRedo: (() -> Void)?
-    var onScrollCapture: (() -> Void)?
     var onInsertImage: (() -> Void)?
     var onQRCode: (() -> Void)?
     var onSave: (() -> Void)?
@@ -101,21 +100,15 @@ class ToolbarView: NSView {
         btn.alphaValue = enabled ? 1.0 : 0.35
     }
 
-    /// `true` if this toolbar holds the given item.
-    func contains(_ id: ToolbarItemID) -> Bool { buttons[id] != nil }
-
     /// Frame of an item's button in this toolbar's coordinate space.
     func frame(for id: ToolbarItemID) -> NSRect? { buttons[id]?.frame }
 
     // Convenience wrappers so callers don't repeat the id literals.
-    func setScrollCaptureActive(_ active: Bool) { setActive(active, for: .scrollCapture) }
-    func setScrollCaptureEnabled(_ enabled: Bool) { setEnabled(enabled, for: .scrollCapture) }
     func setUndoEnabled(_ enabled: Bool) { setEnabled(enabled, for: .undo) }
     func setRedoEnabled(_ enabled: Bool) { setEnabled(enabled, for: .redo) }
     func setRecordingEnabled(_ enabled: Bool) {
         setEnabled(enabled, for: .record)
     }
-    var scrollCaptureButtonFrame: NSRect? { frame(for: .scrollCapture) }
 
     private func setupButtons() {
         let size = Self.buttonSize
@@ -172,7 +165,6 @@ class ToolbarView: NSView {
         case .insertImage:   onInsertImage?()
         case .undo:          onUndo?()
         case .redo:          onRedo?()
-        case .scrollCapture: onScrollCapture?()
         case .qrCode:        onQRCode?()
         case .save:          onSave?()
         case .pin:           onPin?()

@@ -22,7 +22,6 @@ enum ToolbarItemID: String, Codable, CaseIterable {
     // Stateful actions
     case undo
     case redo
-    case scrollCapture
     // Output actions
     case save
     case pin
@@ -47,7 +46,7 @@ extension ToolbarItemID {
         switch self {
         case .rectangle, .ellipse, .arrow, .line, .pen, .marker, .mosaic, .eraser, .magnifier, .numbered, .text:
             return .toggleTool
-        case .scrollCapture, .qrCode:
+        case .qrCode:
             return .toggleAction
         case .insertImage, .undo, .redo, .save, .pin, .record, .close, .confirm:
             return .momentary
@@ -89,7 +88,6 @@ extension ToolbarItemID {
         case .insertImage:   return "photo"
         case .undo:          return "arrow.uturn.backward"
         case .redo:          return "arrow.uturn.forward"
-        case .scrollCapture: return "arrow.up.and.down.text.horizontal"
         case .save:          return "square.and.arrow.down"
         case .pin:           return "pin"
         case .record:        return "record.circle"
@@ -159,7 +157,6 @@ extension ToolbarItemID {
         case .insertImage:   title = L10n.tipInsertImage
         case .undo:          title = L10n.tipUndo
         case .redo:          title = L10n.tipRedo
-        case .scrollCapture: title = L10n.tipScrollCapture
         case .save:          title = L10n.tipSave
         case .pin:           title = L10n.tipPin
         case .record:        title = L10n.tipRecord
@@ -230,7 +227,7 @@ struct ToolbarLayout: Equatable {
     /// recorded.
     static let canonicalOrder: [ToolbarItemID] = [
         .rectangle, .ellipse, .line, .arrow, .pen, .marker, .mosaic, .eraser, .numbered, .text, .insertImage,
-        .magnifier, .undo, .redo, .scrollCapture, .qrCode,
+        .magnifier, .undo, .redo, .qrCode,
         .save, .pin, .record, .close, .confirm,
     ]
 
@@ -243,7 +240,7 @@ struct ToolbarLayout: Equatable {
                 .rectangle, .ellipse, .line, .arrow, .pen, .marker, .mosaic, .eraser, .numbered, .text, .insertImage,
                 .magnifier, .qrCode, .undo, .redo,
             ],
-            side: [.scrollCapture, .save, .pin, .record, .close, .confirm],
+            side: [.save, .pin, .record, .close, .confirm],
             hidden: []
         )
     }

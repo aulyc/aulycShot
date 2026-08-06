@@ -2,17 +2,13 @@ import AppKit
 import ScreenCaptureKit
 
 struct ScreenCapturer {
-    /// - Parameter excludingWindowNumbers: window numbers (`NSWindow.windowNumber`)
-    ///   to omit from the capture — used so aulycShot's own scroll-capture chrome
-    ///   (e.g. the on-screen hint toast) is never baked into a captured frame.
     static func capture(
         rect: CGRect,
         screen: NSScreen,
-        excludingWindowNumbers: [CGWindowID] = [],
         timeout: TimeInterval? = nil
     ) -> NSImage? {
         guard rect.width > 0, rect.height > 0 else { return nil }
-        let excludedWindowNumbers = effectiveExcludedWindowNumbers(excludingWindowNumbers)
+        let excludedWindowNumbers = effectiveExcludedWindowNumbers()
         let requestedDisplayID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
         let screenScale = screen.backingScaleFactor
 
@@ -58,9 +54,9 @@ struct ScreenCapturer {
         return resultBox.get()
     }
 
-    private static func effectiveExcludedWindowNumbers(_ windowNumbers: [CGWindowID]) -> [CGWindowID] {
+    private static func effectiveExcludedWindowNumbers() -> [CGWindowID] {
         var seen = Set<CGWindowID>()
-        return (windowNumbers + ToastWindow.captureExcludedWindowNumbers).filter { windowNumber in
+        return ToastWindow.captureExcludedWindowNumbers.filter { windowNumber in
             windowNumber > 0 && seen.insert(windowNumber).inserted
         }
     }
