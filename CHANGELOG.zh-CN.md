@@ -5,6 +5,8 @@
 
 ## [Unreleased]
 
+## [1.8.14] - 2026-08-06
+
 ### 改进
 
 - 将“关于”页与 README 中的 Linux.do 致谢替换为对开源项目 capcap 的链接致谢，说明其为 aulycShot 提供了最初的灵感与基础

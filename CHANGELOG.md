@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.14] - 2026-08-06
+
 ### Changed
 
 - Replace the Linux.do acknowledgement with a linked credit to the open-source capcap project that inspired and provided the original foundation for aulycShot
