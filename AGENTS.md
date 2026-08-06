@@ -197,7 +197,7 @@ formal installation is a separate, explicitly authorized `make install-release` 
   crop/output orchestration, and collaborator callbacks. Editor chrome lives in
   `EditorKeyboardShortcut.swift`, `EditorOptionChrome.swift`, `ToolbarView.swift`,
   `ToolButton.swift`, `EditorSubToolbars.swift`, `EditorHUDControls.swift`,
-  `SelectionChromeOverlay.swift`, and the `Scroll*.swift` controls. Keep tool
+  and `SelectionChromeOverlay.swift`. Keep tool
   state changes paired with toolbar/sub-toolbar updates. Verify with
   `bash scripts/compile-check.sh`; use `bash scripts/rebuild-and-open.sh` for
   UI interaction changes.
