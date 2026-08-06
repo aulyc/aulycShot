@@ -1,0 +1,39 @@
+{
+  "appExecutableSha256": "5ac6abbfc7ae00e4a4900d2143e5d0b78b378c60868dcf5419b1974717160446",
+  "architecture": "arm64",
+  "architectures": [
+    "arm64"
+  ],
+  "artifacts": [
+    {
+      "file": "aulycShot-1.8.13-build.515-arm64.dmg",
+      "sha256": "c9e9b6b1fa92325bfc12e15b742f3a7e5010452b65f9ae0bbf39c136b48d7d60"
+    }
+  ],
+  "buildNumber": 515,
+  "builtAt": "2026-08-06T02:16:25Z",
+  "bundleIdentifier": "com.aulyc.aulycshot",
+  "commit": "504f69f1a65f0fcee86c856ab8b6d41c70371bff",
+  "dirty": false,
+  "gatekeeperAccepted": true,
+  "hardenedRuntime": true,
+  "minimumSystemVersion": "14.0",
+  "notarizationSubmissionId": "bbab0aa0-e080-4956-8884-94c626c9c87a",
+  "notarized": true,
+  "project": "aulycShot",
+  "releaseChannel": "formal",
+  "releaseProfile": "macos-arm64-app",
+  "releaseProfileVersion": "2.0.0",
+  "schemaVersion": 1,
+  "signatureAuthority": "Developer ID Application: nan ma (M9M7M2ARFD)",
+  "signatureType": "developer-id",
+  "sourceBranch": "main",
+  "sourceRemoteCommit": "504f69f1a65f0fcee86c856ab8b6d41c70371bff",
+  "sourceRemoteTagCommit": "504f69f1a65f0fcee86c856ab8b6d41c70371bff",
+  "sourceRemoteVerifiedAt": "2026-08-06T02:17:15Z",
+  "sourceRepository": "aulyc/aulycShot",
+  "stapled": true,
+  "tag": "1.8.13",
+  "teamIdentifier": "M9M7M2ARFD",
+  "version": "1.8.13"
+}
