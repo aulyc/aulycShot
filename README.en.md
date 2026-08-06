@@ -181,7 +181,7 @@ bash scripts/rebuild-and-open.sh
 
 1. Thanks to the remarkable age of AI for helping more ideas become reality faster
 2. A tribute to Codex and Claude for their continued partnership in creation and development
-3. Thanks to the [Linux.do](https://linux.do) community for testing, feedback, and discussion
+3. Thanks to the open-source [capcap](https://github.com/realskyrin/capcap) project for providing the original inspiration and foundation for aulycShot
 4. Thanks to everyone who submits requests, reports issues, and suggests improvements
 5. Thanks to the open-source community and developer tools for inspiration and support
 6. Thanks to aulyc for the persistence and inspiration behind this journey

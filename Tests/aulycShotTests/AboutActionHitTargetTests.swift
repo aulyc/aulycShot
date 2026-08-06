@@ -49,6 +49,22 @@ final class AboutActionHitTargetTests: XCTestCase {
         let aboutLabels = aboutContent.descendants(of: NSTextField.self).map(\.stringValue)
         XCTAssertTrue(acknowledgementCopy.allSatisfy(aboutLabels.contains))
 
+        let capcapURL = try XCTUnwrap(URL(string: "https://github.com/realskyrin/capcap"))
+        let capcapLabel = try XCTUnwrap(aboutContent.descendants(of: NSTextField.self).first {
+            var containsCapcapLink = false
+            $0.attributedStringValue.enumerateAttribute(
+                .link,
+                in: NSRange(location: 0, length: $0.attributedStringValue.length)
+            ) { value, _, stop in
+                if value as? URL == capcapURL {
+                    containsCapcapLink = true
+                    stop.pointee = true
+                }
+            }
+            return containsCapcapLink
+        })
+        XCTAssertTrue(capcapLabel.isSelectable)
+
         let aboutTitleFrame = settingsView.convert(aboutTitle.bounds, from: aboutTitle)
         let settingsTitleFrame = settingsView.convert(settingsTitle.bounds, from: settingsTitle)
         XCTAssertEqual(aboutTitleFrame.maxY, settingsTitleFrame.maxY, accuracy: 0.5)

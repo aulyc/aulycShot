@@ -105,7 +105,13 @@ func buildAboutPane() -> NSView {
             L10n.aboutAcknowledgementFifth,
             L10n.aboutAcknowledgementSixth,
         ] {
-            let label = aboutBodyLabel(acknowledgement)
+            let label = acknowledgement == L10n.aboutAcknowledgementThird
+                ? aboutBodyLinkLabel(
+                    acknowledgement,
+                    linkText: "capcap",
+                    destination: URL(string: "https://github.com/realskyrin/capcap")!
+                )
+                : aboutBodyLabel(acknowledgement)
             stack.addArrangedSubview(label)
             label.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
             stack.addArrangedSubview(aboutSpacer(height: 7))
@@ -153,6 +159,34 @@ func buildAboutPane() -> NSView {
         label.lineBreakMode = .byWordWrapping
         label.maximumNumberOfLines = 0
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        return label
+    }
+
+    private func aboutBodyLinkLabel(
+        _ text: String,
+        linkText: String,
+        destination: URL
+    ) -> NSTextField {
+        let label = aboutBodyLabel(text)
+        let attributedText = NSMutableAttributedString(
+            string: text,
+            attributes: [
+                .font: NSFont.systemFont(ofSize: 13, weight: .regular),
+                .foregroundColor: SettingsPalette.secondaryText,
+            ]
+        )
+        let linkRange = (text as NSString).range(of: linkText)
+        let effectiveLinkRange = linkRange.location == NSNotFound
+            ? NSRange(location: 0, length: attributedText.length)
+            : linkRange
+        attributedText.addAttributes([
+            .link: destination,
+            .foregroundColor: NSColor.systemBlue,
+            .underlineStyle: NSUnderlineStyle.single.rawValue,
+        ], range: effectiveLinkRange)
+        label.attributedStringValue = attributedText
+        label.allowsEditingTextAttributes = true
+        label.isSelectable = true
         return label
     }
 
