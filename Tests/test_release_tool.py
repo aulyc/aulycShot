@@ -283,15 +283,18 @@ class ReleaseToolTests(unittest.TestCase):
         self.assertTrue(release_tool.codesign_has_runtime(signed))
         self.assertFalse(release_tool.codesign_has_runtime(unsigned))
 
-    def test_developer_id_signing_uses_explicit_apple_timestamp_service(self):
+    def test_developer_id_signing_uses_apple_default_timestamp_service_with_override(self):
         bundle_script = (PROJECT_ROOT / "scripts" / "bundle.sh").read_text(encoding="utf-8")
         formal_script = (PROJECT_ROOT / "scripts" / "formal-release.sh").read_text(encoding="utf-8")
-        expected_url = "http://timestamp.apple.com/ts01"
 
-        self.assertIn(f'APPLE_TIMESTAMP_URL="${{APPLE_TIMESTAMP_URL:-{expected_url}}}"', bundle_script)
-        self.assertIn('local timestamp_option="--timestamp=$APPLE_TIMESTAMP_URL"', bundle_script)
-        self.assertIn(f'APPLE_TIMESTAMP_URL="${{APPLE_TIMESTAMP_URL:-{expected_url}}}"', formal_script)
-        self.assertIn('"--timestamp=$APPLE_TIMESTAMP_URL"', formal_script)
+        self.assertIn('APPLE_TIMESTAMP_URL="${APPLE_TIMESTAMP_URL:-}"', bundle_script)
+        self.assertIn('local timestamp_option="--timestamp"', bundle_script)
+        self.assertIn('timestamp_option="--timestamp=$APPLE_TIMESTAMP_URL"', bundle_script)
+        self.assertIn('APPLE_TIMESTAMP_URL="${APPLE_TIMESTAMP_URL:-}"', formal_script)
+        self.assertIn('TIMESTAMP_OPTION="--timestamp"', formal_script)
+        self.assertIn('TIMESTAMP_OPTION="--timestamp=$APPLE_TIMESTAMP_URL"', formal_script)
+        self.assertNotIn("http://timestamp.apple.com/ts01", bundle_script)
+        self.assertNotIn("http://timestamp.apple.com/ts01", formal_script)
 
     def test_runtime_resources_accept_packaged_icons(self):
         app = self.root / "aulycShot.app"
