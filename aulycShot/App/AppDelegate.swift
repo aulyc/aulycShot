@@ -12,8 +12,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var recordingBorderPanel: RecordingBorderPanel?
     private var recordingScreenRect: NSRect = .zero
     private var recordingScreen: NSScreen?
-    private var recordingCancelLocalMonitor: Any?
-    private var recordingCancelGlobalMonitor: Any?
+    private var recordingKeyboardLocalMonitor: Any?
+    private var recordingKeyboardGlobalMonitor: Any?
     private var recordingCancelRequested = false
     private var appInitialized = false
     private var suspendedEditDraft: OverlayWindowController.SuspendedEditDraft?
@@ -805,7 +805,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             self?.finishRecording(url: url, error: error)
         }
         recordingEngine = engine
-        installRecordingCancelMonitors()
+        installRecordingKeyboardMonitors()
         applyHotkeyState()
 
         let excludedWindows = [
@@ -849,7 +849,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func stopRecordingUI() {
-        removeRecordingCancelMonitors()
+        removeRecordingKeyboardMonitors()
         recordingHUDPanel?.close()
         recordingHUDPanel = nil
         recordingBorderPanel?.close()
@@ -877,73 +877,83 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         recordingEngine.cancelRecording()
     }
 
-    private func installRecordingCancelMonitors() {
-        removeRecordingCancelMonitors()
-        recordingCancelLocalMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+    private func installRecordingKeyboardMonitors() {
+        removeRecordingKeyboardMonitors()
+        recordingKeyboardLocalMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            if Self.isPlainReturn(event) {
+                self?.stopRecordingAndSave()
+                return nil
+            }
             if Self.isPlainEscape(event) {
                 self?.cancelRecordingFromKeyboard()
                 return nil
             }
             return event
         }
-        recordingCancelGlobalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            if Self.isPlainEscape(event) {
+        recordingKeyboardGlobalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            if Self.isPlainReturn(event) {
+                self?.stopRecordingAndSave()
+            } else if Self.isPlainEscape(event) {
                 self?.cancelRecordingFromKeyboard()
             }
         }
     }
 
-    private func removeRecordingCancelMonitors() {
-        if let monitor = recordingCancelLocalMonitor {
+    private func removeRecordingKeyboardMonitors() {
+        if let monitor = recordingKeyboardLocalMonitor {
             NSEvent.removeMonitor(monitor)
-            recordingCancelLocalMonitor = nil
+            recordingKeyboardLocalMonitor = nil
         }
-        if let monitor = recordingCancelGlobalMonitor {
+        if let monitor = recordingKeyboardGlobalMonitor {
             NSEvent.removeMonitor(monitor)
-            recordingCancelGlobalMonitor = nil
+            recordingKeyboardGlobalMonitor = nil
         }
     }
 
-    private static func isPlainEscape(_ event: NSEvent) -> Bool {
+    static func isPlainReturn(_ event: NSEvent) -> Bool {
+        let activeModifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
+        return (event.keyCode == 36 || event.keyCode == 76) && activeModifiers.isEmpty
+    }
+
+    static func isPlainEscape(_ event: NSEvent) -> Bool {
         let activeModifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
         return event.keyCode == 53 && activeModifiers.isEmpty
     }
 
     private func promptToSaveRecording(tmpURL: URL) {
-        if let format = Defaults.recordingSavePreference.format {
-            saveRecordingToConfiguredDirectory(tmpURL: tmpURL, format: format)
-            return
-        }
-
-        promptToChooseRecordingFormat(tmpURL: tmpURL)
-    }
-
-    private func promptToChooseRecordingFormat(tmpURL: URL) {
-        var selectedFormat = Defaults.recordingSaveFormat
-        let alert = NSAlert()
-        alert.messageText = L10n.recordingFormatChoiceTitle
-        alert.informativeText = L10n.recordingFormatChoiceMessage
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: L10n.saveRecordingPrompt)
-        alert.addButton(withTitle: L10n.shortcutCancel)
-        alert.accessoryView = RecordingSaveAccessoryView(initialFormat: selectedFormat) { format in
-            selectedFormat = format
-        }
-
-        NSApp.activate(ignoringOtherApps: true)
-        guard alert.runModal() == .alertFirstButtonReturn else {
+        let configuration = RecordingSavePromptConfiguration(
+            preference: Defaults.recordingSavePreference,
+            lastSelectedFormat: Defaults.recordingSaveFormat
+        )
+        let savePanel = RecordingSavePanel(
+            initialFormat: configuration.initialFormat,
+            allowsFormatSelection: configuration.allowsFormatSelection,
+            defaultDirectory: Defaults.recordingSaveDirectory,
+            lastCustomDirectory: Defaults.lastCustomRecordingSaveDirectory
+        )
+        guard savePanel.presentModally() == .OK else {
             try? FileManager.default.removeItem(at: tmpURL)
             return
         }
 
-        Defaults.recordingSaveFormat = selectedFormat
-        saveRecordingToConfiguredDirectory(tmpURL: tmpURL, format: selectedFormat)
+        let selectedFormat = savePanel.selectedFormat
+        if configuration.allowsFormatSelection {
+            Defaults.recordingSaveFormat = selectedFormat
+        }
+        if !savePanel.usesDefaultDirectory {
+            Defaults.lastCustomRecordingSaveDirectory = savePanel.customDirectory
+        }
+        saveRecording(
+            tmpURL: tmpURL,
+            to: savePanel.selectedDirectory,
+            format: selectedFormat
+        )
     }
 
-    private func saveRecordingToConfiguredDirectory(tmpURL: URL, format: ScreenRecordingFormat) {
+    private func saveRecording(tmpURL: URL, to directory: URL, format: ScreenRecordingFormat) {
         do {
             let filename = OutputFilename.recordingFileName(fileExtension: format.fileExtension)
-            let destination = try SaveDestination.uniqueFile(in: Defaults.recordingSaveDirectory, fileName: filename)
+            let destination = try SaveDestination.uniqueFile(in: directory, fileName: filename)
             saveRecording(tmpURL: tmpURL, destination: destination, format: format)
         } catch {
             try? FileManager.default.removeItem(at: tmpURL)
@@ -1044,54 +1054,5 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return URL(fileURLWithPath: filePath)
-    }
-}
-
-private final class RecordingSaveAccessoryView: NSView {
-    private static let labelTrailingInset: CGFloat = 170
-    private let popup = NSPopUpButton(frame: .zero, pullsDown: false)
-    private let onFormatChanged: (ScreenRecordingFormat) -> Void
-
-    init(initialFormat: ScreenRecordingFormat, onFormatChanged: @escaping (ScreenRecordingFormat) -> Void) {
-        self.onFormatChanged = onFormatChanged
-        super.init(frame: NSRect(x: 0, y: 0, width: 460, height: 32))
-
-        let label = NSTextField(labelWithString: L10n.recordingFormatLabel)
-        label.translatesAutoresizingMaskIntoConstraints = false
-
-        popup.translatesAutoresizingMaskIntoConstraints = false
-        for format in ScreenRecordingFormat.allCases {
-            popup.addItem(withTitle: format.displayName)
-            popup.lastItem?.representedObject = format.rawValue
-        }
-        popup.selectItem(withTitle: initialFormat.displayName)
-        popup.target = self
-        popup.action = #selector(formatDidChange)
-
-        addSubview(label)
-        addSubview(popup)
-
-        NSLayoutConstraint.activate([
-            label.trailingAnchor.constraint(equalTo: leadingAnchor, constant: Self.labelTrailingInset),
-            label.centerYAnchor.constraint(equalTo: centerYAnchor),
-
-            popup.leadingAnchor.constraint(equalTo: label.trailingAnchor, constant: 8),
-            popup.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor),
-            popup.centerYAnchor.constraint(equalTo: centerYAnchor),
-            popup.widthAnchor.constraint(greaterThanOrEqualToConstant: 140),
-        ])
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    @objc private func formatDidChange() {
-        guard let raw = popup.selectedItem?.representedObject as? String,
-              let format = ScreenRecordingFormat(rawValue: raw)
-        else {
-            return
-        }
-        onFormatChanged(format)
     }
 }

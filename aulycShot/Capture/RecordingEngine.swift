@@ -41,6 +41,46 @@ enum RecordingSavePreference: String, CaseIterable {
     }
 }
 
+struct RecordingSavePromptConfiguration: Equatable {
+    let initialFormat: ScreenRecordingFormat
+    let allowsFormatSelection: Bool
+
+    init(preference: RecordingSavePreference, lastSelectedFormat: ScreenRecordingFormat) {
+        if let fixedFormat = preference.format {
+            initialFormat = fixedFormat
+            allowsFormatSelection = false
+        } else {
+            initialFormat = lastSelectedFormat
+            allowsFormatSelection = true
+        }
+    }
+}
+
+struct RecordingSavePathSelection: Equatable {
+    let defaultDirectory: URL
+    private(set) var customDirectory: URL
+    var usesDefaultDirectory: Bool
+
+    var selectedDirectory: URL {
+        usesDefaultDirectory ? defaultDirectory : customDirectory
+    }
+
+    init(
+        defaultDirectory: URL,
+        customDirectory: URL? = nil,
+        usesDefaultDirectory: Bool = true
+    ) {
+        let normalizedDirectory = defaultDirectory.standardizedFileURL
+        self.defaultDirectory = normalizedDirectory
+        self.customDirectory = customDirectory?.standardizedFileURL ?? normalizedDirectory
+        self.usesDefaultDirectory = usesDefaultDirectory
+    }
+
+    mutating func selectCustomDirectory(_ directory: URL) {
+        customDirectory = directory.standardizedFileURL
+    }
+}
+
 typealias RecordingProgressCallback = (_ seconds: Int) -> Void
 typealias RecordingCompletionCallback = (_ url: URL?, _ error: Error?) -> Void
 

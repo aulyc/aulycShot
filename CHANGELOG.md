@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Always show a compact save panel after recording, with a default-path option, remembered custom folder, and format selection only when Settings uses manual format choice
+- Stop recording and open the save panel with either the main Return key or numeric keypad Enter
+
 ## [1.8.15] - 2026-08-06
 
 ### Changed

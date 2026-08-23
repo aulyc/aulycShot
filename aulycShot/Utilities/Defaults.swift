@@ -201,7 +201,8 @@ enum L10n {
     static var recordingFormatMP4: String { s("recordingFormatMP4") }
     static var recordingFormatGIF: String { s("recordingFormatGIF") }
     static var recordingFormatChoiceTitle: String { s("recordingFormatChoiceTitle") }
-    static var recordingFormatChoiceMessage: String { s("recordingFormatChoiceMessage") }
+    static var recordingUseDefaultSavePath: String { s("recordingUseDefaultSavePath") }
+    static var recordingSaveLocationLabel: String { s("recordingSaveLocationLabel") }
     static func screenshotSaved(to path: String) -> String {
         String(format: s("screenshotSaved"), path)
     }
@@ -787,6 +788,24 @@ struct Defaults {
             if oldValue != normalized {
                 NotificationCenter.default.post(name: .recordingSaveDirectoryDidChange, object: nil)
             }
+        }
+    }
+
+    static var lastCustomRecordingSaveDirectory: URL? {
+        get {
+            guard let path = defaults.string(forKey: "lastCustomRecordingSaveDirectory"),
+                  !path.isEmpty
+            else {
+                return nil
+            }
+            return URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
+        }
+        set {
+            guard let newValue else {
+                defaults.removeObject(forKey: "lastCustomRecordingSaveDirectory")
+                return
+            }
+            defaults.set(newValue.standardizedFileURL.path, forKey: "lastCustomRecordingSaveDirectory")
         }
     }
 
