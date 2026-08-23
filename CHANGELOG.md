@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-08-23
+
 ### Added
 
 - Customize the recording file name in the save panel, with the selected MP4 or GIF extension shown separately and collision-safe numbering for existing files
