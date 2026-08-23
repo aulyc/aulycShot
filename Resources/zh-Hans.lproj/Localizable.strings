@@ -103,7 +103,9 @@
 "recordingFormatManual" = "手动选择";
 "recordingFormatMP4" = "MP4";
 "recordingFormatGIF" = "GIF";
-"recordingFormatChoiceTitle" = "保存录制";
+"recordingFormatChoiceTitle" = "保存录屏设置";
+"recordingFileNameLabel" = "名称";
+"recordingFileNamePlaceholder" = "输入文件名称";
 "recordingUseDefaultSavePath" = "使用设置中的默认保存路径";
 "recordingSaveLocationLabel" = "位置";
 "screenshotSaved" = "截图已保存到 %@";

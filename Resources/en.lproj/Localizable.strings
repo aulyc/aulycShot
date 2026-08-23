@@ -103,7 +103,9 @@
 "recordingFormatManual" = "Choose each time";
 "recordingFormatMP4" = "MP4";
 "recordingFormatGIF" = "GIF";
-"recordingFormatChoiceTitle" = "Save Recording";
+"recordingFormatChoiceTitle" = "Recording Save Settings";
+"recordingFileNameLabel" = "Name";
+"recordingFileNamePlaceholder" = "Enter file name";
 "recordingUseDefaultSavePath" = "Use default path from Settings";
 "recordingSaveLocationLabel" = "Location";
 "screenshotSaved" = "Screenshot saved to %@";

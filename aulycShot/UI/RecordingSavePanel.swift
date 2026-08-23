@@ -1,14 +1,18 @@
 import AppKit
 
 @MainActor
-final class RecordingSavePanel: NSPanel {
+final class RecordingSavePanel: NSPanel, NSTextFieldDelegate {
     static let contentWidth: CGFloat = 333
-    static let contentHeight: CGFloat = 252
+    static let contentHeight: CGFloat = 292
 
     let appIconView = NSImageView()
     let headingLabel = NSTextField(labelWithString: L10n.recordingFormatChoiceTitle)
+    let headerStack = NSStackView()
     let formatLabel = NSTextField(labelWithString: L10n.recordingFormatLabel)
     let formatPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    let nameLabel = NSTextField(labelWithString: L10n.recordingFileNameLabel)
+    let nameField = NSTextField(string: "")
+    let nameExtensionLabel = NSTextField(labelWithString: "")
     let defaultPathCheckbox = NSButton(
         checkboxWithTitle: L10n.recordingUseDefaultSavePath,
         target: nil,
@@ -22,6 +26,7 @@ final class RecordingSavePanel: NSPanel {
     let actionStack = NSStackView()
 
     private let fallbackFormat: ScreenRecordingFormat
+    private let defaultFileNameStem: String
     private var pathSelection: RecordingSavePathSelection
 
     var selectedFormat: ScreenRecordingFormat {
@@ -35,6 +40,11 @@ final class RecordingSavePanel: NSPanel {
 
     var selectedDirectory: URL {
         pathSelection.selectedDirectory
+    }
+
+    var selectedFileName: String {
+        let stem = normalizedFileNameStem ?? defaultFileNameStem
+        return "\(stem).\(selectedFormat.fileExtension)"
     }
 
     var usesDefaultDirectory: Bool {
@@ -52,6 +62,10 @@ final class RecordingSavePanel: NSPanel {
         lastCustomDirectory: URL?
     ) {
         fallbackFormat = initialFormat
+        let defaultFileName = OutputFilename.recordingFileName(
+            fileExtension: initialFormat.fileExtension
+        )
+        defaultFileNameStem = (defaultFileName as NSString).deletingPathExtension
         pathSelection = RecordingSavePathSelection(
             defaultDirectory: defaultDirectory,
             customDirectory: lastCustomDirectory
@@ -75,6 +89,7 @@ final class RecordingSavePanel: NSPanel {
             allowsFormatSelection: allowsFormatSelection
         )
         buildLayout()
+        refreshFileNameControls()
         refreshPathControls()
     }
 
@@ -88,6 +103,8 @@ final class RecordingSavePanel: NSPanel {
         NSApp.activate(ignoringOtherApps: true)
         center()
         makeKeyAndOrderFront(nil)
+        makeFirstResponder(nameField)
+        nameField.selectText(nil)
         let response = NSApp.runModal(for: self)
         orderOut(nil)
         return response
@@ -124,6 +141,7 @@ final class RecordingSavePanel: NSPanel {
         headingLabel.translatesAutoresizingMaskIntoConstraints = false
 
         configureFormLabel(formatLabel)
+        configureFormLabel(nameLabel)
         configureFormLabel(locationLabel)
 
         formatPopup.translatesAutoresizingMaskIntoConstraints = false
@@ -133,6 +151,23 @@ final class RecordingSavePanel: NSPanel {
         }
         formatPopup.selectItem(withTitle: initialFormat.displayName)
         formatPopup.isEnabled = allowsFormatSelection
+        formatPopup.target = self
+        formatPopup.action = #selector(formatSelectionDidChange)
+
+        nameField.stringValue = defaultFileNameStem
+        nameField.placeholderString = L10n.recordingFileNamePlaceholder
+        nameField.delegate = self
+        nameField.lineBreakMode = .byTruncatingMiddle
+        nameField.cell?.usesSingleLineMode = true
+        nameField.translatesAutoresizingMaskIntoConstraints = false
+        nameField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        nameExtensionLabel.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
+        nameExtensionLabel.textColor = .secondaryLabelColor
+        nameExtensionLabel.alignment = .right
+        nameExtensionLabel.translatesAutoresizingMaskIntoConstraints = false
+        nameExtensionLabel.setContentHuggingPriority(.required, for: .horizontal)
+        nameExtensionLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
 
         defaultPathCheckbox.translatesAutoresizingMaskIntoConstraints = false
         defaultPathCheckbox.target = self
@@ -187,6 +222,13 @@ final class RecordingSavePanel: NSPanel {
         )
         contentView = rootView
 
+        headerStack.orientation = .horizontal
+        headerStack.alignment = .centerY
+        headerStack.spacing = 10
+        headerStack.addArrangedSubview(appIconView)
+        headerStack.addArrangedSubview(headingLabel)
+        headerStack.translatesAutoresizingMaskIntoConstraints = false
+
         actionStack.orientation = .horizontal
         actionStack.alignment = .centerY
         actionStack.spacing = 10
@@ -195,10 +237,12 @@ final class RecordingSavePanel: NSPanel {
         actionStack.translatesAutoresizingMaskIntoConstraints = false
 
         [
-            appIconView,
-            headingLabel,
+            headerStack,
             formatLabel,
             formatPopup,
+            nameLabel,
+            nameField,
+            nameExtensionLabel,
             defaultPathCheckbox,
             locationLabel,
             pathValue,
@@ -207,17 +251,16 @@ final class RecordingSavePanel: NSPanel {
         ].forEach(rootView.addSubview)
 
         NSLayoutConstraint.activate([
-            appIconView.leadingAnchor.constraint(equalTo: rootView.leadingAnchor, constant: 28),
-            appIconView.topAnchor.constraint(equalTo: rootView.topAnchor, constant: 24),
+            headerStack.centerXAnchor.constraint(equalTo: rootView.centerXAnchor),
+            headerStack.topAnchor.constraint(equalTo: rootView.topAnchor, constant: 24),
+            headerStack.leadingAnchor.constraint(greaterThanOrEqualTo: rootView.leadingAnchor, constant: 28),
+            headerStack.trailingAnchor.constraint(lessThanOrEqualTo: rootView.trailingAnchor, constant: -28),
+
             appIconView.widthAnchor.constraint(equalToConstant: 30),
             appIconView.heightAnchor.constraint(equalToConstant: 30),
 
-            headingLabel.leadingAnchor.constraint(equalTo: appIconView.trailingAnchor, constant: 10),
-            headingLabel.trailingAnchor.constraint(lessThanOrEqualTo: rootView.trailingAnchor, constant: -28),
-            headingLabel.centerYAnchor.constraint(equalTo: appIconView.centerYAnchor),
-
             formatLabel.leadingAnchor.constraint(equalTo: rootView.leadingAnchor, constant: 28),
-            formatLabel.topAnchor.constraint(equalTo: appIconView.bottomAnchor, constant: 22),
+            formatLabel.topAnchor.constraint(equalTo: headerStack.bottomAnchor, constant: 22),
             formatLabel.widthAnchor.constraint(equalToConstant: 36),
 
             formatPopup.leadingAnchor.constraint(equalTo: formatLabel.trailingAnchor, constant: 8),
@@ -225,8 +268,20 @@ final class RecordingSavePanel: NSPanel {
             formatPopup.centerYAnchor.constraint(equalTo: formatLabel.centerYAnchor),
             formatPopup.heightAnchor.constraint(equalToConstant: 26),
 
+            nameLabel.leadingAnchor.constraint(equalTo: rootView.leadingAnchor, constant: 28),
+            nameLabel.topAnchor.constraint(equalTo: formatPopup.bottomAnchor, constant: 14),
+            nameLabel.widthAnchor.constraint(equalToConstant: 36),
+
+            nameField.leadingAnchor.constraint(equalTo: nameLabel.trailingAnchor, constant: 8),
+            nameField.trailingAnchor.constraint(equalTo: nameExtensionLabel.leadingAnchor, constant: -6),
+            nameField.centerYAnchor.constraint(equalTo: nameLabel.centerYAnchor),
+            nameField.heightAnchor.constraint(equalToConstant: 26),
+
+            nameExtensionLabel.trailingAnchor.constraint(equalTo: choosePathButton.trailingAnchor),
+            nameExtensionLabel.centerYAnchor.constraint(equalTo: nameField.centerYAnchor),
+
             locationLabel.leadingAnchor.constraint(equalTo: rootView.leadingAnchor, constant: 28),
-            locationLabel.topAnchor.constraint(equalTo: formatPopup.bottomAnchor, constant: 14),
+            locationLabel.topAnchor.constraint(equalTo: nameField.bottomAnchor, constant: 14),
             locationLabel.widthAnchor.constraint(equalToConstant: 36),
 
             pathValue.leadingAnchor.constraint(equalTo: locationLabel.trailingAnchor, constant: 8),
@@ -251,6 +306,41 @@ final class RecordingSavePanel: NSPanel {
             actionStack.topAnchor.constraint(equalTo: defaultPathCheckbox.bottomAnchor, constant: 22),
             actionStack.bottomAnchor.constraint(equalTo: rootView.bottomAnchor, constant: -22),
         ])
+    }
+
+    func controlTextDidChange(_ notification: Notification) {
+        guard notification.object as? NSTextField === nameField else { return }
+        refreshFileNameControls()
+    }
+
+    @objc private func formatSelectionDidChange() {
+        refreshFileNameControls()
+    }
+
+    private var normalizedFileNameStem: String? {
+        var stem = nameField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !stem.isEmpty,
+              !stem.contains("/"),
+              stem.rangeOfCharacter(from: .controlCharacters) == nil
+        else {
+            return nil
+        }
+
+        for format in ScreenRecordingFormat.allCases {
+            let suffix = ".\(format.fileExtension)"
+            if stem.count > suffix.count, stem.lowercased().hasSuffix(suffix) {
+                stem.removeLast(suffix.count)
+                break
+            }
+        }
+
+        let normalized = stem.trimmingCharacters(in: .whitespacesAndNewlines)
+        return normalized.isEmpty ? nil : normalized
+    }
+
+    private func refreshFileNameControls() {
+        nameExtensionLabel.stringValue = ".\(selectedFormat.fileExtension)"
+        saveButton.isEnabled = normalizedFileNameStem != nil
     }
 
     @objc private func defaultPathSelectionDidChange() {
@@ -301,6 +391,11 @@ final class RecordingSavePanel: NSPanel {
     }
 
     @objc private func saveClicked() {
+        guard normalizedFileNameStem != nil else {
+            NSSound.beep()
+            makeFirstResponder(nameField)
+            return
+        }
         finish(with: .OK)
     }
 

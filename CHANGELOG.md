@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Customize the recording file name in the save panel, with the selected MP4 or GIF extension shown separately and collision-safe numbering for existing files
+
+### Changed
+
+- Rename the recording save panel to Recording Save Settings and center its 30-point app icon and title as one header row
+
 ## [1.9.0] - 2026-08-23
 
 ### Added

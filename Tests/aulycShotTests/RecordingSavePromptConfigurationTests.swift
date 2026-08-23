@@ -89,7 +89,7 @@ final class RecordingSavePromptConfigurationTests: XCTestCase {
         XCTAssertEqual(Defaults.recordingSaveDirectory, originalDefaultDirectory)
     }
 
-    func testSavePanelUsesCompactLeftAlignedHeaderAndFolderIcon() throws {
+    func testSavePanelUsesCompactCenteredHeaderAndFolderIcon() throws {
         if ProcessInfo.processInfo.environment["AULYC_SKIP_WINDOW_SERVER_TESTS"] == "1" {
             throw XCTSkip("Requires an interactive WindowServer session")
         }
@@ -111,10 +111,15 @@ final class RecordingSavePromptConfigurationTests: XCTestCase {
         XCTAssertEqual(panel.appIconView.frame.width, 30, accuracy: 0.5)
         XCTAssertEqual(panel.appIconView.frame.height, 30, accuracy: 0.5)
         XCTAssertEqual(panel.appIconView.frame.midY, panel.headingLabel.frame.midY, accuracy: 0.5)
+        XCTAssertEqual(panel.headerStack.frame.midX, contentView.bounds.midX, accuracy: 0.5)
+        XCTAssertEqual(panel.headingLabel.stringValue, L10n.recordingFormatChoiceTitle)
         XCTAssertEqual(panel.headingLabel.alignment, .left)
+        XCTAssertEqual(panel.nameLabel.stringValue, L10n.recordingFileNameLabel)
+        XCTAssertEqual(panel.nameExtensionLabel.stringValue, ".mp4")
+        XCTAssertTrue(panel.selectedFileName.hasSuffix(".mp4"))
         XCTAssertEqual(
             panel.formatLabel.alignmentRect(forFrame: panel.formatLabel.frame).minX,
-            panel.appIconView.frame.minX,
+            28,
             accuracy: 0.5
         )
         XCTAssertEqual(
@@ -128,8 +133,18 @@ final class RecordingSavePromptConfigurationTests: XCTestCase {
             accuracy: 0.5
         )
         XCTAssertEqual(
+            panel.nameField.alignmentRect(forFrame: panel.nameField.frame).minX,
+            panel.formatPopup.alignmentRect(forFrame: panel.formatPopup.frame).minX,
+            accuracy: 0.5
+        )
+        XCTAssertEqual(
+            panel.nameExtensionLabel.alignmentRect(forFrame: panel.nameExtensionLabel.frame).maxX,
+            panel.choosePathButton.alignmentRect(forFrame: panel.choosePathButton.frame).maxX,
+            accuracy: 0.5
+        )
+        XCTAssertEqual(
             panel.locationLabel.alignmentRect(forFrame: panel.locationLabel.frame).minX,
-            panel.appIconView.frame.minX,
+            28,
             accuracy: 0.5
         )
         XCTAssertEqual(
@@ -177,5 +192,47 @@ final class RecordingSavePromptConfigurationTests: XCTestCase {
 
         XCTAssertTrue(panel.formatPopup.isEnabled)
         XCTAssertEqual(panel.selectedFormat, .gif)
+        XCTAssertEqual(panel.nameExtensionLabel.stringValue, ".gif")
+
+        panel.nameField.stringValue = "  product-demo.gif  "
+        XCTAssertEqual(panel.selectedFileName, "product-demo.gif")
+
+        panel.formatPopup.selectItem(withTitle: ScreenRecordingFormat.mp4.displayName)
+        panel.formatPopup.sendAction(panel.formatPopup.action, to: panel.formatPopup.target)
+
+        XCTAssertEqual(panel.nameExtensionLabel.stringValue, ".mp4")
+        XCTAssertEqual(panel.selectedFileName, "product-demo.mp4")
+    }
+
+    func testSavePanelRequiresAValidCustomFileName() throws {
+        if ProcessInfo.processInfo.environment["AULYC_SKIP_WINDOW_SERVER_TESTS"] == "1" {
+            throw XCTSkip("Requires an interactive WindowServer session")
+        }
+
+        let panel = RecordingSavePanel(
+            initialFormat: .mp4,
+            allowsFormatSelection: true,
+            defaultDirectory: URL(fileURLWithPath: "/tmp/aulycShot-default-recording-path"),
+            lastCustomDirectory: nil
+        )
+
+        panel.nameField.stringValue = ""
+        panel.controlTextDidChange(
+            Notification(name: NSControl.textDidChangeNotification, object: panel.nameField)
+        )
+        XCTAssertFalse(panel.saveButton.isEnabled)
+
+        panel.nameField.stringValue = "folder/name"
+        panel.controlTextDidChange(
+            Notification(name: NSControl.textDidChangeNotification, object: panel.nameField)
+        )
+        XCTAssertFalse(panel.saveButton.isEnabled)
+
+        panel.nameField.stringValue = "weekly-demo"
+        panel.controlTextDidChange(
+            Notification(name: NSControl.textDidChangeNotification, object: panel.nameField)
+        )
+        XCTAssertTrue(panel.saveButton.isEnabled)
+        XCTAssertEqual(panel.selectedFileName, "weekly-demo.mp4")
     }
 }

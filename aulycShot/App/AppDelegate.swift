@@ -946,14 +946,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         saveRecording(
             tmpURL: tmpURL,
             to: savePanel.selectedDirectory,
-            format: selectedFormat
+            format: selectedFormat,
+            fileName: savePanel.selectedFileName
         )
     }
 
-    private func saveRecording(tmpURL: URL, to directory: URL, format: ScreenRecordingFormat) {
+    private func saveRecording(
+        tmpURL: URL,
+        to directory: URL,
+        format: ScreenRecordingFormat,
+        fileName: String
+    ) {
         do {
-            let filename = OutputFilename.recordingFileName(fileExtension: format.fileExtension)
-            let destination = try SaveDestination.uniqueFile(in: directory, fileName: filename)
+            let destination = try SaveDestination.uniqueFile(in: directory, fileName: fileName)
             saveRecording(tmpURL: tmpURL, destination: destination, format: format)
         } catch {
             try? FileManager.default.removeItem(at: tmpURL)

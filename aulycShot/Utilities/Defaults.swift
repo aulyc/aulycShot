@@ -201,6 +201,8 @@ enum L10n {
     static var recordingFormatMP4: String { s("recordingFormatMP4") }
     static var recordingFormatGIF: String { s("recordingFormatGIF") }
     static var recordingFormatChoiceTitle: String { s("recordingFormatChoiceTitle") }
+    static var recordingFileNameLabel: String { s("recordingFileNameLabel") }
+    static var recordingFileNamePlaceholder: String { s("recordingFileNamePlaceholder") }
     static var recordingUseDefaultSavePath: String { s("recordingUseDefaultSavePath") }
     static var recordingSaveLocationLabel: String { s("recordingSaveLocationLabel") }
     static func screenshotSaved(to path: String) -> String {
