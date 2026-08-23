@@ -328,7 +328,7 @@
     },
     {
       "path": "docs/RELEASE.md",
-      "sha256": "a6f2f4b06bd40e8d50abbdb56fbdd6c9cdab613942bbdfc8433db8a4fcfc53b8"
+      "sha256": "437f860b51dd1dedc4fec1bd00755dd837551e5b8e196ab270259e1f4f78e1fb"
     },
     {
       "path": "design/icon-assets.generated.json",
@@ -368,7 +368,7 @@
     },
     {
       "path": "scripts/bundle.sh",
-      "sha256": "2ea668e72330aa74acdc68c46f3fe9d43f708330439799b5023c38d92210fb07"
+      "sha256": "aa0b01b73461d767b6623f501031420afa1a22a427beed33322bbbaf65bab5c6"
     },
     {
       "path": "scripts/generate-icon.sh",
@@ -404,7 +404,7 @@
     },
     {
       "path": "scripts/formal-release.sh",
-      "sha256": "8eca75aae5a6d62e204d346dd6a8075dae68e7d2b44b4b51f15a3e49d310ad0c"
+      "sha256": "c4544aa7843167eb19063936d37d2ecef8b88b0a4bfc04371d93dcd5b3946508"
     },
     {
       "path": "scripts/verify-formal-artifact.sh",

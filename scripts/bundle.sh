@@ -126,12 +126,14 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEFAULT_SIGN_IDENTITY="Developer ID Application: nan ma (M9M7M2ARFD)"
 SIGN_IDENTITY="${SIGN_IDENTITY:-$DEFAULT_SIGN_IDENTITY}"
 REQUIRE_SIGNING="${REQUIRE_SIGNING:-0}"
-APPLE_TIMESTAMP_URL="${APPLE_TIMESTAMP_URL:-http://timestamp.apple.com/ts01}"
+APPLE_TIMESTAMP_URL="${APPLE_TIMESTAMP_URL:-}"
 sign_bundles() {
     local identity="$1"
-    local timestamp_option="--timestamp=$APPLE_TIMESTAMP_URL"
+    local timestamp_option="--timestamp"
     if [ "$identity" = "-" ]; then
         timestamp_option="--timestamp=none"
+    elif [ -n "$APPLE_TIMESTAMP_URL" ]; then
+        timestamp_option="--timestamp=$APPLE_TIMESTAMP_URL"
     fi
     codesign --force --options runtime "$timestamp_option" \
         --entitlements "$SCRIPT_DIR/aulycShot-share-extension.entitlements" \

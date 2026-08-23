@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 IDENTITY="${DEVELOPER_ID_APPLICATION:?DEVELOPER_ID_APPLICATION is required}"
 NOTARY_PROFILE="${NOTARY_PROFILE:?NOTARY_PROFILE is required}"
-APPLE_TIMESTAMP_URL="${APPLE_TIMESTAMP_URL:-http://timestamp.apple.com/ts01}"
+APPLE_TIMESTAMP_URL="${APPLE_TIMESTAMP_URL:-}"
 cd "$ROOT"
 
 python3 scripts/release_tool.py version-check --release
@@ -61,7 +61,11 @@ SIGNATURE_INFO="$(codesign -dv --verbose=4 "$APP" 2>&1)"
 [[ "$SIGNATURE_INFO" == *"Developer ID Application:"* && "$SIGNATURE_INFO" == *"(runtime)"* ]] || { echo "error: formal App signature is invalid" >&2; exit 1; }
 
 bash scripts/create-dmg.sh "$APP" "$DMG" "aulycShot"
-codesign --force --sign "$IDENTITY" "--timestamp=$APPLE_TIMESTAMP_URL" "$DMG"
+TIMESTAMP_OPTION="--timestamp"
+if [[ -n "$APPLE_TIMESTAMP_URL" ]]; then
+    TIMESTAMP_OPTION="--timestamp=$APPLE_TIMESTAMP_URL"
+fi
+codesign --force --sign "$IDENTITY" "$TIMESTAMP_OPTION" "$DMG"
 codesign --verify --verbose=2 "$DMG"
 
 NOTARY_RESULT="$TEMP_ROOT/notary-result.json"
