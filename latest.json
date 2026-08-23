@@ -5,19 +5,19 @@
     "downloads": [
       {
         "source": "github",
-        "url": "https://github.com/aulyc/aulycShot/releases/download/1.9.0/aulycShot-1.9.0-build.518-arm64.dmg"
+        "url": "https://github.com/aulyc/aulycShot/releases/download/1.10.0/aulycShot-1.10.0-build.519-arm64.dmg"
       },
       {
         "source": "gitee",
-        "url": "https://gitee.com/aulyc/aulycShot/releases/download/1.9.0/aulycShot-1.9.0-build.518-arm64.dmg"
+        "url": "https://gitee.com/aulyc/aulycShot/releases/download/1.10.0/aulycShot-1.10.0-build.519-arm64.dmg"
       }
     ],
-    "file": "aulycShot-1.9.0-build.518-arm64.dmg",
-    "sha256": "d8b8ce7d165b340a5fc1f2c51452faa44735c483daced5bbd4b1230b57a068f8"
+    "file": "aulycShot-1.10.0-build.519-arm64.dmg",
+    "sha256": "4d15455422fd86e1b004de293591bab621ac1d96edb0933f35ac1bc43b191e0f"
   },
-  "buildNumber": 518,
+  "buildNumber": 519,
   "bundleIdentifier": "com.aulyc.aulycshot",
-  "commit": "cb6665bb9a16d0004573ad3b4b0bd63a4f54814d",
+  "commit": "17c4c59609aa22540b3564e58c60f43db782bc00",
   "minimumSystemVersion": "14.0",
   "pluginIdentifier": null,
   "policy": "aulyc-dual-mirror-v1",
@@ -25,21 +25,21 @@
     "downloads": [
       {
         "source": "github",
-        "url": "https://raw.githubusercontent.com/aulyc/aulycShot/release-channel/updates/1.9.0/aulycShot-1.9.0-build.518-arm64.release-provenance.json"
+        "url": "https://raw.githubusercontent.com/aulyc/aulycShot/release-channel/updates/1.10.0/aulycShot-1.10.0-build.519-arm64.release-provenance.json"
       },
       {
         "source": "gitee",
-        "url": "https://gitee.com/aulyc/aulycShot/raw/main/updates/1.9.0/aulycShot-1.9.0-build.518-arm64.release-provenance.json"
+        "url": "https://gitee.com/aulyc/aulycShot/raw/main/updates/1.10.0/aulycShot-1.10.0-build.519-arm64.release-provenance.json"
       }
     ],
-    "file": "aulycShot-1.9.0-build.518-arm64.release-provenance.json",
-    "sha256": "6335723343bc97e8c20308c483edc8df7443e020e0fb117d064b64a9154a4294"
+    "file": "aulycShot-1.10.0-build.519-arm64.release-provenance.json",
+    "sha256": "d93182f667dcad18c6d80cde538389f5a045a60e2ea3525f303473671fc6132e"
   },
   "releaseChannel": "formal",
-  "releasePageURL": "https://github.com/aulyc/aulycShot/releases/tag/1.9.0",
+  "releasePageURL": "https://github.com/aulyc/aulycShot/releases/tag/1.10.0",
   "releaseProfile": "macos-arm64-app",
   "schemaVersion": 2,
-  "tag": "1.9.0",
+  "tag": "1.10.0",
   "teamIdentifier": "M9M7M2ARFD",
-  "version": "1.9.0"
+  "version": "1.10.0"
 }
