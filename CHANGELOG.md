@@ -7,8 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.10.1] - 2026-08-27
-
 ### Changed
 
 - Refactor recording lifecycle and output, hotkey metadata, localization, and CLI parsing into focused collaborators while preserving existing behavior
