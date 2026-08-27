@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Keep screenshot shortcut capture reliable while the status-bar menu is open by handling the matched key event before menu dismissal
+- Retry identical Developer ID signing requests when Apple's timestamp service fails transiently without weakening the signature gate
 
 ## [1.10.0] - 2026-08-23
 

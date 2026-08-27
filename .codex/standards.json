@@ -368,7 +368,7 @@
     },
     {
       "path": "scripts/bundle.sh",
-      "sha256": "aa0b01b73461d767b6623f501031420afa1a22a427beed33322bbbaf65bab5c6"
+      "sha256": "39aec6ed4f54460df21d7991f0337ada04a14dcd25edb310044812305ebe6415"
     },
     {
       "path": "scripts/generate-icon.sh",
@@ -436,7 +436,7 @@
     },
     {
       "path": "Tests/test_release_tool.py",
-      "sha256": "0748654a9e75e0903d083e3fee612bc54e8895e55538233ad17e6a6339a00a7f"
+      "sha256": "24ef32b380d86ab3a6c20b1aea5d63a7644a53be936a602b9a4ccd60d473322d"
     },
     {
       "path": "docs/DUAL_MIRROR_RELEASE.md",

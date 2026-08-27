@@ -296,6 +296,16 @@ class ReleaseToolTests(unittest.TestCase):
         self.assertNotIn("http://timestamp.apple.com/ts01", bundle_script)
         self.assertNotIn("http://timestamp.apple.com/ts01", formal_script)
 
+    def test_bundle_signing_retries_the_same_strict_codesign_command(self):
+        bundle_script = (PROJECT_ROOT / "scripts" / "bundle.sh").read_text(encoding="utf-8")
+        retry_block = bundle_script.split("codesign_with_retry()", 1)[1].split("sign_bundles()", 1)[0]
+
+        self.assertIn("codesign_with_retry()", bundle_script)
+        self.assertIn("local max_attempts=3", bundle_script)
+        self.assertIn('codesign --force --options runtime "$timestamp_option"', bundle_script)
+        self.assertIn('echo "error: codesign failed after $max_attempts attempts', bundle_script)
+        self.assertNotIn("|| true", retry_block)
+
     def test_runtime_resources_accept_packaged_icons(self):
         app = self.root / "aulycShot.app"
         self.write_runtime_icons(app)

@@ -127,6 +127,30 @@ DEFAULT_SIGN_IDENTITY="Developer ID Application: nan ma (M9M7M2ARFD)"
 SIGN_IDENTITY="${SIGN_IDENTITY:-$DEFAULT_SIGN_IDENTITY}"
 REQUIRE_SIGNING="${REQUIRE_SIGNING:-0}"
 APPLE_TIMESTAMP_URL="${APPLE_TIMESTAMP_URL:-}"
+codesign_with_retry() {
+    local identity="$1"
+    local timestamp_option="$2"
+    local entitlements="$3"
+    local bundle="$4"
+    local attempt=1
+    local max_attempts=3
+
+    # Apple's timestamp service can fail before producing a signature even when
+    # the same request succeeds immediately afterward. Retry only the identical
+    # strict signing command and still fail closed after the bounded attempts.
+    while ! codesign --force --options runtime "$timestamp_option" \
+        --entitlements "$entitlements" \
+        --sign "$identity" "$bundle"; do
+        if [ "$attempt" -ge "$max_attempts" ]; then
+            echo "error: codesign failed after $max_attempts attempts: $bundle" >&2
+            return 1
+        fi
+        echo "warning: codesign attempt $attempt failed; retrying: $bundle" >&2
+        attempt=$((attempt + 1))
+        sleep 1
+    done
+}
+
 sign_bundles() {
     local identity="$1"
     local timestamp_option="--timestamp"
@@ -135,12 +159,10 @@ sign_bundles() {
     elif [ -n "$APPLE_TIMESTAMP_URL" ]; then
         timestamp_option="--timestamp=$APPLE_TIMESTAMP_URL"
     fi
-    codesign --force --options runtime "$timestamp_option" \
-        --entitlements "$SCRIPT_DIR/aulycShot-share-extension.entitlements" \
-        --sign "$identity" "$EXTENSION_DIR"
-    codesign --force --options runtime "$timestamp_option" \
-        --entitlements "$SCRIPT_DIR/aulycShot.entitlements" \
-        --sign "$identity" "$APP_DIR"
+    codesign_with_retry "$identity" "$timestamp_option" \
+        "$SCRIPT_DIR/aulycShot-share-extension.entitlements" "$EXTENSION_DIR"
+    codesign_with_retry "$identity" "$timestamp_option" \
+        "$SCRIPT_DIR/aulycShot.entitlements" "$APP_DIR"
 }
 
 if [ "$SIGN_IDENTITY" = "-" ]; then
