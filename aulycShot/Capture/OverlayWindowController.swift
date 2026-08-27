@@ -91,12 +91,6 @@ enum OverlayPresentationPolicy {
     }
 }
 
-struct CaptureResult {
-    let rect: CGRect       // In CG coordinates (top-left origin) for capture
-    let screen: NSScreen   // The screen where selection was made
-    let screenRect: NSRect // In AppKit coordinates for editor positioning
-}
-
 @MainActor
 class OverlayWindowController {
     /// Where a preset image came from — drives the source-specific edit hint.

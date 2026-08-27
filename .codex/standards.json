@@ -316,7 +316,7 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "82d236eb54890e4b3dff00291a6671de61237389b7f295c972e28954fd3bc1cf"
+      "sha256": "ee98b0c065ae34b3c154cce2194696665ede4613135f520729b77c17afcb4477"
     },
     {
       "path": "README.md",
@@ -356,7 +356,7 @@
     },
     {
       "path": "aulycShot/Utilities/UpdateChecker.swift",
-      "sha256": "7a6a22c33e0565ae857c9f7c7903c39baf50d0dbeb400269336eac620789dbc8"
+      "sha256": "4378348696261b24cdcd96051707d2d95b9df78790fea7a38eac3bfe1b168699"
     },
     {
       "path": "aulycShot/Utilities/UpdateInstaller.swift",

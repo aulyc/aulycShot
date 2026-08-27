@@ -136,7 +136,7 @@ enum AgentCLIError: Error {
     }
 }
 
-private struct AgentAnnotateOptions {
+struct AgentAnnotateOptions {
     let inputURL: URL
     let specURL: URL
     let outputURL: URL
@@ -150,46 +150,28 @@ private struct AgentAnnotateOptions {
         var meta: String?
         var pretty = false
 
-        var index = 0
-        while index < arguments.count {
-            let token = arguments[index]
-
-            if token == "--pretty" {
+        var cursor = AgentArgumentCursor(arguments)
+        while let argument = try cursor.next(flags: ["--pretty"]) {
+            switch argument {
+            case .flag("--pretty"):
                 pretty = true
-                index += 1
-                continue
-            }
-            if token == "--help" || token == "-h" {
-                throw AgentCLIError.help(Self.usageText)
-            }
-
-            let key: String
-            let value: String
-
-            if let split = token.firstIndex(of: "="), token.hasPrefix("--") {
-                key = String(token[..<split])
-                value = String(token[token.index(after: split)...])
-                index += 1
-            } else {
-                key = token
-                guard index + 1 < arguments.count else {
-                    throw AgentCLIError.usage("Missing value for \(token)")
-                }
-                value = arguments[index + 1]
-                index += 2
-            }
-
-            switch key {
-            case "--input", "-i":
-                input = value
-            case "--spec", "-s":
-                spec = value
-            case "--out", "--output", "-o":
-                output = value
-            case "--meta":
-                meta = value
-            default:
+            case .flag(let key):
                 throw AgentCLIError.usage("Unknown option \(key)")
+            case .help:
+                throw AgentCLIError.help(Self.usageText)
+            case .option(let key, let value):
+                switch key {
+                case "--input", "-i":
+                    input = value
+                case "--spec", "-s":
+                    spec = value
+                case "--out", "--output", "-o":
+                    output = value
+                case "--meta":
+                    meta = value
+                default:
+                    throw AgentCLIError.usage("Unknown option \(key)")
+                }
             }
         }
 

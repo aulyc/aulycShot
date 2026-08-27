@@ -21,7 +21,6 @@
 
 /* Screenshot shortcut */
 "shortcutHeader" = "截图";
-"shortcutHint" = "设置后可在任意应用中触发截图，默认未设置";
 "shortcutDefaultDisplay" = "未设置";
 "shortcutSet" = "录制";
 "shortcutCancel" = "取消";
@@ -45,17 +44,14 @@
 
 /* Image-edit shortcuts */
 "selectedImageEditShortcutHeader" = "编辑选中图片";
-"selectedImageEditShortcutHint" = "按下后直接编辑 Finder 中选中的单张图片。默认未设置";
 "selectedImageEditShortcutDefaultDisplay" = "未设置";
 "clipboardImageEditShortcutHeader" = "编辑剪贴板图片";
-"clipboardImageEditShortcutHint" = "按下后直接编辑当前剪贴板里的图片。默认未设置";
 "clipboardImageEditShortcutDefaultDisplay" = "未设置";
 "recordShortcutHeader" = "录制";
 "recordShortcutDefaultDisplay" = "未设置";
 
 /* Screenshot execution shortcut (editor confirm) */
 "clipboardShortcutHeader" = "触发截图执行";
-"clipboardShortcutHint" = "在编辑器内按下以完成截图，并执行“截图执行后”设置，默认未设置";
 "clipboardShortcutDefaultDisplay" = "未设置";
 
 /* Shortcut conflict */
@@ -97,7 +93,6 @@
 "recordingCancelled" = "录制已取消";
 "recordingExportingGIF" = "正在生成 GIF";
 "recordingFailed" = "录制失败: %@";
-"saveRecording" = "保存录制";
 "saveRecordingPrompt" = "保存";
 "recordingFormatLabel" = "格式";
 "recordingFormatManual" = "手动选择";
@@ -168,15 +163,9 @@
 "settingsTabAboutDescription" = "查看版本、更新与诊断信息";
 
 "toolbarSettingsPrimaryTitle" = "主工具栏";
-"toolbarSettingsPrimaryHint" = "工具会在选区上方或下方显示";
 "toolbarSettingsSideTitle" = "侧工具栏";
-"toolbarSettingsSideHint" = "工具会在选区左侧或右侧显示";
 "toolbarSettingsHiddenTitle" = "隐藏的工具";
-"toolbarSettingsHiddenHint" = "拖到这里的工具不会出现在任何工具栏中";
-"toolbarSettingsFootnote" = "工具栏会根据选区位置自动切换为上下或左右布局";
 "toolbarSettingsReset" = "重置为默认";
-"toolbarSettingsCancel" = "取消";
-"toolbarSettingsApply" = "应用";
 
 /* About pane */
 "aboutTitle" = "关于 aulycShot";
@@ -219,13 +208,10 @@
 "aboutErrorLogEmptyBody" = "aulycShot 暂未记录到错误日志。如果遇到卡死、强制退出或闪退，请回到这里复制日志反馈给开发者";
 
 /* Updates — About pane */
-"checkForUpdates" = "检查更新";
 "updateChecking" = "正在检查";
 "updateUpToDateStatus" = "已是最新版本";
 "updateNewVersionStatus" = "发现新版本 v%@";
 "updateFailedStatus" = "检查失败";
-"updateDownloadButton" = "前往下载";
-"updateRetryButton" = "重试";
 "updateInstallNowButton" = "立即更新";
 "updateDownloadingStatus" = "下载中 %d%%";
 "updateInstallingStatus" = "正在安装";
@@ -275,7 +261,6 @@
 "imageMergeFailed" = "图片拼接失败";
 "imageMergeSaved" = "拼接结果已保存";
 "imageMergeWindowTitle" = "图片拼接工具";
-"imageMergeSources" = "图片来源";
 "imageMergeAddFiles" = "添加文件";
 "imageMergeAddFromClipboard" = "从剪贴板添加";
 "imageMergeImageList" = "图片";
@@ -284,7 +269,6 @@
 "imageMergeTemplateVertical" = "纵向排列";
 "imageMergeTemplateGrid" = "等宽网格";
 "imageMergeTemplateLongStitch" = "长图拼接";
-"imageMergeLayout" = "布局";
 "imageMergeSpacing" = "间距";
 "imageMergeMargin" = "外边距";
 "imageMergeCornerRadius" = "边角";
@@ -298,7 +282,6 @@
 "imageMergeTransparent" = "透明";
 "imageMergeSolid" = "纯色";
 "imageMergeParameters" = "参数";
-"imageMergeOutput" = "输出";
 "imageMergeCopy" = "复制";
 "imageMergeSave" = "保存";
 "imageMergeContinueEditing" = "编辑";

@@ -2,12 +2,18 @@ import AppKit
 
 // MARK: - Mosaic Annotation
 
-struct MosaicAnnotation: Annotation {
+struct MosaicAnnotation: Annotation, Equatable {
     let rect: NSRect
     let pixelatedImage: NSImage
     let blockSize: CGFloat
 
     var boundingRect: NSRect { rect }
+
+    static func == (lhs: MosaicAnnotation, rhs: MosaicAnnotation) -> Bool {
+        // The pixels are derived from the base image, rect and block size.
+        // Re-rendering the same logical mosaic must remain a no-op for undo.
+        lhs.rect == rhs.rect && lhs.blockSize == rhs.blockSize
+    }
 
     func draw(in context: CGContext, bounds: NSRect) {
         pixelatedImage.draw(in: rect)

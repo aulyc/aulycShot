@@ -96,66 +96,6 @@ enum AdaptiveChrome {
     }
 }
 
-/// Layer-backed rounded surface whose colors continue to follow live system
-/// appearance changes
-final class AdaptiveChromeSurfaceView: NSView {
-    enum Style {
-        case floating
-        case toolbar
-        case panel
-        case popover
-        case card
-
-        var backgroundColor: NSColor {
-            switch self {
-            case .floating: return AdaptiveChrome.floatingBackground
-            case .toolbar: return AdaptiveChrome.toolbarBackground
-            case .panel: return AdaptiveChrome.panelBackground
-            case .popover: return AdaptiveChrome.popoverBackground
-            case .card: return AdaptiveChrome.cardBackground
-            }
-        }
-    }
-
-    var style: Style {
-        didSet { applyAppearance() }
-    }
-    var cornerRadius: CGFloat {
-        didSet { layer?.cornerRadius = cornerRadius }
-    }
-    var borderWidth: CGFloat {
-        didSet { layer?.borderWidth = borderWidth }
-    }
-
-    init(style: Style, cornerRadius: CGFloat = 0, borderWidth: CGFloat = 0) {
-        self.style = style
-        self.cornerRadius = cornerRadius
-        self.borderWidth = borderWidth
-        super.init(frame: .zero)
-        wantsLayer = true
-        layer?.cornerCurve = .continuous
-        layer?.masksToBounds = cornerRadius > 0
-        applyAppearance()
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        applyAppearance()
-    }
-
-    private func applyAppearance() {
-        guard let layer else { return }
-        layer.cornerRadius = cornerRadius
-        layer.borderWidth = borderWidth
-        layer.backgroundColor = AdaptiveChrome.resolvedCGColor(style.backgroundColor, for: effectiveAppearance)
-        layer.borderColor = AdaptiveChrome.resolvedCGColor(AdaptiveChrome.border, for: effectiveAppearance)
-    }
-}
-
 /// A one-pixel semantic separator for layer-composited HUD layouts
 final class AdaptiveSeparatorView: NSView {
     override init(frame frameRect: NSRect) {

@@ -2,6 +2,49 @@ import AppKit
 import Carbon
 
 enum StatusMenuScreenshotEventPolicy {
+    enum Disposition: Equatable {
+        case passthrough
+        case reenableAndPassthrough
+        case swallowAndCapture
+    }
+
+    static func disposition(
+        eventType: CGEventType,
+        keyCode: UInt32,
+        flags: CGEventFlags,
+        configuredHotkey: (keyCode: UInt32, modifiers: UInt32)?
+    ) -> Disposition {
+        if eventType == .tapDisabledByTimeout || eventType == .tapDisabledByUserInput {
+            return .reenableAndPassthrough
+        }
+        return shouldCapture(
+            eventType: eventType,
+            keyCode: keyCode,
+            flags: flags,
+            configuredHotkey: configuredHotkey
+        ) ? .swallowAndCapture : .passthrough
+    }
+
+    @discardableResult
+    static func perform(
+        _ disposition: Disposition,
+        reenableTap: () -> Void,
+        disableTap: () -> Void,
+        capture: () -> Void
+    ) -> Bool {
+        switch disposition {
+        case .passthrough:
+            return false
+        case .reenableAndPassthrough:
+            reenableTap()
+            return false
+        case .swallowAndCapture:
+            disableTap()
+            capture()
+            return true
+        }
+    }
+
     static func shouldCapture(
         eventType: CGEventType,
         keyCode: UInt32,
@@ -25,13 +68,13 @@ enum StatusMenuScreenshotEventPolicy {
 
 private final class StatusMenuScreenshotEventTap {
     private let configuredHotkey: (keyCode: UInt32, modifiers: UInt32)
-    private let onMatch: @MainActor () -> Void
+    private let onMatch: @MainActor @Sendable () -> Void
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
 
     init(
         configuredHotkey: (keyCode: UInt32, modifiers: UInt32),
-        onMatch: @escaping @MainActor () -> Void
+        onMatch: @escaping @MainActor @Sendable () -> Void
     ) {
         self.configuredHotkey = configuredHotkey
         self.onMatch = onMatch
@@ -85,34 +128,38 @@ private final class StatusMenuScreenshotEventTap {
         event: CGEvent
     ) -> Unmanaged<CGEvent>? {
         let passthrough = Unmanaged.passUnretained(event)
-        switch type {
-        case .tapDisabledByTimeout, .tapDisabledByUserInput:
-            if let eventTap {
-                CGEvent.tapEnable(tap: eventTap, enable: true)
-            }
-            return passthrough
-        case .keyDown:
-            let keyCode = UInt32(event.getIntegerValueField(.keyboardEventKeycode))
-            guard StatusMenuScreenshotEventPolicy.shouldCapture(
-                eventType: type,
-                keyCode: keyCode,
-                flags: event.flags,
-                configuredHotkey: configuredHotkey
-            ) else {
-                return passthrough
-            }
-
-            if let eventTap {
-                CGEvent.tapEnable(tap: eventTap, enable: false)
-            }
-            guard Thread.isMainThread else { return passthrough }
-            MainActor.assumeIsolated {
-                onMatch()
-            }
-            return nil
-        default:
+        let keyCode = UInt32(event.getIntegerValueField(.keyboardEventKeycode))
+        let disposition = StatusMenuScreenshotEventPolicy.disposition(
+            eventType: type,
+            keyCode: keyCode,
+            flags: event.flags,
+            configuredHotkey: configuredHotkey
+        )
+        guard disposition != .swallowAndCapture || Thread.isMainThread else {
             return passthrough
         }
+
+        let tap = eventTap
+        let matchAction = onMatch
+        let shouldSwallow = StatusMenuScreenshotEventPolicy.perform(
+            disposition,
+            reenableTap: {
+                if let tap {
+                    CGEvent.tapEnable(tap: tap, enable: true)
+                }
+            },
+            disableTap: {
+                if let tap {
+                    CGEvent.tapEnable(tap: tap, enable: false)
+                }
+            },
+            capture: {
+                MainActor.assumeIsolated {
+                    matchAction()
+                }
+            }
+        )
+        return shouldSwallow ? nil : passthrough
     }
 
     deinit {
@@ -139,7 +186,7 @@ final class StatusMenuScreenshotPreflight: NSObject, NSMenuDelegate {
         menu.delegate = self
     }
 
-    deinit {
+    isolated deinit {
         shortcutTap?.stop()
     }
 

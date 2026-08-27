@@ -2,11 +2,20 @@ import AppKit
 
 // MARK: - Pen Annotation
 
-struct PenAnnotation: Annotation {
+struct PenAnnotation: Annotation, Equatable {
     let path: NSBezierPath
+    private let pathIdentity: ObjectIdentifier
     let color: NSColor
     let lineWidth: CGFloat
     var rotation: CGFloat = 0
+
+    init(path: NSBezierPath, color: NSColor, lineWidth: CGFloat, rotation: CGFloat = 0) {
+        self.path = path
+        pathIdentity = ObjectIdentifier(path)
+        self.color = color
+        self.lineWidth = lineWidth
+        self.rotation = rotation
+    }
 
     var boundingRect: NSRect {
         path.bounds.insetBy(dx: -lineWidth / 2, dy: -lineWidth / 2)

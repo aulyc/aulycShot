@@ -22,20 +22,6 @@ final class ImageMergeLauncher {
         present(document: ImageMergeDocument())
     }
 
-    func openFromFinderSelection() {
-        if let windowController, windowController.window?.isVisible == true {
-            windowController.show()
-            return
-        }
-
-        let urls = FinderSelection.currentImageFileURLs()
-        guard urls.count >= 2 else {
-            ToastWindow.show(message: L10n.imageMergeNeedTwoImages)
-            return
-        }
-        open(urls: urls)
-    }
-
     func openFromShortcutSources() {
         if let windowController, windowController.window?.isVisible == true {
             windowController.show()

@@ -2,7 +2,7 @@ import AppKit
 
 // MARK: - Arrow Annotation
 
-struct ArrowAnnotation: Annotation {
+struct ArrowAnnotation: Annotation, Equatable {
     let startPoint: NSPoint
     let endPoint: NSPoint
     let color: NSColor
@@ -625,14 +625,4 @@ struct ArrowAnnotation: Annotation {
         )
     }
 
-    func withStyle(_ style: ArrowStyle) -> ArrowAnnotation {
-        ArrowAnnotation(
-            startPoint: startPoint,
-            endPoint: endPoint,
-            color: color,
-            lineWidth: lineWidth,
-            style: style,
-            controlPoint: controlPoint
-        )
-    }
 }

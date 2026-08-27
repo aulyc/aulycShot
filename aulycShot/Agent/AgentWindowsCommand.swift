@@ -19,59 +19,36 @@ struct AgentWindowsOptions {
         var meta: String?
         var pretty = false
 
-        var index = 0
-        while index < arguments.count {
-            let token = arguments[index]
-
-            if token == "--pretty" {
+        var cursor = AgentArgumentCursor(arguments)
+        let flags: Set<String> = ["--pretty", "--frontmost-only", "--all", "--include-system"]
+        while let argument = try cursor.next(flags: flags) {
+            switch argument {
+            case .flag("--pretty"):
                 pretty = true
-                index += 1
-                continue
-            }
-            if token == "--frontmost-only" {
+            case .flag("--frontmost-only"):
                 frontmostOnly = true
-                index += 1
-                continue
-            }
-            if token == "--all" || token == "--include-system" {
+            case .flag("--all"), .flag("--include-system"):
                 includeSystem = true
-                index += 1
-                continue
-            }
-            if token == "--help" || token == "-h" {
-                throw AgentCLIError.help(Self.usageText)
-            }
-
-            let key: String
-            let value: String
-
-            if let split = token.firstIndex(of: "="), token.hasPrefix("--") {
-                key = String(token[..<split])
-                value = String(token[token.index(after: split)...])
-                index += 1
-            } else {
-                key = token
-                guard index + 1 < arguments.count else {
-                    throw AgentCLIError.usage("Missing value for \(token)")
-                }
-                value = arguments[index + 1]
-                index += 2
-            }
-
-            switch key {
-            case "--owner":
-                owner = value
-            case "--title":
-                title = value
-            case "--limit":
-                guard let parsed = Int(value), parsed > 0 else {
-                    throw AgentCLIError.usage("Invalid limit \(value)")
-                }
-                limit = parsed
-            case "--meta":
-                meta = value
-            default:
+            case .flag(let key):
                 throw AgentCLIError.usage("Unknown option \(key)")
+            case .help:
+                throw AgentCLIError.help(Self.usageText)
+            case .option(let key, let value):
+                switch key {
+                case "--owner":
+                    owner = value
+                case "--title":
+                    title = value
+                case "--limit":
+                    guard let parsed = Int(value), parsed > 0 else {
+                        throw AgentCLIError.usage("Invalid limit \(value)")
+                    }
+                    limit = parsed
+                case "--meta":
+                    meta = value
+                default:
+                    throw AgentCLIError.usage("Unknown option \(key)")
+                }
             }
         }
 

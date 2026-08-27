@@ -2,7 +2,7 @@ import AppKit
 
 // MARK: - Rectangle Annotation
 
-struct RectAnnotation: Annotation {
+struct RectAnnotation: Annotation, Equatable {
     let rect: NSRect
     let color: NSColor
     let lineWidth: CGFloat

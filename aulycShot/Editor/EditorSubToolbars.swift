@@ -299,10 +299,6 @@ class ColorSizeSubToolbar: NSView {
         }
     }
 
-    private func updateShapeFillModeSelection() {
-        shapeFillModeControl?.selectedMode = currentShapeFillMode ?? .none
-    }
-
     private func updateShapeStrokeStyleSelection() {
         for view in shapeStrokeStyleButtons {
             view.isSelected = view.style == currentShapeStrokeStyle

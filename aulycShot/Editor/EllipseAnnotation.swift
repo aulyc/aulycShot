@@ -2,7 +2,7 @@ import AppKit
 
 // MARK: - Ellipse Annotation
 
-struct EllipseAnnotation: Annotation {
+struct EllipseAnnotation: Annotation, Equatable {
     let rect: NSRect
     let color: NSColor
     let lineWidth: CGFloat

@@ -6,8 +6,9 @@ import AppKit
 /// reads as if drawn over text with a real marker. Unlike the pen, the brush
 /// width scales as `lineWidth × 6` and self-overlapping segments are drawn
 /// inside a transparency layer so the alpha doesn't compound at junctions.
-struct MarkerAnnotation: Annotation {
+struct MarkerAnnotation: Annotation, Equatable {
     let path: NSBezierPath
+    private let pathIdentity: ObjectIdentifier
     /// User-picked color; alpha is applied at draw time.
     let color: NSColor
     /// Base width — multiplied by `MarkerAnnotation.brushScale` when drawn.
@@ -16,6 +17,14 @@ struct MarkerAnnotation: Annotation {
 
     static let brushScale: CGFloat = 6
     static let markerAlpha: CGFloat = 0.35
+
+    init(path: NSBezierPath, color: NSColor, lineWidth: CGFloat, rotation: CGFloat = 0) {
+        self.path = path
+        pathIdentity = ObjectIdentifier(path)
+        self.color = color
+        self.lineWidth = lineWidth
+        self.rotation = rotation
+    }
 
     var boundingRect: NSRect {
         let inset = -lineWidth * MarkerAnnotation.brushScale / 2

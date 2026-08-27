@@ -7,23 +7,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var statusBarController: StatusBarController?
     private var overlayController: OverlayWindowController?
-    private var recordingEngine: RecordingEngine?
-    private var recordingHUDPanel: RecordingHUDPanel?
-    private var recordingBorderPanel: RecordingBorderPanel?
-    private var recordingScreenRect: NSRect = .zero
-    private var recordingScreen: NSScreen?
-    private var recordingKeyboardLocalMonitor: Any?
-    private var recordingKeyboardGlobalMonitor: Any?
-    private var recordingCancelRequested = false
     private var appInitialized = false
     private var suspendedEditDraft: OverlayWindowController.SuspendedEditDraft?
     private var pendingReopenSettingsWorkItem: DispatchWorkItem?
     private var pendingOpenImageURLs: [URL] = []
+    private lazy var recordingOutputCoordinator = RecordingOutputCoordinator()
+    private lazy var recordingSessionController = RecordingSessionController(
+        onActiveStateChange: { [weak self] in
+            self?.applyHotkeyState()
+        },
+        onCompletion: { [weak self] completion in
+            self?.recordingOutputCoordinator.handle(completion)
+        }
+    )
 
     private var activityAvailability: AppActivityAvailability {
         let availability = AppActivityAvailability(
             overlayActive: overlayController != nil,
-            recordingActive: recordingEngine != nil
+            recordingActive: recordingSessionController.isActive
         )
         assert(!availability.hasConflictingActivities, "Capture overlay and recording cannot be active together")
         return availability
@@ -168,99 +169,45 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func applyHotkeyState() {
+        HotkeyManager.shared.unregisterAllGlobalHotkeys()
         if HotkeyManager.shared.isRecording {
-            HotkeyManager.shared.unregister()
-            unregisterNonScreenshotHotkeys()
             return
         }
 
-        if recordingEngine != nil {
-            unregisterNonScreenshotHotkeys()
-            if Defaults.hasCustomScreenshotHotkey {
-                HotkeyManager.shared.register { [weak self] in
-                    self?.stopRecordingAndSave()
-                }
-            } else {
-                HotkeyManager.shared.unregister()
+        if recordingSessionController.isActive {
+            HotkeyManager.shared.register(.screenshot) { [weak self] in
+                self?.recordingSessionController.stopAndSave()
             }
             return
         }
 
-        if Defaults.hasCustomScreenshotHotkey {
-            HotkeyManager.shared.register { [weak self] in
-                self?.handleTrigger(fromShortcut: true)
-            }
-        } else {
-            HotkeyManager.shared.unregister()
+        for slot in HotkeySlot.globalCases {
+            guard let callback = hotkeyCallback(for: slot) else { continue }
+            HotkeyManager.shared.register(slot, callback: callback)
         }
-
-        // The pin hotkeys are independent of the screenshot hotkey.
-        if Defaults.hasCustomSelectedImagePinHotkey {
-            HotkeyManager.shared.registerSelectedImagePin { [weak self] in
-                self?.handleSelectedImagePinTrigger()
-            }
-        } else {
-            HotkeyManager.shared.unregisterSelectedImagePin()
-        }
-
-        if Defaults.hasCustomClipboardImagePinHotkey {
-            HotkeyManager.shared.registerClipboardImagePin { [weak self] in
-                self?.handleClipboardImagePinTrigger()
-            }
-        } else {
-            HotkeyManager.shared.unregisterClipboardImagePin()
-        }
-
-        if Defaults.hasCustomClipboardTextPinHotkey {
-            HotkeyManager.shared.registerClipboardTextPin { [weak self] in
-                self?.handleClipboardTextPinTrigger()
-            }
-        } else {
-            HotkeyManager.shared.unregisterClipboardTextPin()
-        }
-
-        if Defaults.hasCustomSelectedImageEditHotkey {
-            HotkeyManager.shared.registerSelectedImageEdit { [weak self] in
-                self?.handleSelectedImageEditTrigger()
-            }
-        } else {
-            HotkeyManager.shared.unregisterSelectedImageEdit()
-        }
-
-        if Defaults.hasCustomClipboardImageEditHotkey {
-            HotkeyManager.shared.registerClipboardImageEdit { [weak self] in
-                self?.handleClipboardImageEditTrigger()
-            }
-        } else {
-            HotkeyManager.shared.unregisterClipboardImageEdit()
-        }
-
-        if Defaults.hasCustomRecordHotkey {
-            HotkeyManager.shared.registerRecord { [weak self] in
-                self?.handleRecordingTrigger()
-            }
-        } else {
-            HotkeyManager.shared.unregisterRecord()
-        }
-
-        if Defaults.hasCustomImageMergeHotkey {
-            HotkeyManager.shared.registerImageMerge { [weak self] in
-                self?.handleImageMergeShortcutTrigger()
-            }
-        } else {
-            HotkeyManager.shared.unregisterImageMerge()
-        }
-
     }
 
-    private func unregisterNonScreenshotHotkeys() {
-        HotkeyManager.shared.unregisterSelectedImagePin()
-        HotkeyManager.shared.unregisterClipboardImagePin()
-        HotkeyManager.shared.unregisterClipboardTextPin()
-        HotkeyManager.shared.unregisterSelectedImageEdit()
-        HotkeyManager.shared.unregisterClipboardImageEdit()
-        HotkeyManager.shared.unregisterRecord()
-        HotkeyManager.shared.unregisterImageMerge()
+    private func hotkeyCallback(for slot: HotkeySlot) -> (() -> Void)? {
+        switch slot {
+        case .screenshot:
+            return { [weak self] in self?.handleTrigger(fromShortcut: true) }
+        case .selectedImagePin:
+            return { [weak self] in self?.handleSelectedImagePinTrigger() }
+        case .clipboardImagePin:
+            return { [weak self] in self?.handleClipboardImagePinTrigger() }
+        case .clipboardTextPin:
+            return { [weak self] in self?.handleClipboardTextPinTrigger() }
+        case .selectedImageEdit:
+            return { [weak self] in self?.handleSelectedImageEditTrigger() }
+        case .clipboardImageEdit:
+            return { [weak self] in self?.handleClipboardImageEditTrigger() }
+        case .record:
+            return { [weak self] in self?.handleRecordingTrigger() }
+        case .imageMerge:
+            return { [weak self] in self?.handleImageMergeShortcutTrigger() }
+        case .clipboard:
+            return nil
+        }
     }
 
     @discardableResult
@@ -352,7 +299,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 )
             },
             stopRecording: { [self] in
-                stopRecordingAndSave()
+                recordingSessionController.stopAndSave()
             }
         )
         return didBeginCapture
@@ -764,237 +711,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         AppActivityEntryRouter.routeRecordingHandoff(
             availability: activityAvailability,
             beginRecording: { [self] in
-                beginRecordingAfterActivityHandoff(rect: rect, screen: screen)
+                recordingSessionController.start(rect: rect, screen: screen)
             }
         )
-    }
-
-    private func beginRecordingAfterActivityHandoff(rect: NSRect, screen: NSScreen) {
-        recordingScreenRect = rect
-        recordingScreen = screen
-        recordingCancelRequested = false
-
-        let borderPanel = RecordingBorderPanel(screen: screen)
-        borderPanel.setSelectionRect(rect)
-        borderPanel.orderFrontRegardless()
-        recordingBorderPanel = borderPanel
-
-        let hudPanel = RecordingHUDPanel()
-        hudPanel.update(elapsedSeconds: 0)
-        hudPanel.positionOnScreen(relativeTo: rect, screen: screen)
-        hudPanel.onStopRecording = { [weak self] in
-            self?.stopRecordingAndSave()
-        }
-        hudPanel.onPauseRecording = { [weak self] in
-            self?.recordingEngine?.pauseRecording()
-        }
-        hudPanel.onResumeRecording = { [weak self] in
-            self?.recordingEngine?.resumeRecording()
-        }
-        hudPanel.orderFrontRegardless()
-        recordingHUDPanel = hudPanel
-
-        let engine = RecordingEngine()
-        engine.onProgress = { [weak self] seconds in
-            self?.updateRecordingHUD(seconds: seconds)
-        }
-        engine.onPauseChanged = { [weak self] paused in
-            self?.recordingHUDPanel?.setPaused(paused)
-        }
-        engine.onCompletion = { [weak self] url, error in
-            self?.finishRecording(url: url, error: error)
-        }
-        recordingEngine = engine
-        installRecordingKeyboardMonitors()
-        applyHotkeyState()
-
-        let excludedWindows = [
-            recordingBorderPanel.map { CGWindowID($0.windowNumber) },
-            recordingHUDPanel.map { CGWindowID($0.windowNumber) },
-        ].compactMap { $0 } + ToastWindow.captureExcludedWindowNumbers
-        engine.startRecording(rect: rect, screen: screen, excludeWindowNumbers: excludedWindows)
-    }
-
-    private func updateRecordingHUD(seconds: Int) {
-        recordingHUDPanel?.update(elapsedSeconds: seconds)
-        if let screen = recordingScreen, recordingHUDPanel?.userHasDragged != true {
-            recordingHUDPanel?.positionOnScreen(relativeTo: recordingScreenRect, screen: screen)
-        }
-    }
-
-    private func finishRecording(url: URL?, error: Error?) {
-        let wasCancelled = recordingCancelRequested
-        recordingCancelRequested = false
-        stopRecordingUI()
-
-        if wasCancelled {
-            if let url {
-                try? FileManager.default.removeItem(at: url)
-            }
-            ToastWindow.show(message: L10n.recordingCancelled)
-            return
-        }
-
-        if let error {
-            ToastWindow.show(message: L10n.recordingFailed(error.localizedDescription), duration: 3.5)
-            return
-        }
-
-        guard let url else {
-            ToastWindow.show(message: L10n.recordingFailed(RecordingEngine.RecordingError.noFrames.localizedDescription), duration: 3.5)
-            return
-        }
-
-        promptToSaveRecording(tmpURL: url)
-    }
-
-    private func stopRecordingUI() {
-        removeRecordingKeyboardMonitors()
-        recordingHUDPanel?.close()
-        recordingHUDPanel = nil
-        recordingBorderPanel?.close()
-        recordingBorderPanel = nil
-        recordingEngine = nil
-        recordingScreenRect = .zero
-        recordingScreen = nil
-        applyHotkeyState()
-    }
-
-    private func stopRecordingAndSave() {
-        guard let recordingEngine else { return }
-        recordingEngine.stopRecording()
-    }
-
-    private func cancelRecordingFromKeyboard() {
-        guard let recordingEngine, !recordingCancelRequested else { return }
-        switch recordingEngine.state {
-        case .recording, .paused:
-            break
-        case .idle, .stopping:
-            return
-        }
-        recordingCancelRequested = true
-        recordingEngine.cancelRecording()
-    }
-
-    private func installRecordingKeyboardMonitors() {
-        removeRecordingKeyboardMonitors()
-        recordingKeyboardLocalMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            if Self.isPlainReturn(event) {
-                self?.stopRecordingAndSave()
-                return nil
-            }
-            if Self.isPlainEscape(event) {
-                self?.cancelRecordingFromKeyboard()
-                return nil
-            }
-            return event
-        }
-        recordingKeyboardGlobalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            if Self.isPlainReturn(event) {
-                self?.stopRecordingAndSave()
-            } else if Self.isPlainEscape(event) {
-                self?.cancelRecordingFromKeyboard()
-            }
-        }
-    }
-
-    private func removeRecordingKeyboardMonitors() {
-        if let monitor = recordingKeyboardLocalMonitor {
-            NSEvent.removeMonitor(monitor)
-            recordingKeyboardLocalMonitor = nil
-        }
-        if let monitor = recordingKeyboardGlobalMonitor {
-            NSEvent.removeMonitor(monitor)
-            recordingKeyboardGlobalMonitor = nil
-        }
-    }
-
-    static func isPlainReturn(_ event: NSEvent) -> Bool {
-        let activeModifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
-        return (event.keyCode == 36 || event.keyCode == 76) && activeModifiers.isEmpty
-    }
-
-    static func isPlainEscape(_ event: NSEvent) -> Bool {
-        let activeModifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
-        return event.keyCode == 53 && activeModifiers.isEmpty
-    }
-
-    private func promptToSaveRecording(tmpURL: URL) {
-        let configuration = RecordingSavePromptConfiguration(
-            preference: Defaults.recordingSavePreference,
-            lastSelectedFormat: Defaults.recordingSaveFormat
-        )
-        let savePanel = RecordingSavePanel(
-            initialFormat: configuration.initialFormat,
-            allowsFormatSelection: configuration.allowsFormatSelection,
-            defaultDirectory: Defaults.recordingSaveDirectory,
-            lastCustomDirectory: Defaults.lastCustomRecordingSaveDirectory
-        )
-        guard savePanel.presentModally() == .OK else {
-            try? FileManager.default.removeItem(at: tmpURL)
-            return
-        }
-
-        let selectedFormat = savePanel.selectedFormat
-        if configuration.allowsFormatSelection {
-            Defaults.recordingSaveFormat = selectedFormat
-        }
-        if !savePanel.usesDefaultDirectory {
-            Defaults.lastCustomRecordingSaveDirectory = savePanel.customDirectory
-        }
-        saveRecording(
-            tmpURL: tmpURL,
-            to: savePanel.selectedDirectory,
-            format: selectedFormat,
-            fileName: savePanel.selectedFileName
-        )
-    }
-
-    private func saveRecording(
-        tmpURL: URL,
-        to directory: URL,
-        format: ScreenRecordingFormat,
-        fileName: String
-    ) {
-        do {
-            let destination = try SaveDestination.uniqueFile(in: directory, fileName: fileName)
-            saveRecording(tmpURL: tmpURL, destination: destination, format: format)
-        } catch {
-            try? FileManager.default.removeItem(at: tmpURL)
-            ToastWindow.show(message: L10n.recordingFailed(error.localizedDescription), duration: 3.5)
-        }
-    }
-
-    private func saveRecording(tmpURL: URL, destination: URL, format: ScreenRecordingFormat) {
-        switch format {
-        case .mp4:
-            do {
-                try? FileManager.default.removeItem(at: destination)
-                try FileManager.default.moveItem(at: tmpURL, to: destination)
-                showSavedRecording(destination)
-            } catch {
-                ToastWindow.show(message: L10n.recordingFailed(error.localizedDescription), duration: 3.5)
-            }
-        case .gif:
-            ToastWindow.show(message: L10n.recordingExportingGIF, duration: 600)
-            RecordingExporter.exportGIF(from: tmpURL, to: destination) { result in
-                ToastWindow.dismiss()
-                switch result {
-                case .success:
-                    try? FileManager.default.removeItem(at: tmpURL)
-                    self.showSavedRecording(destination)
-                case .failure(let error):
-                    ToastWindow.show(message: L10n.recordingFailed(error.localizedDescription), duration: 3.5)
-                    NSWorkspace.shared.activateFileViewerSelecting([tmpURL])
-                }
-            }
-        }
-    }
-
-    private func showSavedRecording(_ destination: URL) {
-        let directoryPath = SaveDestination.displayPath(destination.deletingLastPathComponent())
-        ToastWindow.show(message: L10n.recordingSaved(to: directoryPath))
     }
 
     private func openSettings() {

@@ -2,7 +2,7 @@ import AppKit
 
 // MARK: - Text Annotation
 
-struct TextAnnotation: Annotation {
+struct TextAnnotation: Annotation, Equatable {
     let text: String
     /// Bottom-left of the editing/drawing frame, in canvas coordinates.
     let origin: NSPoint

@@ -2,7 +2,7 @@ import AppKit
 
 // MARK: - Number Annotation
 
-struct NumberAnnotation: Annotation {
+struct NumberAnnotation: Annotation, Equatable {
     let center: NSPoint
     /// Optional arrow tip pointing away from the badge. `nil` (or a tip
     /// inside the badge) draws the badge alone. Otherwise an arrow is drawn

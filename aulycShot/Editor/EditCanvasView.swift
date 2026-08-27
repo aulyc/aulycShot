@@ -130,6 +130,14 @@ class EditCanvasView: NSView {
     private var validSelectedIndexes: [Int] {
         selectedIndexes.filter { annotations.indices.contains($0) }.sorted()
     }
+    private var selectedAnnotationForChrome: Annotation? {
+        guard
+            selectedIndexes.count == 1,
+            let index = selectedIndex,
+            annotations.indices.contains(index)
+        else { return nil }
+        return annotations[index]
+    }
 
     /// Fired when the selected annotation identity changes — non-nil when a
     /// selection is gained, nil when the selection clears. Used by the
@@ -192,13 +200,6 @@ class EditCanvasView: NSView {
         }
     }
 
-    /// The currently selected annotation, if any. Read by the controller
-    /// when seeding sub-toolbar values.
-    var selectedAnnotation: Annotation? {
-        guard selectedIndexes.count == 1, let idx = selectedIndex, idx < annotations.count else { return nil }
-        return annotations[idx]
-    }
-
     @discardableResult
     func clearMultiSelection() -> Bool {
         guard selectedIndexes.count > 1 else { return false }
@@ -249,11 +250,7 @@ class EditCanvasView: NSView {
     /// escape-style cancellations (e.g. tool switch mid-drag) can restore it
     /// cleanly.
     private struct HandleDragState {
-        enum Kind {
-            case rotate, curve, tip, textCalloutTip, magnifierSource, arrowStart, arrowEnd
-            case resize(ResizeAnchor)
-        }
-        let kind: Kind
+        let kind: AnnotationHitTesting.Handle
         let index: Int
         let original: Annotation
         let startMouse: NSPoint
@@ -264,21 +261,8 @@ class EditCanvasView: NSView {
         let startRotation: CGFloat
     }
 
-    private static let rotateHandleSize: CGFloat = 22
-    private static let rotateHandleOffset: CGFloat = 22
-    private static let curveHandleSize: CGFloat = 14
-    private static let tipHandleSize: CGFloat = 14
-    private static let textCalloutHandleSize: CGFloat = 13
-    private static let magnifierSourceHandleSize: CGFloat = 14
-    private static let endpointHandleSize: CGFloat = 12
-    private static let resizeHandleSize: CGFloat = 10
-    private static let actionButtonSize: CGFloat = 22
-    /// Small +/- stepper buttons shown under a selected numbered badge.
-    private static let numberStepButtonSize: CGFloat = 20
-    private static let selectionBoxPad: CGFloat = 6
     private static let hoverBoxPad: CGFloat = 5
     private static let hoverColor = NSColor(calibratedRed: 0.0, green: 0.56, blue: 1.0, alpha: 1.0)
-    private static let selectionOutlineColor = NSColor(calibratedWhite: 0.36, alpha: 0.9)
 
     private var trackingArea: NSTrackingArea?
 
@@ -299,10 +283,8 @@ class EditCanvasView: NSView {
         if AnnotationHitTesting.topmostIndex(at: local, in: annotations) != nil {
             return super.hitTest(point)
         }
-        if hitTestSelectionHandle(at: local) != nil {
-            return super.hitTest(point)
-        }
-        if hitTestSelectionAction(at: local) != nil {
+        if let annotation = selectedAnnotationForChrome,
+           AnnotationHitTesting.chromeHit(at: local, for: annotation) != nil {
             return super.hitTest(point)
         }
         // Empty-canvas click in adjust mode normally falls through to
@@ -658,7 +640,7 @@ class EditCanvasView: NSView {
         guard selectedIndexes.count == 1, let idx = selectedIndex, idx < annotations.count else { return }
         let original = annotations[idx]
         let updated = transform(original)
-        guard !annotationsEqualEnough(updated, original) else { return }
+        guard !updated.hasSameUndoState(as: original) else { return }
         recordUndo()
         annotations[idx] = updated
         syncNumberCounterAfterMutation(from: original, to: updated)
@@ -671,7 +653,7 @@ class EditCanvasView: NSView {
         guard selectedIndexes.count == 1, let idx = selectedIndex, idx < annotations.count else { return }
         let original = annotations[idx]
         let updated = transform(original)
-        guard !annotationsEqualEnough(updated, original) else { return }
+        guard !updated.hasSameUndoState(as: original) else { return }
         annotations[idx] = updated
         syncNumberCounterAfterMutation(from: original, to: updated)
         selectionAdjustmentDirty = true
@@ -762,66 +744,6 @@ class EditCanvasView: NSView {
         }
     }
 
-    /// Cheap identity check — guards atomic mutations from registering a
-    /// no-op undo entry when the user clicks the swatch that's already
-    /// selected. Annotations are value types but compare via property
-    /// snapshots since the protocol itself isn't Equatable.
-    private func annotationsEqualEnough(_ a: Annotation, _ b: Annotation) -> Bool {
-        if let a = a as? TextAnnotation, let b = b as? TextAnnotation {
-            return a.text == b.text && a.origin == b.origin
-                && a.fontSize == b.fontSize && a.rotation == b.rotation
-                && a.color == b.color && a.hasStroke == b.hasStroke
-                && a.hasCallout == b.hasCallout && a.calloutTip == b.calloutTip
-        }
-        if let a = a as? PenAnnotation, let b = b as? PenAnnotation {
-            return a.path === b.path && a.lineWidth == b.lineWidth
-                && a.rotation == b.rotation && a.color == b.color
-        }
-        if let a = a as? MarkerAnnotation, let b = b as? MarkerAnnotation {
-            return a.path === b.path && a.lineWidth == b.lineWidth
-                && a.rotation == b.rotation && a.color == b.color
-        }
-        if let a = a as? RectAnnotation, let b = b as? RectAnnotation {
-            return a.rect == b.rect && a.lineWidth == b.lineWidth
-                && a.fillMode == b.fillMode && a.strokeStyle == b.strokeStyle
-                && a.roughStyle == b.roughStyle
-                && a.rotation == b.rotation && a.color == b.color
-        }
-        if let a = a as? EllipseAnnotation, let b = b as? EllipseAnnotation {
-            return a.rect == b.rect && a.lineWidth == b.lineWidth
-                && a.fillMode == b.fillMode && a.strokeStyle == b.strokeStyle
-                && a.roughStyle == b.roughStyle
-                && a.rotation == b.rotation && a.color == b.color
-        }
-        if let a = a as? ArrowAnnotation, let b = b as? ArrowAnnotation {
-            return a.startPoint == b.startPoint && a.endPoint == b.endPoint
-                && a.controlPoint == b.controlPoint && a.style == b.style
-                && a.lineWidth == b.lineWidth && a.color == b.color
-        }
-        if let a = a as? LineAnnotation, let b = b as? LineAnnotation {
-            return a.startPoint == b.startPoint && a.endPoint == b.endPoint
-                && a.lineWidth == b.lineWidth && a.color == b.color
-        }
-        if let a = a as? NumberAnnotation, let b = b as? NumberAnnotation {
-            return a.center == b.center && a.tip == b.tip
-                && a.controlPoint == b.controlPoint && a.number == b.number
-                && a.color == b.color
-        }
-        if let a = a as? MosaicAnnotation, let b = b as? MosaicAnnotation {
-            return a.rect == b.rect && a.blockSize == b.blockSize
-        }
-        if let a = a as? MagnifierAnnotation, let b = b as? MagnifierAnnotation {
-            return a.center == b.center && a.radius == b.radius
-                && a.color == b.color && a.lineWidth == b.lineWidth
-                && a.zoom == b.zoom && a.sourceImage === b.sourceImage
-                && a.sourceCenter == b.sourceCenter
-        }
-        if let a = a as? ImageAnnotation, let b = b as? ImageAnnotation {
-            return a.image === b.image && a.rect == b.rect && a.rotation == b.rotation
-        }
-        return false
-    }
-
     // MARK: - Mouse Events
 
     override func mouseDown(with event: NSEvent) {
@@ -832,8 +754,15 @@ class EditCanvasView: NSView {
             .contains(.shift)
 
         // Action buttons (delete / edit) — clicked, not dragged.
-        if !isShiftSelecting,
-           let action = hitTestSelectionAction(at: point),
+        let chromeHit = selectedAnnotationForChrome.flatMap {
+            AnnotationHitTesting.chromeHit(
+                at: point,
+                for: $0,
+                includeActions: !isShiftSelecting
+            )
+        }
+
+        if case .action(let action) = chromeHit,
            let idx = selectedIndex {
             activeTextField?.commit()
             switch action {
@@ -881,7 +810,7 @@ class EditCanvasView: NSView {
         // Selection handles (rotate / curve / tip) take priority over body
         // drags so the user can grab a handle that visually overlaps the
         // annotation it controls.
-        if let kind = hitTestSelectionHandle(at: point),
+        if case .handle(let kind) = chromeHit,
            let idx = selectedIndex {
             activeTextField?.commit()
             let original = annotations[idx]
@@ -1343,10 +1272,10 @@ class EditCanvasView: NSView {
 
         // Selection chrome — drawn on top so it's always reachable.
         if selected.count == 1, let idx = selected.first {
-            drawSelectionHandles(for: annotations[idx], in: context)
+            AnnotationChromeRenderer.drawSelectionHandles(for: annotations[idx], in: context)
         } else {
             for idx in selected {
-                drawSelectionOutline(for: annotations[idx], in: context)
+                AnnotationChromeRenderer.drawSelectionOutline(for: annotations[idx], in: context)
             }
         }
 
@@ -1657,7 +1586,7 @@ class EditCanvasView: NSView {
             NSPoint(x: rect.minX, y: rect.maxY),
             NSPoint(x: rect.maxX, y: rect.minY),
             NSPoint(x: rect.maxX, y: rect.maxY),
-        ].map { rotated($0, for: annotation) }
+        ].map { AnnotationHandlePolicy.rotated($0, for: annotation) }
 
         guard let first = corners.first else { return rect }
         var minX = first.x
@@ -1852,168 +1781,6 @@ class EditCanvasView: NSView {
         )
     }
 
-    // MARK: - Selection handles
-
-    /// Padded bounding rect (unrotated) used as the dashed selection box and
-    /// as the anchor for the rotate / delete / edit handles.
-    private func selectionBox(for annotation: Annotation) -> NSRect {
-        EditorCanvasGeometry.selectionBox(
-            boundingRect: annotation.boundingRect,
-            padding: Self.selectionBoxPad
-        )
-    }
-
-    /// Places screen-space chrome at a point that follows the annotation's
-    /// rotation around its bounding-rect center.
-    private func rotated(_ point: NSPoint, for annotation: Annotation) -> NSPoint {
-        EditorCanvasGeometry.rotated(
-            point,
-            around: annotation.boundingRect,
-            rotation: annotation.supportsRotation ? annotation.rotation : 0
-        )
-    }
-
-    /// Center of the rotation handle in canvas coordinates. Sits above the
-    /// annotation's (rotated) top-center so it tracks the annotation as it
-    /// rotates and stays visible at any angle.
-    private func rotationHandleCenter(for annotation: Annotation) -> NSPoint {
-        let box = selectionBox(for: annotation)
-        let unrotatedTop = NSPoint(
-            x: box.midX,
-            y: box.maxY + EditCanvasView.rotateHandleOffset
-        )
-        return rotated(unrotatedTop, for: annotation)
-    }
-
-    /// Where the rotation tether meets the box edge, in canvas space.
-    private func rotationTetherAnchor(for annotation: Annotation) -> NSPoint {
-        let box = selectionBox(for: annotation)
-        let unrotated = NSPoint(x: box.midX, y: box.maxY + 2)
-        return rotated(unrotated, for: annotation)
-    }
-
-    /// Top-right corner of the dashed box in canvas space. Anchors the
-    /// stack of action buttons (delete, edit).
-    private func topRightCorner(for annotation: Annotation) -> NSPoint {
-        let box = selectionBox(for: annotation)
-        return rotated(NSPoint(x: box.maxX, y: box.maxY), for: annotation)
-    }
-
-    /// Curve handle position for any annotation that supports curving its
-    /// shaft (arrows and numbered badges with an arrow). Falls back to the
-    /// visual midpoint when no `controlPoint` is set so a fresh straight
-    /// shaft still has a grabbable bend point.
-    private func curveHandleCenter(for annotation: Annotation) -> NSPoint? {
-        if let arrow = annotation as? ArrowAnnotation {
-            return arrow.curveHandlePoint
-        }
-        if let number = annotation as? NumberAnnotation {
-            return number.curveHandlePoint
-        }
-        return nil
-    }
-
-    /// Tip handle position for numbered badges. Anchors at `tip` when set;
-    /// otherwise places a "stub" handle just outside the badge so the user
-    /// can pull a fresh arrow out without re-creating the annotation.
-    /// Stub sits above the badge — the right side is reserved for the
-    /// close button stack.
-    private func tipHandleCenter(for annotation: Annotation) -> NSPoint? {
-        guard let number = annotation as? NumberAnnotation else { return nil }
-        if let tip = number.tip {
-            return tip
-        }
-        return NSPoint(
-            x: number.center.x,
-            y: number.center.y + NumberAnnotation.arrowMinDistance + 4
-        )
-    }
-
-    /// Text callout handle. It starts below the bubble, then moves to the arrow
-    /// tip once the user has pulled one out.
-    private func textCalloutHandleCenter(for annotation: Annotation) -> NSPoint? {
-        guard let text = annotation as? TextAnnotation, text.hasCallout else { return nil }
-        return rotated(text.calloutHandlePoint, for: annotation)
-    }
-
-    /// Center source control for a magnifier. It starts in the middle of the
-    /// lens, then follows the detached sample point after the user drags it.
-    private func magnifierSourceHandleCenter(for annotation: Annotation) -> NSPoint? {
-        guard let magnifier = annotation as? MagnifierAnnotation else { return nil }
-        return magnifier.sourceCenter ?? magnifier.center
-    }
-
-    /// Start (tail) endpoint handle for a straight/curved arrow or a line —
-    /// sits at the `startPoint` so the user can re-anchor that end.
-    private func arrowStartHandleCenter(for annotation: Annotation) -> NSPoint? {
-        if let arrow = annotation as? ArrowAnnotation { return arrow.startPoint }
-        if let line = annotation as? LineAnnotation { return line.startPoint }
-        return nil
-    }
-
-    /// End endpoint handle — sits at the `endPoint` of an arrow or line so
-    /// the user can redirect / re-extend it without rebuilding the mark.
-    private func arrowEndHandleCenter(for annotation: Annotation) -> NSPoint? {
-        if let arrow = annotation as? ArrowAnnotation { return arrow.endPoint }
-        if let line = annotation as? LineAnnotation { return line.endPoint }
-        return nil
-    }
-
-    /// Delete button rect — always present in adjust mode.
-    private func deleteButtonRect(for annotation: Annotation) -> NSRect {
-        let s = EditCanvasView.actionButtonSize
-        let topRight = topRightCorner(for: annotation)
-        return NSRect(
-            x: topRight.x + 4,
-            y: topRight.y - s,
-            width: s,
-            height: s
-        )
-    }
-
-    /// Edit (pencil) button rect — only meaningful for text annotations.
-    private func editButtonRect(for annotation: Annotation) -> NSRect? {
-        guard annotation is TextAnnotation else { return nil }
-        let s = EditCanvasView.actionButtonSize
-        let topRight = topRightCorner(for: annotation)
-        return NSRect(
-            x: topRight.x + 4,
-            y: topRight.y - s * 2 - 4,
-            width: s,
-            height: s
-        )
-    }
-
-    /// One of the two +/- stepper buttons under a numbered badge.
-    /// `.decrement` is the left button, `.increment` the right. They are
-    /// anchored to the badge circle (not the bounding box) so they hug the
-    /// glyph regardless of any arrow. nil for non-number annotations.
-    private func numberStepButtonRect(for annotation: Annotation, increment: Bool) -> NSRect? {
-        guard let number = annotation as? NumberAnnotation else { return nil }
-        let s = EditCanvasView.numberStepButtonSize
-        let gap: CGFloat = 4          // spacing between the two buttons
-        let dropBelow: CGFloat = 7    // clearance under the badge circle
-        let centerY = number.center.y - NumberAnnotation.radius - dropBelow - s / 2
-        let centerX = increment
-            ? number.center.x + gap / 2 + s / 2
-            : number.center.x - gap / 2 - s / 2
-        return NSRect(x: centerX - s / 2, y: centerY - s / 2, width: s, height: s)
-    }
-
-    /// +/- buttons under a selected magnifier. Uses the same visual language
-    /// as numbered-badge steppers, but controls the lens' sampling scale.
-    private func magnifierZoomButtonRect(for annotation: Annotation, increment: Bool) -> NSRect? {
-        guard let magnifier = annotation as? MagnifierAnnotation else { return nil }
-        let s = EditCanvasView.numberStepButtonSize
-        let gap: CGFloat = 4
-        let dropBelow: CGFloat = 9
-        let centerY = magnifier.center.y - magnifier.radius - dropBelow - s / 2
-        let centerX = increment
-            ? magnifier.center.x + gap / 2 + s / 2
-            : magnifier.center.x - gap / 2 - s / 2
-        return NSRect(x: centerX - s / 2, y: centerY - s / 2, width: s, height: s)
-    }
-
     private func drawHoverHighlight(for annotation: Annotation, in context: CGContext) {
         if drawsHoverBody(for: annotation) {
             context.saveGState()
@@ -2089,625 +1856,31 @@ class EditCanvasView: NSView {
         context.restoreGState()
     }
 
-    private func drawSelectionOutline(for annotation: Annotation, in context: CGContext) {
-        let box = selectionBox(for: annotation)
-        let needsRotation = annotation.supportsRotation && annotation.rotation != 0
-        context.saveGState()
-        if needsRotation {
-            let rect = annotation.boundingRect
-            context.translateBy(x: rect.midX, y: rect.midY)
-            context.rotate(by: annotation.rotation)
-            context.translateBy(x: -rect.midX, y: -rect.midY)
-        }
-        context.setStrokeColor(EditCanvasView.selectionOutlineColor.cgColor)
-        context.setLineWidth(1)
-        context.setLineDash(phase: 0, lengths: [4, 3])
-        context.stroke(box)
-        context.restoreGState()
-    }
-
-    private func drawSelectionHandles(for annotation: Annotation, in context: CGContext) {
-        // 1. Dashed selection box — rotated with the annotation so it stays
-        // wrapped around the visible content at any angle.
-        drawSelectionOutline(for: annotation, in: context)
-
-        // 1b. Resize grips — eight dots on the rect's corners + edge mids.
-        if isResizable(annotation) {
-            for anchor in ResizeAnchor.allCases {
-                drawHandleDot(
-                    at: resizeHandlePoint(anchor, for: annotation),
-                    size: EditCanvasView.resizeHandleSize,
-                    fill: NSColor.white.withAlphaComponent(0.95),
-                    stroke: accentGreen,
-                    in: context
-                )
-            }
-        }
-
-        // 2. Rotation handle — follows the rotated top-center via a dashed
-        // tether so the user has a clear pivot point at any angle.
-        if annotation.supportsRotation {
-            let handleCenter = rotationHandleCenter(for: annotation)
-            let tether = rotationTetherAnchor(for: annotation)
-            context.saveGState()
-            context.setStrokeColor(NSColor.white.withAlphaComponent(0.6).cgColor)
-            context.setLineWidth(1)
-            context.setLineDash(phase: 0, lengths: [3, 3])
-            context.move(to: tether)
-            context.addLine(to: handleCenter)
-            context.strokePath()
-            context.restoreGState()
-
-            drawHandleDot(
-                at: handleCenter,
-                size: EditCanvasView.rotateHandleSize,
-                fill: NSColor(white: 0.12, alpha: 0.94),
-                stroke: accentGreen,
-                in: context
-            )
-            drawSymbolGlyph(
-                "arrow.triangle.2.circlepath",
-                at: handleCenter,
-                pointSize: 10,
-                in: context
-            )
-        }
-
-        // 3. Curve handle (arrow only).
-        if let cp = curveHandleCenter(for: annotation) {
-            drawHandleDot(
-                at: cp,
-                size: EditCanvasView.curveHandleSize,
-                fill: NSColor.white.withAlphaComponent(0.95),
-                stroke: accentGreen,
-                in: context
-            )
-        }
-
-        // 4. Tip handle (number only) — pulled out of the badge as an arrow.
-        if let tip = tipHandleCenter(for: annotation) {
-            drawHandleDot(
-                at: tip,
-                size: EditCanvasView.tipHandleSize,
-                fill: NSColor.white.withAlphaComponent(0.95),
-                stroke: accentGreen,
-                in: context
-            )
-        }
-
-        // 4a. Text callout handle — pulls an arrow out from the bubble.
-        if let tip = textCalloutHandleCenter(for: annotation) {
-            let fill = (annotation as? TextAnnotation)?.color ?? NSColor.white
-            drawHandleDot(
-                at: tip,
-                size: EditCanvasView.textCalloutHandleSize,
-                fill: fill,
-                stroke: NSColor.white.withAlphaComponent(0.95),
-                in: context
-            )
-        }
-
-        // 4b. Magnifier source handle — starts at the lens center and can be
-        // pulled out to magnify another part of the captured image.
-        if let source = magnifierSourceHandleCenter(for: annotation) {
-            drawHandleDot(
-                at: source,
-                size: EditCanvasView.magnifierSourceHandleSize,
-                fill: NSColor.white.withAlphaComponent(0.95),
-                stroke: accentGreen,
-                in: context
-            )
-        }
-
-        // 4c. Arrow endpoint handles — re-anchor the tail / redirect the tip.
-        if let start = arrowStartHandleCenter(for: annotation) {
-            drawHandleDot(
-                at: start,
-                size: EditCanvasView.endpointHandleSize,
-                fill: NSColor.white.withAlphaComponent(0.95),
-                stroke: accentGreen,
-                in: context
-            )
-        }
-        if let end = arrowEndHandleCenter(for: annotation) {
-            drawHandleDot(
-                at: end,
-                size: EditCanvasView.endpointHandleSize,
-                fill: NSColor.white.withAlphaComponent(0.95),
-                stroke: accentGreen,
-                in: context
-            )
-        }
-
-        // 5. Delete button (always).
-        let deleteRect = deleteButtonRect(for: annotation)
-        drawActionButton(
-            in: deleteRect,
-            symbolName: "xmark",
-            symbolPointSize: 9,
-            in: context
-        )
-
-        // 6. Edit (pencil) button — text only.
-        if let editRect = editButtonRect(for: annotation) {
-            drawActionButton(
-                in: editRect,
-                symbolName: "pencil",
-                symbolPointSize: 10,
-                in: context
-            )
-        }
-
-        // 7. Number stepper — small +/- buttons under the badge so the
-        // user can re-number a sequence badge without re-creating it.
-        if let number = annotation as? NumberAnnotation,
-           let decRect = numberStepButtonRect(for: annotation, increment: false),
-           let incRect = numberStepButtonRect(for: annotation, increment: true) {
-            drawActionButton(
-                in: decRect,
-                symbolName: "minus",
-                symbolPointSize: 9,
-                enabled: number.number > 1,
-                in: context
-            )
-            drawActionButton(
-                in: incRect,
-                symbolName: "plus",
-                symbolPointSize: 9,
-                in: context
-            )
-        }
-
-        // 8. Magnifier zoom stepper — small +/- buttons under the lens so
-        // the user can tune the sampled region without re-creating it.
-        if let magnifier = annotation as? MagnifierAnnotation,
-           let decRect = magnifierZoomButtonRect(for: annotation, increment: false),
-           let incRect = magnifierZoomButtonRect(for: annotation, increment: true) {
-            drawActionButton(
-                in: decRect,
-                symbolName: "minus",
-                symbolPointSize: 9,
-                enabled: magnifier.zoom > MagnifierAnnotation.minZoom,
-                in: context
-            )
-            drawActionButton(
-                in: incRect,
-                symbolName: "plus",
-                symbolPointSize: 9,
-                enabled: magnifier.zoom < MagnifierAnnotation.maxZoom,
-                in: context
-            )
-        }
-    }
-
-    private func drawHandleDot(
-        at center: NSPoint,
-        size: CGFloat,
-        fill: NSColor,
-        stroke: NSColor,
-        in context: CGContext
-    ) {
-        let rect = NSRect(
-            x: center.x - size / 2,
-            y: center.y - size / 2,
-            width: size,
-            height: size
-        )
-        context.setFillColor(fill.cgColor)
-        context.fillEllipse(in: rect)
-        context.setStrokeColor(stroke.cgColor)
-        context.setLineWidth(1.5)
-        context.strokeEllipse(in: rect.insetBy(dx: 0.75, dy: 0.75))
-    }
-
-    /// Draw an SF Symbol tinted white, centered at `center`. Used for the
-    /// rotate / delete / edit glyphs on the action buttons. `alpha` dims the
-    /// glyph for disabled buttons (e.g. "−" when the badge is already at 1).
-    private func drawSymbolGlyph(
-        _ symbolName: String,
-        at center: NSPoint,
-        pointSize: CGFloat,
-        alpha: CGFloat = 1,
-        in context: CGContext
-    ) {
-        let cfg = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .bold)
-        guard let img = NSImage(
-            systemSymbolName: symbolName,
-            accessibilityDescription: nil
-        )?.withSymbolConfiguration(cfg) else { return }
-
-        let tinted = NSImage(size: img.size, flipped: false) { rect in
-            img.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1)
-            NSColor.white.set()
-            rect.fill(using: .sourceAtop)
-            return true
-        }
-
-        let drawRect = NSRect(
-            x: center.x - tinted.size.width / 2,
-            y: center.y - tinted.size.height / 2,
-            width: tinted.size.width,
-            height: tinted.size.height
-        )
-        NSGraphicsContext.saveGraphicsState()
-        tinted.draw(in: drawRect, from: .zero, operation: .sourceOver, fraction: alpha)
-        NSGraphicsContext.restoreGraphicsState()
-    }
-
-    /// Round dark button with an accent ring and a centered SF symbol —
-    /// used for delete / edit / number-stepper actions in adjust mode.
-    /// `enabled: false` dims the whole button for a no-op state.
-    private func drawActionButton(
-        in rect: NSRect,
-        symbolName: String,
-        symbolPointSize: CGFloat,
-        enabled: Bool = true,
-        in context: CGContext
-    ) {
-        let alpha: CGFloat = enabled ? 1 : 0.4
-        drawHandleDot(
-            at: NSPoint(x: rect.midX, y: rect.midY),
-            size: rect.width,
-            fill: NSColor(white: 0.12, alpha: 0.94 * alpha),
-            stroke: accentGreen.withAlphaComponent(alpha),
-            in: context
-        )
-        drawSymbolGlyph(
-            symbolName,
-            at: NSPoint(x: rect.midX, y: rect.midY),
-            pointSize: symbolPointSize,
-            alpha: alpha,
-            in: context
-        )
-    }
-
-    enum SelectionAction {
-        case delete, edit
-        case incrementNumber, decrementNumber
-        case zoomInMagnifier, zoomOutMagnifier
-    }
-
-    /// Top-right action buttons (delete, edit) — clicked, not dragged.
-    private func hitTestSelectionAction(at point: NSPoint) -> SelectionAction? {
-        guard
-            selectedIndexes.count == 1,
-            let idx = selectedIndex,
-            idx < annotations.count
-        else { return nil }
-        let annotation = annotations[idx]
-
-        if deleteButtonRect(for: annotation).contains(point) {
-            return .delete
-        }
-        if let editRect = editButtonRect(for: annotation), editRect.contains(point) {
-            return .edit
-        }
-        if let decRect = numberStepButtonRect(for: annotation, increment: false),
-           decRect.contains(point) {
-            return .decrementNumber
-        }
-        if let incRect = numberStepButtonRect(for: annotation, increment: true),
-           incRect.contains(point) {
-            return .incrementNumber
-        }
-        if let decRect = magnifierZoomButtonRect(for: annotation, increment: false),
-           decRect.contains(point) {
-            return .zoomOutMagnifier
-        }
-        if let incRect = magnifierZoomButtonRect(for: annotation, increment: true),
-           incRect.contains(point) {
-            return .zoomInMagnifier
-        }
-        return nil
-    }
-
-    /// True for annotations that expose the eight-grip resize chrome.
-    private func isResizable(_ annotation: Annotation) -> Bool {
-        annotation is RectAnnotation
-            || annotation is EllipseAnnotation
-            || annotation is MosaicAnnotation
-            || annotation is MagnifierAnnotation
-            || annotation is ImageAnnotation
-    }
-
-    private func resizeHandlePoint(_ anchor: ResizeAnchor, for annotation: Annotation) -> NSPoint {
-        EditorCanvasGeometry.resizeHandlePoint(
-            anchor,
-            boundingRect: annotation.boundingRect,
-            rotation: annotation.supportsRotation ? annotation.rotation : 0
-        )
-    }
-
-    private func hitTestSelectionHandle(at point: NSPoint) -> HandleDragState.Kind? {
-        guard
-            selectedIndexes.count == 1,
-            let idx = selectedIndex,
-            idx < annotations.count
-        else { return nil }
-        let annotation = annotations[idx]
-
-        if let source = magnifierSourceHandleCenter(for: annotation) {
-            let r = EditCanvasView.magnifierSourceHandleSize / 2 + 5
-            if hypot(point.x - source.x, point.y - source.y) <= r {
-                return .magnifierSource
-            }
-        }
-
-        // Resize grips — checked before body drags so a corner grip wins on
-        // the same pixels.
-        if isResizable(annotation) {
-            let r = EditCanvasView.resizeHandleSize / 2 + 4
-            for anchor in ResizeAnchor.allCases {
-                let c = resizeHandlePoint(anchor, for: annotation)
-                if hypot(point.x - c.x, point.y - c.y) <= r {
-                    return .resize(anchor)
-                }
-            }
-        }
-
-        if annotation.supportsRotation {
-            let handleCenter = rotationHandleCenter(for: annotation)
-            let r = EditCanvasView.rotateHandleSize / 2 + 2
-            if hypot(point.x - handleCenter.x, point.y - handleCenter.y) <= r {
-                return .rotate
-            }
-        }
-
-        // Tip handle wins over curve when both apply (numbered badges with
-        // a short shaft) — the arrowhead is the more visually salient grab
-        // target.
-        if let tip = tipHandleCenter(for: annotation) {
-            let r = EditCanvasView.tipHandleSize / 2 + 4
-            if hypot(point.x - tip.x, point.y - tip.y) <= r {
-                return .tip
-            }
-        }
-
-        if let tip = textCalloutHandleCenter(for: annotation) {
-            let r = EditCanvasView.textCalloutHandleSize / 2 + 4
-            if hypot(point.x - tip.x, point.y - tip.y) <= r {
-                return .textCalloutTip
-            }
-        }
-
-        // Arrow endpoint handles — checked before the curve handle so the
-        // user can grab the tip even if it visually overlaps another handle.
-        if let end = arrowEndHandleCenter(for: annotation) {
-            let r = EditCanvasView.endpointHandleSize / 2 + 4
-            if hypot(point.x - end.x, point.y - end.y) <= r {
-                return .arrowEnd
-            }
-        }
-        if let start = arrowStartHandleCenter(for: annotation) {
-            let r = EditCanvasView.endpointHandleSize / 2 + 4
-            if hypot(point.x - start.x, point.y - start.y) <= r {
-                return .arrowStart
-            }
-        }
-
-        if let cp = curveHandleCenter(for: annotation) {
-            let r = EditCanvasView.curveHandleSize / 2 + 4
-            if hypot(point.x - cp.x, point.y - cp.y) <= r {
-                return .curve
-            }
-        }
-
-        return nil
-    }
-
     private func applyHandleDrag(state: HandleDragState, currentMouse: NSPoint) {
         guard state.index < annotations.count else { return }
-
-        switch state.kind {
-        case .rotate:
-            let original = state.original
-            let center = NSPoint(
-                x: original.boundingRect.midX,
-                y: original.boundingRect.midY
-            )
-            let currentAngle = atan2(currentMouse.y - center.y, currentMouse.x - center.x)
-            var newRotation = state.startRotation + (currentAngle - state.startAngle)
-            // Shift snaps to 15° increments for predictable angles.
-            if NSEvent.modifierFlags.contains(.shift) {
-                let step = CGFloat.pi / 12
-                newRotation = (newRotation / step).rounded() * step
-            }
-            annotations[state.index] = original.withRotation(newRotation)
-
-        case .curve:
-            // Snap back to a straight shaft when the handle is dragged near
-            // the geometric midpoint, so the user can undo a curve without
-            // having to land precisely on the original mid pixel.
-            if let arrow = state.original as? ArrowAnnotation {
-                let mid = arrow.defaultCurveMid
-                if hypot(currentMouse.x - mid.x, currentMouse.y - mid.y) < 4 {
-                    annotations[state.index] = arrow.withControlPoint(nil)
-                } else {
-                    annotations[state.index] = arrow.withControlPoint(currentMouse)
-                }
-            } else if let number = state.original as? NumberAnnotation,
-                      let mid = number.defaultCurveMid {
-                if hypot(currentMouse.x - mid.x, currentMouse.y - mid.y) < 4 {
-                    annotations[state.index] = number.withControlPoint(nil)
-                } else {
-                    annotations[state.index] = number.withControlPoint(currentMouse)
-                }
-            }
-
-        case .tip:
-            guard let number = state.original as? NumberAnnotation else { return }
-            // Snap to "no arrow" when the tip is dragged back inside the
-            // badge so the user can ditch the arrow without precisely
-            // landing on the badge center.
-            let dist = hypot(currentMouse.x - number.center.x, currentMouse.y - number.center.y)
-            if dist < NumberAnnotation.arrowMinDistance {
-                annotations[state.index] = number.withTip(nil)
-            } else {
-                annotations[state.index] = number.withTip(currentMouse)
-            }
-
-        case .textCalloutTip:
-            guard let text = state.original as? TextAnnotation, text.hasCallout else { return }
-            let point = text.unrotate(currentMouse)
-            if text.calloutBodyRect.insetBy(dx: -2, dy: -2).contains(point) {
-                annotations[state.index] = text.withCalloutTip(nil)
-                break
-            }
-            let anchor = text.calloutAnchorPoint(for: point)
-            let dist = hypot(point.x - anchor.x, point.y - anchor.y)
-            if dist <= TextAnnotation.calloutArrowMinDistance {
-                annotations[state.index] = text.withCalloutTip(nil)
-            } else {
-                annotations[state.index] = text.withCalloutTip(point)
-            }
-
-        case .magnifierSource:
-            guard let magnifier = state.original as? MagnifierAnnotation else { return }
-            let point = EditorCanvasGeometry.clamped(currentMouse, to: bounds)
-            let dist = hypot(point.x - magnifier.center.x, point.y - magnifier.center.y)
-            let source = dist < MagnifierAnnotation.sourceResetDistance ? nil : point
-            annotations[state.index] = magnifier.withSourceCenter(source)
-
-        case .arrowStart:
-            if let arrow = state.original as? ArrowAnnotation {
-                let newStart = constrainedEndpoint(
-                    currentMouse,
-                    fixedPoint: arrow.endPoint
-                )
-                annotations[state.index] = arrow.withStartPoint(newStart)
-            } else if let line = state.original as? LineAnnotation {
-                let newStart = constrainedEndpoint(
-                    currentMouse,
-                    fixedPoint: line.endPoint
-                )
-                annotations[state.index] = line.withStartPoint(newStart)
-            }
-
-        case .arrowEnd:
-            if let arrow = state.original as? ArrowAnnotation {
-                let newEnd = constrainedEndpoint(
-                    currentMouse,
-                    fixedPoint: arrow.startPoint
-                )
-                annotations[state.index] = arrow.withEndPoint(newEnd)
-            } else if let line = state.original as? LineAnnotation {
-                let newEnd = constrainedEndpoint(
-                    currentMouse,
-                    fixedPoint: line.startPoint
-                )
-                annotations[state.index] = line.withEndPoint(newEnd)
-            }
-
-        case .resize(let anchor):
-            let shiftIsDown = NSEvent.modifierFlags
-                .intersection(.deviceIndependentFlagsMask)
-                .contains(.shift)
-            if let magnifier = state.original as? MagnifierAnnotation {
-                // Circular lens — keep the center pinned and set the radius
-                // to the cursor's distance from it. Every grip behaves the
-                // same; it's the natural gesture for a circle.
-                let r = hypot(
-                    currentMouse.x - magnifier.center.x,
-                    currentMouse.y - magnifier.center.y
-                )
-                guard r >= MagnifierAnnotation.minRadius else { return }
-                annotations[state.index] = magnifier.withRadius(r)
-            } else if let mosaic = state.original as? MosaicAnnotation {
-                // Move only the edge(s) this grip owns; the opposite edge(s)
-                // stay pinned. min/abs keep the rect valid if the user drags a
-                // grip past its opposite side.
-                let newRect = EditorCanvasGeometry.resizedRect(
-                    from: mosaic.rect,
-                    anchor: anchor,
-                    currentMouse: currentMouse,
-                    minimumSize: 4,
-                    constraint: shiftIsDown ? .preserveAspectRatio : .none
-                )
-                guard newRect.width >= 4, newRect.height >= 4 else { return }
-                // Re-pixelate from the untouched base image so the mosaic
-                // always covers whatever content the new rect frames (rather
-                // than stretching the old pixels).
-                guard
-                    let baseImage = resolveBaseImageForEditing(),
-                    let region = MosaicTool.createMosaicRegion(
-                        rect: newRect,
-                        imageSize: bounds.size,
-                        baseImage: baseImage,
-                        blockSize: mosaic.blockSize
-                    )
-                else { return }
-                annotations[state.index] = MosaicAnnotation(
-                    rect: region.rect,
-                    pixelatedImage: region.pixelatedImage,
-                    blockSize: mosaic.blockSize
-                )
-            } else if let rect = state.original as? RectAnnotation {
-                let newRect = EditorCanvasGeometry.resizedRotatedRect(
-                    from: rect.rect,
-                    rotation: rect.rotation,
-                    anchor: anchor,
-                    currentMouse: currentMouse,
-                    minimumSize: 4,
-                    constraint: shiftIsDown ? .square : .none
-                )
-                guard newRect.width >= 4, newRect.height >= 4 else { return }
-                annotations[state.index] = RectAnnotation(
-                    rect: newRect,
-                    color: rect.color,
-                    lineWidth: rect.lineWidth,
-                    fillMode: rect.fillMode,
-                    strokeStyle: rect.strokeStyle,
-                    roughStyle: rect.roughStyle.tuned(for: newRect, lineWidth: rect.lineWidth),
-                    rotation: rect.rotation
-                )
-            } else if let ellipse = state.original as? EllipseAnnotation {
-                let newRect = EditorCanvasGeometry.resizedRotatedRect(
-                    from: ellipse.rect,
-                    rotation: ellipse.rotation,
-                    anchor: anchor,
-                    currentMouse: currentMouse,
-                    minimumSize: 4,
-                    constraint: shiftIsDown ? .square : .none
-                )
-                guard newRect.width >= 4, newRect.height >= 4 else { return }
-                annotations[state.index] = EllipseAnnotation(
-                    rect: newRect,
-                    color: ellipse.color,
-                    lineWidth: ellipse.lineWidth,
-                    fillMode: ellipse.fillMode,
-                    strokeStyle: ellipse.strokeStyle,
-                    roughStyle: ellipse.roughStyle.tuned(for: newRect, lineWidth: ellipse.lineWidth),
-                    rotation: ellipse.rotation
-                )
-            } else if let image = state.original as? ImageAnnotation {
-                let newRect = EditorCanvasGeometry.resizedRotatedRect(
-                    from: image.rect,
-                    rotation: image.rotation,
-                    anchor: anchor,
-                    currentMouse: currentMouse,
-                    minimumSize: 12,
-                    constraint: shiftIsDown ? .preserveAspectRatio : .none
-                )
-                guard newRect.width >= 12, newRect.height >= 12 else { return }
-                annotations[state.index] = image.withRect(newRect)
-            }
-        }
-
-        needsDisplay = true
-    }
-
-    private func constrainedEndpoint(
-        _ currentMouse: NSPoint,
-        fixedPoint: NSPoint
-    ) -> NSPoint {
         let shiftPressed = NSEvent.modifierFlags
             .intersection(.deviceIndependentFlagsMask)
             .contains(.shift)
-        return EditorCanvasGeometry.constrainedEndpoint(
-            currentMouse,
-            fixedPoint: fixedPoint,
-            shiftPressed: shiftPressed
+        let baseImage = state.original is MosaicAnnotation
+            ? resolveBaseImageForEditing()
+            : nil
+        let context = AnnotationHandleDragging.Context(
+            canvasBounds: bounds,
+            shiftPressed: shiftPressed,
+            baseImage: baseImage
         )
+        if let annotation = AnnotationHandleDragging.transformedAnnotation(
+            from: state.original,
+            handle: state.kind,
+            currentMouse: currentMouse,
+            startAngle: state.startAngle,
+            startRotation: state.startRotation,
+            context: context
+        ) {
+            annotations[state.index] = annotation
+        }
+
+        needsDisplay = true
     }
 
     // MARK: - Cursor
@@ -2758,14 +1931,17 @@ class EditCanvasView: NSView {
             return
         }
         // Action buttons on the selection chrome: pointing finger.
-        if hitTestSelectionAction(at: point) != nil {
+        let chromeHit = selectedAnnotationForChrome.flatMap {
+            AnnotationHitTesting.chromeHit(at: point, for: $0)
+        }
+        if case .action = chromeHit {
             NSCursor.pointingHand.set()
             return
         }
         // Drag handles (rotate / curve / number tip / magnifier source /
         // resize): resize grips get a directional cursor; the rest get an
         // open hand.
-        if let kind = hitTestSelectionHandle(at: point) {
+        if case .handle(let kind) = chromeHit {
             if case .resize(let anchor) = kind {
                 switch anchor {
                 case .topLeft: ResizeHandleCursor.setFrameResizeCursor(for: .topLeft)

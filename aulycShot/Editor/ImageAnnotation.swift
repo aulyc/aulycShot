@@ -2,7 +2,7 @@ import AppKit
 
 // MARK: - Image Annotation
 
-struct ImageAnnotation: Annotation {
+struct ImageAnnotation: Annotation, Equatable {
     let image: NSImage
     let rect: NSRect
     var rotation: CGFloat = 0

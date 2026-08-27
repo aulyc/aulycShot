@@ -23,10 +23,6 @@ enum InstallPhase: Equatable, Sendable {
     case installing
 }
 
-extension Notification.Name {
-    static let updateStateDidChange = Notification.Name("aulycShot.updateStateDidChange")
-}
-
 /// Checks the public GitHub/Gitee update mirrors for a newer formal aulycShot
 /// release and, when asked, downloads and installs it in place.
 ///
@@ -297,21 +293,6 @@ final class UpdateChecker {
 
     private func setState(_ newState: UpdateState) {
         state = newState
-    }
-
-    /// Strips a leading `release-v` / `v` from a tag — aulycShot tags releases as
-    /// `release-v1.1.2`, so "release-v1.1.2" becomes "1.1.2".
-    nonisolated static func normalizeVersion(_ raw: String) -> String {
-        var v = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if v.hasPrefix("release-v") {
-            v.removeFirst("release-v".count)
-        } else if v.hasPrefix("release-") {
-            v.removeFirst("release-".count)
-        }
-        if v.hasPrefix("v") || v.hasPrefix("V") {
-            v.removeFirst()
-        }
-        return v
     }
 
     /// Component-wise numeric comparison: "1.2.0" is newer than "1.1.9".

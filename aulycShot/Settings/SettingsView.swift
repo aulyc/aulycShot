@@ -27,15 +27,6 @@ enum SettingsTab: CaseIterable {
         }
     }
 
-    var iconTint: NSColor {
-        switch self {
-        case .general: return NSColor(calibratedRed: 0.62, green: 0.66, blue: 0.72, alpha: 1.0)
-        case .shortcuts: return NSColor(calibratedRed: 0.36, green: 0.66, blue: 0.98, alpha: 1.0)
-        case .toolbar: return NSColor(calibratedRed: 0.95, green: 0.54, blue: 0.62, alpha: 1.0)
-        case .about: return NSColor(calibratedRed: 0.70, green: 0.56, blue: 0.96, alpha: 1.0)
-        }
-    }
-
     var description: String {
         switch self {
         case .general: return L10n.settingsTabGeneralDescription
@@ -68,8 +59,16 @@ enum SettingsActivationState: String, CaseIterable {
 @MainActor
 class SettingsView: NSView {
 
+    struct ShortcutRowControls {
+        let title: NSTextField
+        let field: NSTextField
+        let setButton: NSButton
+    }
+
     var onMenuBarToggle: ((Bool) -> Void)?
     var onPermissionHelpRequest: (() -> Void)?
+
+    var shortcutRows: [HotkeySlot: ShortcutRowControls] = [:]
 
     // Pane extensions share this module-internal state without exposing it publicly.
     // Activation-state pickers
@@ -81,59 +80,8 @@ class SettingsView: NSView {
     // Picker & slider
     var langPicker: NSPopUpButton!
 
-    // Screenshot shortcut card
-    var shortcutTitleLabel: NSTextField!
-    var shortcutField: NSTextField!
-    var shortcutSetButton: NSButton!
     var shortcutRecordingMonitor: Any?
-
-    // Pin selected image shortcut card
-    var selectedImagePinShortcutTitleLabel: NSTextField!
-    var selectedImagePinShortcutField: NSTextField!
-    var selectedImagePinShortcutSetButton: NSButton!
-    var selectedImagePinShortcutRecordingMonitor: Any?
-
-    // Pin clipboard image shortcut card
-    var clipboardImagePinShortcutTitleLabel: NSTextField!
-    var clipboardImagePinShortcutField: NSTextField!
-    var clipboardImagePinShortcutSetButton: NSButton!
-    var clipboardImagePinShortcutRecordingMonitor: Any?
-
-    // Pin clipboard text shortcut card
-    var clipboardTextPinShortcutTitleLabel: NSTextField!
-    var clipboardTextPinShortcutField: NSTextField!
-    var clipboardTextPinShortcutSetButton: NSButton!
-    var clipboardTextPinShortcutRecordingMonitor: Any?
-
-    // Edit selected image shortcut card
-    var selectedImageEditShortcutTitleLabel: NSTextField!
-    var selectedImageEditShortcutField: NSTextField!
-    var selectedImageEditShortcutSetButton: NSButton!
-    var selectedImageEditShortcutRecordingMonitor: Any?
-
-    // Edit clipboard image shortcut card
-    var clipboardImageEditShortcutTitleLabel: NSTextField!
-    var clipboardImageEditShortcutField: NSTextField!
-    var clipboardImageEditShortcutSetButton: NSButton!
-    var clipboardImageEditShortcutRecordingMonitor: Any?
-
-    // Recording shortcut card
-    var recordShortcutTitleLabel: NSTextField!
-    var recordShortcutField: NSTextField!
-    var recordShortcutSetButton: NSButton!
-    var recordShortcutRecordingMonitor: Any?
-
-    // Image Merge shortcut card
-    var imageMergeShortcutTitleLabel: NSTextField!
-    var imageMergeShortcutField: NSTextField!
-    var imageMergeShortcutSetButton: NSButton!
-    var imageMergeShortcutRecordingMonitor: Any?
-
-    // Screenshot execution (editor confirm) shortcut card
-    var clipboardShortcutTitleLabel: NSTextField!
-    var clipboardShortcutField: NSTextField!
-    var clipboardShortcutSetButton: NSButton!
-    var clipboardShortcutRecordingMonitor: Any?
+    var recordingShortcutSlot: HotkeySlot?
 
     var detailResetButton: NSButton?
     weak var toolbarSettingsPane: ToolbarSettingsPane?
@@ -230,14 +178,6 @@ class SettingsView: NSView {
             refreshTimer?.invalidate()
             removePermissionAlertOutsideClickMonitor()
             cancelShortcutRecording()
-            cancelSelectedImagePinShortcutRecording()
-            cancelClipboardImagePinShortcutRecording()
-            cancelClipboardTextPinShortcutRecording()
-            cancelSelectedImageEditShortcutRecording()
-            cancelClipboardImageEditShortcutRecording()
-            cancelRecordShortcutRecording()
-            cancelImageMergeShortcutRecording()
-            cancelClipboardShortcutRecording()
             NotificationCenter.default.removeObserver(self)
         }
     }
@@ -281,15 +221,7 @@ class SettingsView: NSView {
         selectTab(.general)
 
         refreshPermissionStatus()
-        refreshShortcutDisplay()
-        refreshSelectedImagePinShortcutDisplay()
-        refreshClipboardImagePinShortcutDisplay()
-        refreshClipboardTextPinShortcutDisplay()
-        refreshSelectedImageEditShortcutDisplay()
-        refreshClipboardImageEditShortcutDisplay()
-        refreshRecordShortcutDisplay()
-        refreshImageMergeShortcutDisplay()
-        refreshClipboardShortcutDisplay()
+        refreshShortcutDisplays()
     }
 
     // MARK: - Sidebar
@@ -643,15 +575,9 @@ private func buildToolbarPane() -> NSView {
         screenshotSavePathRevealButton?.setAccessibilityLabel(L10n.savePathReveal)
         refreshSavePathControls()
         refreshGeneralPopupWidths()
-        shortcutTitleLabel?.stringValue = L10n.shortcutHeader
-        selectedImagePinShortcutTitleLabel?.stringValue = L10n.selectedImagePinShortcutHeader
-        clipboardImagePinShortcutTitleLabel?.stringValue = L10n.clipboardImagePinShortcutHeader
-        clipboardTextPinShortcutTitleLabel?.stringValue = L10n.clipboardTextPinShortcutHeader
-        selectedImageEditShortcutTitleLabel?.stringValue = L10n.selectedImageEditShortcutHeader
-        clipboardImageEditShortcutTitleLabel?.stringValue = L10n.clipboardImageEditShortcutHeader
-        recordShortcutTitleLabel?.stringValue = L10n.recordShortcutHeader
-        imageMergeShortcutTitleLabel?.stringValue = L10n.imageMergeShortcutHeader
-        clipboardShortcutTitleLabel?.stringValue = L10n.clipboardShortcutHeader
+        for (slot, row) in shortcutRows {
+            row.title.stringValue = slot.localizedHeader
+        }
         detailResetButton?.title = L10n.toolbarSettingsReset
         aboutVersionLabel?.stringValue = aboutVersionValueString()
         aboutLicenseTitleLabel?.stringValue = L10n.aboutLicense
@@ -663,15 +589,7 @@ private func buildToolbarPane() -> NSView {
         errorLogTitleLabel?.stringValue = L10n.aboutErrorLog
         errorLogWindowController?.refreshLocalizedText()
         refreshUpdateRow()
-        refreshShortcutDisplay()
-        refreshSelectedImagePinShortcutDisplay()
-        refreshClipboardImagePinShortcutDisplay()
-        refreshClipboardTextPinShortcutDisplay()
-        refreshSelectedImageEditShortcutDisplay()
-        refreshClipboardImageEditShortcutDisplay()
-        refreshRecordShortcutDisplay()
-        refreshImageMergeShortcutDisplay()
-        refreshClipboardShortcutDisplay()
+        refreshShortcutDisplays()
         featurePermissionHelpButton?.toolTip = L10n.featurePermissionHelpTooltip
         featurePermissionHelpButton?.setAccessibilityLabel(L10n.featurePermissionHelpTooltip)
         featurePermissionStatus?.setTitle(L10n.featurePermissionStatus)

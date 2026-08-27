@@ -3,6 +3,12 @@ import AppKit
 // MARK: - Annotation Protocol
 
 protocol Annotation {
+    /// Compares the complete editor state that determines whether a mutation
+    /// deserves an undo entry. Concrete annotations use synthesized
+    /// `Equatable` witnesses so adding a stored field updates this contract
+    /// automatically instead of requiring a central type switch.
+    func hasSameUndoState(as other: Annotation) -> Bool
+
     func draw(in context: CGContext, bounds: NSRect)
 
     /// True when the point is on (or close enough to) this annotation that
@@ -40,6 +46,12 @@ protocol Annotation {
     func withFill(_ filled: Bool) -> Annotation
     func withShapeFillMode(_ fillMode: ShapeFillMode) -> Annotation
     func withShapeStrokeStyle(_ strokeStyle: ShapeStrokeStyle) -> Annotation
+}
+extension Annotation where Self: Equatable {
+    func hasSameUndoState(as other: Annotation) -> Bool {
+        guard let other = other as? Self else { return false }
+        return self == other
+    }
 }
 extension Annotation {
     var rotation: CGFloat { 0 }
@@ -637,7 +649,6 @@ enum ArrowStyle: String, CaseIterable {
 enum NumberArrowShape {
     static let shaftWidth: CGFloat = 3
     static let headStrokeWidth: CGFloat = 1.5
-    static let dotTailRadius: CGFloat = 5
 
     static var headLength: CGFloat { max(10, shaftWidth * 4) }
     static var headWidth: CGFloat { max(7, shaftWidth * 3) }

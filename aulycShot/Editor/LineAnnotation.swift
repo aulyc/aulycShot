@@ -6,7 +6,7 @@ import AppKit
 /// endpoints carry draggable handles in adjust mode so the user can change
 /// the line's length and angle; a rotation handle spins the whole segment
 /// around its midpoint.
-struct LineAnnotation: Annotation {
+struct LineAnnotation: Annotation, Equatable {
     let startPoint: NSPoint
     let endPoint: NSPoint
     let color: NSColor

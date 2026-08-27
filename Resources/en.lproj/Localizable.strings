@@ -21,7 +21,6 @@
 
 /* Screenshot shortcut */
 "shortcutHeader" = "Screenshot";
-"shortcutHint" = "Set a shortcut to trigger screenshots from any app. Not set by default";
 "shortcutDefaultDisplay" = "Not set";
 "shortcutSet" = "Set";
 "shortcutCancel" = "Cancel";
@@ -45,17 +44,14 @@
 
 /* Image-edit shortcuts */
 "selectedImageEditShortcutHeader" = "Edit Selected Image";
-"selectedImageEditShortcutHint" = "Press it to edit the single image selected in Finder. Not set by default";
 "selectedImageEditShortcutDefaultDisplay" = "Not set";
 "clipboardImageEditShortcutHeader" = "Edit Clipboard Image";
-"clipboardImageEditShortcutHint" = "Press it to edit the current image on the clipboard. Not set by default";
 "clipboardImageEditShortcutDefaultDisplay" = "Not set";
 "recordShortcutHeader" = "Record";
 "recordShortcutDefaultDisplay" = "Not set";
 
 /* Screenshot execution shortcut (editor confirm) */
 "clipboardShortcutHeader" = "Execute Screenshot";
-"clipboardShortcutHint" = "Press it in the editor to complete the screenshot and apply the After screenshot execution setting. Not set by default";
 "clipboardShortcutDefaultDisplay" = "Not set";
 
 /* Shortcut conflict */
@@ -97,7 +93,6 @@
 "recordingCancelled" = "Recording cancelled";
 "recordingExportingGIF" = "Creating GIF";
 "recordingFailed" = "Recording failed: %@";
-"saveRecording" = "Save Recording";
 "saveRecordingPrompt" = "Save";
 "recordingFormatLabel" = "Format";
 "recordingFormatManual" = "Choose each time";
@@ -168,15 +163,9 @@
 "settingsTabAboutDescription" = "View version, updates, and diagnostics";
 
 "toolbarSettingsPrimaryTitle" = "Main toolbar";
-"toolbarSettingsPrimaryHint" = "Tools appear above or below the selection";
 "toolbarSettingsSideTitle" = "Side toolbar";
-"toolbarSettingsSideHint" = "Tools appear to the left or right of the selection";
 "toolbarSettingsHiddenTitle" = "Hidden tools";
-"toolbarSettingsHiddenHint" = "Tools dragged here won't appear in any toolbar";
-"toolbarSettingsFootnote" = "Toolbars switch automatically between top/bottom and left/right based on the selection's position";
 "toolbarSettingsReset" = "Reset to Default";
-"toolbarSettingsCancel" = "Cancel";
-"toolbarSettingsApply" = "Apply";
 
 /* About pane */
 "aboutTitle" = "About aulycShot";
@@ -219,13 +208,10 @@
 "aboutErrorLogEmptyBody" = "aulycShot hasn't recorded any error logs yet. If the app freezes or crashes, come back here to copy the log for a bug report";
 
 /* Updates — About pane */
-"checkForUpdates" = "Check for Updates";
 "updateChecking" = "Checking";
 "updateUpToDateStatus" = "Up to date";
 "updateNewVersionStatus" = "New version v%@";
 "updateFailedStatus" = "Check failed";
-"updateDownloadButton" = "Download";
-"updateRetryButton" = "Retry";
 "updateInstallNowButton" = "Update Now";
 "updateDownloadingStatus" = "Downloading %d%%";
 "updateInstallingStatus" = "Installing";
@@ -275,7 +261,6 @@
 "imageMergeFailed" = "Image stitching failed";
 "imageMergeSaved" = "Stitched image saved";
 "imageMergeWindowTitle" = "Image Stitching Tool";
-"imageMergeSources" = "Sources";
 "imageMergeAddFiles" = "Add Files";
 "imageMergeAddFromClipboard" = "Add from Clipboard";
 "imageMergeImageList" = "Images";
@@ -284,7 +269,6 @@
 "imageMergeTemplateVertical" = "Vertical";
 "imageMergeTemplateGrid" = "Grid";
 "imageMergeTemplateLongStitch" = "Long Stitch";
-"imageMergeLayout" = "Layout";
 "imageMergeSpacing" = "Spacing";
 "imageMergeMargin" = "Outer Margin";
 "imageMergeCornerRadius" = "Corners";
@@ -298,7 +282,6 @@
 "imageMergeTransparent" = "Transparent";
 "imageMergeSolid" = "Solid";
 "imageMergeParameters" = "Parameters";
-"imageMergeOutput" = "Output";
 "imageMergeCopy" = "Copy";
 "imageMergeSave" = "Save";
 "imageMergeContinueEditing" = "Edit";

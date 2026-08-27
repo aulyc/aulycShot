@@ -97,28 +97,4 @@ enum EditCanvasCursors {
         return NSCursor(image: image, hotSpot: NSPoint(x: center.x, y: size - center.y))
     }()
 
-    static let plusCursor: NSCursor = {
-        let size: CGFloat = 28
-        let center = NSPoint(x: 14, y: 14)
-
-        let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { _ in
-            let plus = NSBezierPath()
-            plus.lineCapStyle = .round
-            plus.move(to: NSPoint(x: center.x - 8, y: center.y))
-            plus.line(to: NSPoint(x: center.x + 8, y: center.y))
-            plus.move(to: NSPoint(x: center.x, y: center.y - 8))
-            plus.line(to: NSPoint(x: center.x, y: center.y + 8))
-
-            NSColor.black.withAlphaComponent(0.55).setStroke()
-            plus.lineWidth = 5
-            plus.stroke()
-
-            NSColor.white.setStroke()
-            plus.lineWidth = 2.5
-            plus.stroke()
-            return true
-        }
-        return NSCursor(image: image, hotSpot: NSPoint(x: center.x, y: size - center.y))
-    }()
-
 }

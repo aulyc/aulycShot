@@ -7,7 +7,7 @@ import AppKit
 /// default) and redraws that region enlarged `zoom`× inside a plain line
 /// frame. It holds a reference to the source image and re-samples it on every
 /// draw, so moving or resizing the lens always shows fresh underlying pixels.
-struct MagnifierAnnotation: Annotation {
+struct MagnifierAnnotation: Annotation, Equatable {
     let center: NSPoint
     let radius: CGFloat
     let color: NSColor

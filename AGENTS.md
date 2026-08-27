@@ -202,14 +202,18 @@ formal installation is a separate, explicitly authorized `make install-release` 
   `bash scripts/compile-check.sh`; use `bash scripts/rebuild-and-open.sh` for
   UI interaction changes.
 - `aulycShot/Editor/EditCanvasView.swift` owns annotation state, mouse handling,
-  and selection interaction. Hit testing, snapshot history, export compositing,
+  and selection interaction. `AnnotationHitTesting.swift` owns topmost selection
+  and annotation-handle geometry/hit policy; `AnnotationChromeRenderer.swift`
+  owns visible selection chrome, while `AnnotationHandleDragging.swift` owns
+  type-specific handle mutation policy. Snapshot history, export compositing,
   cursors, edit tools, and live text editing live in their named collaborators.
   Preserve value-typed annotation mutation and snapshot-based undo. Verify with
   `bash scripts/compile-check.sh`; use `bash scripts/rebuild-and-open.sh` when
   hit testing or visible editing behavior changes.
 - `aulycShot/Editor/Annotations.swift` owns the annotation protocol and shared
   geometry. Each `*Annotation.swift` file owns that type's model, drawing, and
-  hit testing; keep those responsibilities together. Verify with
+  hit testing; keep those responsibilities together and preserve each type's
+  `Equatable`-backed undo-state contract. Verify with
   `bash scripts/compile-check.sh`.
 - `aulycShot/Settings/SettingsView.swift` owns settings-window orchestration and
   shared pane state. General, shortcut, permission, and about behavior live in
@@ -227,19 +231,32 @@ formal installation is a separate, explicitly authorized `make install-release` 
   `bash scripts/compile-check.sh`; use `bash scripts/rebuild-and-open.sh` for
   pin-window interaction changes.
 - `aulycShot/Capture/RecordingEngine.swift` owns main-thread recording lifecycle
-  and ScreenCaptureKit coordination. `RecordingWriterCoordinator.swift` owns
-  queue serialization, while `RecordingWriterSession.swift` and
-  `RecordingWriterBackend.swift` own writer state and AVFoundation I/O. Keep all
-  writer mutation on the recording queue and completion delivery single-shot.
-- `aulycShot/Utilities/Defaults.swift` owns persisted preferences and localized
-  string accessors. Keep new settings normalized at the persistence boundary and
-  add matching keys to every `Resources/*.lproj/Localizable.strings` file.
+  and ScreenCaptureKit coordination. `RecordingSessionController.swift` owns the
+  active engine, recording HUD/border, Return/Escape monitors, and completion
+  normalization after a selection is confirmed. `RecordingOutputCoordinator.swift`
+  owns the save prompt, MP4/GIF output, and temporary-file cleanup.
+  `RecordingWriterCoordinator.swift` owns queue serialization, while
+  `RecordingWriterSession.swift` and `RecordingWriterBackend.swift` own writer
+  state and AVFoundation I/O. Keep all writer mutation on the recording queue
+  and completion delivery single-shot.
+- `aulycShot/Utilities/Defaults.swift` owns persisted preferences;
+  `AppLanguage.swift` owns language selection metadata, `AppNotifications.swift`
+  owns cross-feature notification names, and `L10n.swift` with `Localizer.swift`
+  owns localized string access. Keep new settings normalized at the persistence
+  boundary and add matching keys to every `Resources/*.lproj/Localizable.strings` file.
   Verify with `bash scripts/compile-check.sh`.
 - `aulycShot/Trigger/HotkeyManager.swift` owns global shortcut registration and
-  keyboard trigger dispatch. Keep shortcut recording, defaults, and active
-  registration behavior aligned with Settings. Verify with
+  keyboard trigger dispatch. `HotkeySlot.swift` owns each shortcut's defaults
+  prefix, Carbon event ID, bare-key policy, and localized settings metadata. Keep
+  shortcut recording, legacy migration, defaults, and active registration
+  behavior aligned with Settings. Verify with
   `bash scripts/compile-check.sh`; use `bash scripts/rebuild-and-open.sh` for
   end-to-end hotkey behavior.
+- `aulycShot/Agent/AgentCommand.swift` owns CLI command dispatch, while
+  `AgentArgumentCursor.swift` owns shared tokenization for flags, `--key=value`,
+  and separate key/value arguments. Preserve existing CLI output, exit status,
+  missing-value, and unknown-option behavior when changing a subcommand parser.
+  Verify with `bash scripts/compile-check.sh` and the agent parsing tests.
 
 ## Adding an Editor Tool
 

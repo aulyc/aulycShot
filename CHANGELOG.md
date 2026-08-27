@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Refactor recording lifecycle and output, hotkey metadata, localization, and CLI parsing into focused collaborators while preserving existing behavior
+- Move annotation selection chrome, hit testing, and handle dragging into dedicated collaborators backed by `Equatable` undo state
+
+### Fixed
+
+- Keep screenshot shortcut capture reliable while the status-bar menu is open by handling the matched key event before menu dismissal
+
 ## [1.10.0] - 2026-08-23
 
 ### Added

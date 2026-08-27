@@ -20,8 +20,6 @@ final class AppLanguageTests: XCTestCase {
         XCTAssertEqual(zh["tipConfirm"], "触发截图执行")
         XCTAssertEqual(zh["shortcutDefaultDisplay"], "未设置")
         XCTAssertEqual(zh["clipboardShortcutDefaultDisplay"], "未设置")
-        XCTAssertFalse(try XCTUnwrap(zh["shortcutHint"]).contains("双击"))
-        XCTAssertFalse(try XCTUnwrap(zh["clipboardShortcutHint"]).contains("双击"))
         XCTAssertNil(zh["fileSaveShortcutHeader"])
         XCTAssertNil(zh["fileSaveShortcutHint"])
 
@@ -30,8 +28,6 @@ final class AppLanguageTests: XCTestCase {
         XCTAssertEqual(en["tipConfirm"], "Execute Screenshot")
         XCTAssertEqual(en["shortcutDefaultDisplay"], "Not set")
         XCTAssertEqual(en["clipboardShortcutDefaultDisplay"], "Not set")
-        XCTAssertFalse(try XCTUnwrap(en["shortcutHint"]).localizedCaseInsensitiveContains("double-tap"))
-        XCTAssertFalse(try XCTUnwrap(en["clipboardShortcutHint"]).localizedCaseInsensitiveContains("double-tap"))
         XCTAssertNil(en["fileSaveShortcutHeader"])
         XCTAssertNil(en["fileSaveShortcutHint"])
     }

@@ -137,11 +137,6 @@ class SettingsWindowController: NSWindowController {
 extension SettingsWindowController: NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         settingsView.cancelShortcutRecording()
-        settingsView.cancelSelectedImagePinShortcutRecording()
-        settingsView.cancelClipboardImagePinShortcutRecording()
-        settingsView.cancelSelectedImageEditShortcutRecording()
-        settingsView.cancelClipboardImageEditShortcutRecording()
-        settingsView.cancelClipboardShortcutRecording()
         settingsView.closeErrorLogWindow()
         NSApp.setActivationPolicy(SettingsWindowPresentationPolicy.hiddenActivationPolicy)
         // The status item now exists before the permission gate. In startup

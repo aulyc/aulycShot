@@ -22,59 +22,41 @@ struct AgentRunOptions {
         var screenIndex: Int?
         var displayID: CGDirectDisplayID?
 
-        var index = 0
-        while index < arguments.count {
-            let token = arguments[index]
-
-            if token == "--pretty" {
+        var cursor = AgentArgumentCursor(arguments)
+        while let argument = try cursor.next(flags: ["--pretty"]) {
+            switch argument {
+            case .flag("--pretty"):
                 pretty = true
-                index += 1
-                continue
-            }
-            if token == "--help" || token == "-h" {
-                throw AgentCLIError.help(Self.usageText)
-            }
-
-            let key: String
-            let value: String
-
-            if let split = token.firstIndex(of: "="), token.hasPrefix("--") {
-                key = String(token[..<split])
-                value = String(token[token.index(after: split)...])
-                index += 1
-            } else {
-                key = token
-                guard index + 1 < arguments.count else {
-                    throw AgentCLIError.usage("Missing value for \(token)")
-                }
-                value = arguments[index + 1]
-                index += 2
-            }
-
-            switch key {
-            case "--target", "-t":
-                targetName = value
-            case "--spec", "-s":
-                spec = value
-            case "--out", "--output", "-o":
-                output = value
-            case "--shot-out":
-                shotOutput = value
-            case "--meta":
-                meta = value
-            case "--rect":
-                rect = try AgentCaptureOptions.parseRect(value)
-            case "--window-id":
-                windowID = try AgentCaptureOptions.parseWindowID(value)
-            case "--screen-index", "--screen":
-                guard let parsed = Int(value), parsed >= 0 else {
-                    throw AgentCLIError.usage("Invalid screen index \(value)")
-                }
-                screenIndex = parsed
-            case "--display-id":
-                displayID = try AgentCaptureOptions.parseDisplayID(value)
-            default:
+            case .flag(let key):
                 throw AgentCLIError.usage("Unknown option \(key)")
+            case .help:
+                throw AgentCLIError.help(Self.usageText)
+            case .option(let key, let value):
+                switch key {
+                case "--target", "-t":
+                    targetName = value
+                case "--spec", "-s":
+                    spec = value
+                case "--out", "--output", "-o":
+                    output = value
+                case "--shot-out":
+                    shotOutput = value
+                case "--meta":
+                    meta = value
+                case "--rect":
+                    rect = try AgentCaptureOptions.parseRect(value)
+                case "--window-id":
+                    windowID = try AgentCaptureOptions.parseWindowID(value)
+                case "--screen-index", "--screen":
+                    guard let parsed = Int(value), parsed >= 0 else {
+                        throw AgentCLIError.usage("Invalid screen index \(value)")
+                    }
+                    screenIndex = parsed
+                case "--display-id":
+                    displayID = try AgentCaptureOptions.parseDisplayID(value)
+                default:
+                    throw AgentCLIError.usage("Unknown option \(key)")
+                }
             }
         }
 
